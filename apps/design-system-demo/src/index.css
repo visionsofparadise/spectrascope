@@ -1,0 +1,4 @@
+@import "tailwindcss";
+@import "@spectrascope/design-system/css/tokens.css";
+@import "@spectrascope/design-system/css/base.css";
+@import "@spectrascope/design-system/css/utilities.css";
