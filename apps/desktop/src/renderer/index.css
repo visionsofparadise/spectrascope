@@ -1,0 +1,12 @@
+@import "tailwindcss";
+@import "@spectrascope/design-system/css/tokens.css";
+@import "@spectrascope/design-system/styles.css";
+@import "@spectrascope/design-system/css/base.css";
+@import "@spectrascope/design-system/css/utilities.css";
+
+@layer base {
+  *::-webkit-scrollbar { width: 6px; height: 6px; }
+  *::-webkit-scrollbar-track { background: var(--color-chrome-border); }
+  *::-webkit-scrollbar-thumb { background: var(--color-chrome-text-dim); }
+  * { scrollbar-width: thin; scrollbar-color: var(--color-chrome-text-dim) var(--color-chrome-border); }
+}
