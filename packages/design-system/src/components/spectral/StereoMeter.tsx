@@ -1,5 +1,4 @@
-import type { ColormapTheme } from "../../colors";
-import { getThemeColors } from "../../colors";
+import type { LayerColor } from "../../layers";
 
 const TRACK_COLOR = "#1E1E23";
 const FADER_LEVEL = 85;
@@ -7,12 +6,15 @@ const LEVEL_L = 82;
 const LEVEL_R = 75;
 
 interface StereoMeterProps {
-  readonly colormap?: ColormapTheme;
+  readonly layerColor: LayerColor;
   readonly className?: string;
 }
 
-export function StereoMeter({ colormap = "lava", className }: StereoMeterProps) {
-  const meterFill = getThemeColors(colormap).meterGradient;
+export function StereoMeter({ layerColor, className }: StereoMeterProps) {
+  // Stereo-meter fill mirrors the layer's spectrogram ramp: void at silence,
+  // layer.secondary at peak. Encodes magnitude by luminance only, matching
+  // the void -> secondary identity the layer establishes on the spectrogram.
+  const meterFill = `linear-gradient(to top, #020204, ${layerColor.secondary})`;
 
   return (
     <div className={`relative flex h-full items-end justify-center gap-1 ${className ?? ""}`}>

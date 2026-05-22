@@ -1,24 +1,27 @@
 import { useRef, useState, useEffect, useMemo } from "react";
 import { SpectrogramCanvas, useSpectralCompute } from "spectral-display";
 import type { SpectralOptions } from "spectral-display";
-import type { ColormapTheme } from "../../colors";
-import { getThemeColors } from "../../colors";
+import { buildLayerColormap } from "../../layers";
+import type { LayerColor } from "../../layers";
 import type { AudioData } from "./types";
 
-const STRIP_WIDTH = 14;
+const STRIP_WIDTH = 36;
 
-// Static vertical viewport -- full range (no vertical zoom applied)
-const VP_TOP_FRAC = 0;
-const VP_BOTTOM_FRAC = 1;
+// Static placeholder vertical viewport — visualises the "current view" box.
+// Vertical zoom isn't wired yet; these fractions just demonstrate the
+// affordance so the minimap reads as a draggable box rather than a flat strip.
+const VP_TOP_FRAC = 0.18;
+const VP_BOTTOM_FRAC = 0.78;
 
 interface FrequencyMinimapProps {
   readonly audioData: AudioData;
   readonly startMs: number;
   readonly endMs: number;
-  readonly colormap?: ColormapTheme;
+  readonly layerColor: LayerColor;
 }
 
-export function FrequencyMinimap({ audioData, startMs, endMs, colormap = "lava" }: FrequencyMinimapProps) {
+export function FrequencyMinimap({ audioData, startMs, endMs, layerColor }: FrequencyMinimapProps) {
+  const colormap = useMemo(() => buildLayerColormap(layerColor), [layerColor]);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerHeight, setContainerHeight] = useState(400);
 
@@ -47,12 +50,12 @@ export function FrequencyMinimap({ audioData, startMs, endMs, colormap = "lava" 
         sampleCount: audioData.totalSamples,
         channelCount: audioData.channels,
       },
-      query: { startMs, endMs, width: 1, height: containerHeight },
+      query: { startMs, endMs, width: STRIP_WIDTH, height: containerHeight },
       readSamples: audioData.readSamples,
       config: {
         fftSize: 2048,
         frequencyScale: "mel",
-        colormap: getThemeColors(colormap).colormap,
+        colormap,
         waveform: false,
         loudness: false,
       },
@@ -78,16 +81,17 @@ export function FrequencyMinimap({ audioData, startMs, endMs, colormap = "lava" 
       )}
       {/* Dimmed regions outside viewport */}
       <div
-        className="absolute inset-x-0 top-0 bg-black/55"
+        className="absolute inset-x-0 top-0 bg-black/65"
         style={{ height: `${vpTopPct}%` }}
       />
       <div
-        className="absolute inset-x-0 bottom-0 bg-black/55"
+        className="absolute inset-x-0 bottom-0 bg-black/65"
         style={{ height: `${(1 - VP_BOTTOM_FRAC) * 100}%` }}
       />
-      {/* Viewport bracket */}
+      {/* Viewport bracket — the scroll-window indicator. No grab-handle chips;
+          the bracket box itself is the affordance. */}
       <div
-        className="absolute inset-x-0 border border-data-selection-border"
+        className="absolute inset-x-0 cursor-ns-resize border-2 border-data-selection-border"
         style={{ top: `${vpTopPct}%`, height: `${vpHeightPct}%` }}
       />
     </div>

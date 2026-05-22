@@ -1,23 +1,24 @@
 import { useState, useEffect, useRef } from 'react';
-import type { ColormapTheme } from '../../colors';
-import { getThemeColors } from '../../colors';
+import type { LayerColor } from "../../layers";
 
 export const Meter = ({
   level,
   height = 80,
   width = 4,
   animated = false,
-  colormap = "lava",
+  layerColor,
   className,
 }: {
   readonly level: number;
   readonly height?: number;
   readonly width?: number;
   readonly animated?: boolean;
-  readonly colormap?: ColormapTheme;
+  readonly layerColor: LayerColor;
   readonly className?: string;
 }) => {
-  const gradient = getThemeColors(colormap).meterGradient;
+  // Meter fill is void -> layerColor.secondary, matching the spectrogram's
+  // void -> secondary ramp and the StereoMeter. Encodes level by luminance.
+  const gradient = `linear-gradient(to top, #020204, ${layerColor.secondary})`;
   const [displayLevel, setDisplayLevel] = useState(level);
   const levelRef = useRef(displayLevel);
 

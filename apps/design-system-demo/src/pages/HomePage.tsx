@@ -2,7 +2,6 @@ import { Icon } from "@iconify/react";
 import { TerrainShader } from "@spectrascope/design-system";
 import type { MenuItem } from "@spectrascope/design-system";
 import { DemoTabBar } from "../DemoTabBar";
-import { useColormapTheme } from "../ThemeContext";
 
 const HOME_TABS = [
   { id: "podcast", label: "podcast-raw.wav" },
@@ -64,16 +63,14 @@ const RECENT_SESSIONS = [
 ] as const;
 
 export function HomePage() {
-	const { colormap } = useColormapTheme();
-
 	return (
 		<div className="flex h-full flex-col overflow-hidden bg-void">
 		<DemoTabBar tabs={HOME_TABS} activeTabId="" menuItems={MENU_ITEMS} />
 		<div className="relative min-h-0 flex-1 overflow-hidden">
-			<TerrainShader className="absolute inset-0" colormap={colormap} />
+			<TerrainShader className="absolute inset-0" />
 
 			<div className="relative flex h-full flex-col p-4">
-				<h1 className="font-display text-[length:6rem] font-bold leading-none tracking-tight text-chrome-text">ENGINEERING</h1>
+				<h1 className="font-display text-[length:6rem] font-bold leading-none tracking-tight text-chrome-text">SPECTRASCOPE</h1>
 
 				<div className="flex-1" />
 

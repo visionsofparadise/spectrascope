@@ -1,56 +1,40 @@
-import { useRef, useEffect, useCallback } from "react";
-import type { ColormapTheme } from "../../colors";
-import { COLORMAP_POINTS } from "../../colors";
+import { useRef, useEffect, useCallback, useMemo } from "react";
+import type { ColormapDefinition } from "spectral-display";
+import { buildLayerColormap } from "../../layers";
+import type { LayerColor } from "../../layers";
 import type { AudioDisplayData } from "./types";
 
-interface ColormapStop {
-  readonly pos: number;
-  readonly r: number;
-  readonly g: number;
-  readonly b: number;
-}
-
-function buildColormap(colormap: ColormapTheme): ReadonlyArray<ColormapStop> {
-  const points = COLORMAP_POINTS[colormap];
-
-  return points.map((rgb, index) => ({
-    pos: index / (points.length - 1),
-    r: rgb[0],
-    g: rgb[1],
-    b: rgb[2],
-  }));
-}
-
-function interpolateColormap(colormapStops: ReadonlyArray<ColormapStop>, value: number): [number, number, number] {
+function interpolateColormap(colormap: ColormapDefinition, value: number): [number, number, number] {
+  const stops = colormap.colors;
   const clamped = Math.max(0, Math.min(1, value));
-  const first = colormapStops[0];
-  const last = colormapStops[colormapStops.length - 1];
+  const first = stops[0];
+  const last = stops[stops.length - 1];
 
   if (!first || !last) return [0, 0, 0];
 
   let lo = first;
   let hi = last;
 
-  for (let si = 0; si < colormapStops.length - 1; si++) {
-    const lower = colormapStops[si];
-    const upper = colormapStops[si + 1];
+  for (let si = 0; si < stops.length - 1; si++) {
+    const lower = stops[si];
+    const upper = stops[si + 1];
 
     if (!lower || !upper) continue;
 
-    if (clamped >= lower.pos && clamped <= upper.pos) {
+    if (clamped >= lower.position && clamped <= upper.position) {
       lo = lower;
       hi = upper;
       break;
     }
   }
 
-  const range = hi.pos - lo.pos;
-  const factor = range > 0 ? (clamped - lo.pos) / range : 0;
+  const range = hi.position - lo.position;
+  const factor = range > 0 ? (clamped - lo.position) / range : 0;
 
   return [
-    Math.round(lo.r + (hi.r - lo.r) * factor),
-    Math.round(lo.g + (hi.g - lo.g) * factor),
-    Math.round(lo.b + (hi.b - lo.b) * factor),
+    Math.round(lo.color[0] + (hi.color[0] - lo.color[0]) * factor),
+    Math.round(lo.color[1] + (hi.color[1] - lo.color[1]) * factor),
+    Math.round(lo.color[2] + (hi.color[2] - lo.color[2]) * factor),
   ];
 }
 
@@ -58,12 +42,12 @@ interface SpectrogramProps {
   readonly data: AudioDisplayData;
   readonly startMs: number;
   readonly endMs: number;
-  readonly colormap?: ColormapTheme;
+  readonly layerColor: LayerColor;
 }
 
-export function Spectrogram({ data, startMs, endMs, colormap = "lava" }: SpectrogramProps) {
+export function Spectrogram({ data, startMs, endMs, layerColor }: SpectrogramProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const colormapStops = buildColormap(colormap);
+  const colormap = useMemo(() => buildLayerColormap(layerColor), [layerColor]);
 
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -107,7 +91,7 @@ export function Spectrogram({ data, startMs, endMs, colormap = "lava" }: Spectro
         const clampedBin = Math.max(0, Math.min(data.freqBins - 1, binIndex));
         const value = frame[clampedBin] ?? 0;
 
-        const rgb = interpolateColormap(colormapStops, value);
+        const rgb = interpolateColormap(colormap, value);
         const pixelOffset = (py * width + px) * 4;
 
         pixels[pixelOffset] = rgb[0];
@@ -118,7 +102,7 @@ export function Spectrogram({ data, startMs, endMs, colormap = "lava" }: Spectro
     }
 
     gfx.putImageData(imageData, 0, 0);
-  }, [data, startMs, endMs, colormapStops]);
+  }, [data, startMs, endMs, colormap]);
 
   useEffect(() => {
     render();

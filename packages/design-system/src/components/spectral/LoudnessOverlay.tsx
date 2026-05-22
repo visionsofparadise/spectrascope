@@ -1,21 +1,20 @@
 import { useRef, useEffect, useCallback } from "react";
-import type { ColormapTheme } from "../../colors";
-import { getThemeColors } from "../../colors";
+import type { LayerColor } from "../../layers";
 import type { AudioDisplayData } from "./types";
 
 interface LoudnessOverlayProps {
   readonly data: AudioDisplayData;
   readonly startMs: number;
   readonly endMs: number;
-  readonly colormap?: ColormapTheme;
+  readonly layerColor: LayerColor;
 }
 
-export function LoudnessOverlay({ data, startMs, endMs, colormap = "lava" }: LoudnessOverlayProps) {
+export function LoudnessOverlay({ data, startMs, endMs, layerColor }: LoudnessOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const themeColors = getThemeColors(colormap);
-  const colorLufs = themeColors.loudness.integrated;
-  const colorRms = themeColors.loudness.rms;
-  const colorPeak = themeColors.loudness.truePeak;
+  // Per the Layer Color Model: all of a layer's overlay traces draw in
+  // layerColor.primary. Per-trace color variation (lava-rms/lava-lufs/lava-peak)
+  // is retired — traces are differentiated by line weight and dash pattern only.
+  const traceColor = layerColor.primary;
 
   const render = useCallback(() => {
     const canvas = canvasRef.current;
@@ -56,7 +55,7 @@ export function LoudnessOverlay({ data, startMs, endMs, colormap = "lava" }: Lou
 
     // Draw RMS envelope
     gfx.beginPath();
-    gfx.strokeStyle = colorRms;
+    gfx.strokeStyle = traceColor;
     gfx.lineWidth = 1.5 * dpr;
     gfx.globalAlpha = 0.35;
 
@@ -79,7 +78,7 @@ export function LoudnessOverlay({ data, startMs, endMs, colormap = "lava" }: Lou
 
     // Draw LUFS
     gfx.beginPath();
-    gfx.strokeStyle = colorLufs;
+    gfx.strokeStyle = traceColor;
     gfx.lineWidth = 1 * dpr;
     gfx.globalAlpha = 0.8;
 
@@ -102,7 +101,7 @@ export function LoudnessOverlay({ data, startMs, endMs, colormap = "lava" }: Lou
 
     // Draw Peak as dashed line at max peak
     gfx.beginPath();
-    gfx.strokeStyle = colorPeak;
+    gfx.strokeStyle = traceColor;
     gfx.lineWidth = 1 * dpr;
     gfx.setLineDash([4 * dpr, 3 * dpr]);
     gfx.globalAlpha = 0.7;
@@ -124,7 +123,7 @@ export function LoudnessOverlay({ data, startMs, endMs, colormap = "lava" }: Lou
     gfx.stroke();
     gfx.setLineDash([]);
     gfx.globalAlpha = 1;
-  }, [data, startMs, endMs, colorLufs, colorRms, colorPeak]);
+  }, [data, startMs, endMs, traceColor]);
 
   useEffect(() => {
     render();

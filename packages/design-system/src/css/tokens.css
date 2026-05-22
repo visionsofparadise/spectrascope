@@ -8,8 +8,8 @@
   --color-chrome-text-secondary: #6E6E78;
   --color-chrome-text-dim: #44444C;
 
-  --color-primary: #D76405;
-  --color-secondary: #0F1446;
+  --color-primary: #A3E635;
+  --color-secondary: #440154;
   --color-void: #020204;
 
   --color-state-rendered: #34D399;
@@ -30,17 +30,7 @@
 
   --color-interactive-hover: #1F1F24;
   --color-interactive-active: #252528;
-  --color-interactive-focus: #D76405;
-
-  --color-lava-waveform: #5EC4B6;
-  --color-lava-lufs: #34D399;
-  --color-lava-rms: #1A7A6C;
-  --color-lava-peak: #FB7185;
-
-  --color-viridis-waveform: #E91E90;
-  --color-viridis-rms: #8B1A5C;
-  --color-viridis-lufs: #38BDF8;
-  --color-viridis-peak: #FF1744;
+  --color-interactive-focus: #A3E635;
 
   --font-display: "Bricolage Grotesque Variable", "Bricolage Grotesque", system-ui, sans-serif;
   --font-body: "Outfit Variable", "Outfit", system-ui, sans-serif;
@@ -62,10 +52,4 @@
   --text-3xl: 3rem;
 
   --breakpoint-wide: 1920px;
-}
-
-[data-theme="viridis"] {
-  --color-primary: #A3E635;
-  --color-secondary: #440154;
-  --color-interactive-focus: #A3E635;
 }

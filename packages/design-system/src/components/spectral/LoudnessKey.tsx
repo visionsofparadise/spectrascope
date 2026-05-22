@@ -1,18 +1,19 @@
-import type { ColormapTheme } from "../../colors";
-import { getThemeColors } from "../../colors";
+import type { LayerColor } from "../../layers";
 
 interface LoudnessKeyProps {
-  readonly colormap?: ColormapTheme;
+  readonly layerColor: LayerColor;
 }
 
-export function LoudnessKey({ colormap = "lava" }: LoudnessKeyProps) {
-  const themeColors = getThemeColors(colormap);
-
+export function LoudnessKey({ layerColor }: LoudnessKeyProps) {
+  // Per the Layer Color Model: all of a layer's overlay-trace legend entries
+  // share layerColor.primary. The legend entries differ in label only;
+  // line weight / dash pattern is left to the rendered overlay.
+  const traceColor = layerColor.primary;
   const legendItems = [
-    { label: "Waveform", color: themeColors.waveformCss },
-    { label: "LUFS", color: themeColors.loudness.integrated },
-    { label: "RMS", color: themeColors.loudness.rms },
-    { label: "Peak", color: themeColors.loudness.truePeak },
+    { label: "Waveform", color: traceColor },
+    { label: "LUFS", color: traceColor },
+    { label: "RMS", color: traceColor },
+    { label: "Peak", color: traceColor },
   ];
 
   return (

@@ -48,7 +48,7 @@ export function IconButton({
       aria-label={label}
       className={`flex items-center justify-center px-1 py-1.5 ${textColor}${disabledClass}${className ? ` ${className}` : ""}`}
     >
-      <span className={`flex items-center justify-center py-1 ${bgClass}`}>
+      <span className={`flex items-center justify-center ${bgClass}`}>
         <Icon icon={icon} width={size} height={size} />
       </span>
     </button>

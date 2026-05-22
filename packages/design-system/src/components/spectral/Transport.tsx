@@ -1,238 +1,437 @@
+import { useCallback, useRef, useState } from "react";
 import { Icon } from "@iconify/react";
 import { IconButton } from "../IconButton";
 
-function TransportButton({
-  icon,
-  label,
-  large,
-  active,
-}: {
-  readonly icon: string;
-  readonly label: string;
-  readonly large?: boolean;
-  readonly active?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      className={`flex items-center justify-center px-1 py-1.5 ${
-        active
-          ? "text-chrome-text"
-          : "text-chrome-text-secondary hover:text-chrome-text"
-      }`}
-      aria-label={label}
-    >
-      <span className={`flex items-center justify-center py-1 ${active ? "bg-chrome-raised" : ""}`}>
-        <Icon icon={icon} width={large ? 22 : 16} height={large ? 22 : 16} />
-      </span>
-    </button>
-  );
+/**
+ * Cursor readout — the time / frequency / amplitude values a view publishes to
+ * show what's under the playhead. Waveform views publish all three; chart
+ * views without a frequency axis (e.g. Loudness) omit `freq`. The waveform
+ * views track this via `SourceStripCursorReadout`; the Transport surfaces it
+ * in its left region so the readout has a stable home outside the workspace.
+ */
+export interface TransportCursorReadout {
+	readonly time: string;
+	/** Optional — chart views with no frequency axis (e.g. Loudness) omit it. */
+	readonly freq?: string;
+	readonly amp: string;
 }
 
-function CursorModeButton({
-  icon,
-  label,
-  active,
-}: {
-  readonly icon: string;
-  readonly label: string;
-  readonly active?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      className={`flex items-center justify-center px-1 py-1.5 ${
-        active
-          ? "text-chrome-text"
-          : "text-chrome-text-dim hover:text-chrome-text-secondary"
-      }`}
-      aria-label={label}
-    >
-      <span className={`flex items-center justify-center py-1 ${active ? "bg-chrome-raised" : ""}`}>
-        <Icon icon={icon} width={20} height={20} />
-      </span>
-    </button>
-  );
-}
-
-function Readout({
-  label,
-  value,
-}: {
-  readonly label: string;
-  readonly value: string;
-}) {
-  return (
-    <div className="flex items-baseline justify-between gap-2">
-      <span className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-dim">
-        {label}
-      </span>
-      <span className="font-technical text-[length:var(--text-sm)] tabular-nums text-chrome-text">
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function ReadoutColumn({
-  label,
-  value,
-}: {
-  readonly label: string;
-  readonly value: string;
-}) {
-  return (
-    <div className="flex flex-col items-center">
-      <span className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-dim">
-        {label}
-      </span>
-      <span className="font-technical text-[length:var(--text-sm)] tabular-nums text-chrome-text">
-        {value}
-      </span>
-    </div>
-  );
+/**
+ * TransportControl — the contract the active view publishes up to the shell.
+ * Views that don't have playback publish a control with `disabled: true`.
+ * `cursorReadout` is optional — waveform-bearing views provide it, line-chart
+ * views (Loudness, FrequencyDistribution) leave it undefined and the left
+ * region collapses.
+ *
+ * `onSeek` is part of the contract (the time ruler drives seeking), but the
+ * Transport itself renders no scrub control — the ruler at the top of each
+ * view is the seek affordance.
+ */
+export interface TransportControl {
+	readonly disabled?: boolean;
+	readonly playing: boolean;
+	readonly positionSec: number;
+	readonly durationSec: number;
+	readonly onPlayToggle: () => void;
+	readonly onSeek: (sec: number) => void;
+	readonly cursorReadout?: TransportCursorReadout;
+	/**
+	 * Selection range — the In / Out columns of the transport's readout panel.
+	 * Times are in seconds (the transport formats them to a timecode);
+	 * amplitudes are pre-formatted strings. Optional — unset fields render an
+	 * em-dash. Views publish these from their (placeholder) selection range.
+	 */
+	readonly selectionInSec?: number;
+	readonly selectionOutSec?: number;
+	readonly selectionInAmp?: string;
+	readonly selectionOutAmp?: string;
 }
 
 interface TransportProps {
-  readonly cursorTime?: string;
-  readonly cursorFreq?: string;
-  readonly cursorAmp?: string;
+	readonly control: TransportControl;
 }
 
-export function Transport({
-  cursorTime = "00:01:32.450",
-  cursorFreq = "440 Hz",
-  cursorAmp = "-24.5 dB",
-}: TransportProps) {
-  return (
-    <div className="relative flex items-center bg-void px-4 py-3">
-      {/* Left: Stats -- cursor readout, loudness, frequency, format */}
-      <div className="z-10 flex shrink-0 items-center">
-        {/* Cursor readout */}
-        <div className="flex flex-col pr-4">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-dim">Time</span>
-            <span className="font-technical text-[length:var(--text-sm)] tabular-nums text-chrome-text">{cursorTime}</span>
-          </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-dim">Freq</span>
-            <span className="font-technical text-[length:var(--text-sm)] tabular-nums text-chrome-text">{cursorFreq}</span>
-          </div>
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-dim">Amp</span>
-            <span className="font-technical text-[length:var(--text-sm)] tabular-nums text-chrome-text">{cursorAmp}</span>
-          </div>
-        </div>
+/** Fixed width of the left readout panel (and the matching right volume
+ *  region). Equal widths keep the centered media cluster on the bar's true
+ *  centerline without `absolute` positioning. */
+const SIDE_REGION = "w-80";
 
-        {/* Loudness */}
-        <div className="flex items-center gap-3 border-l border-chrome-border-subtle px-4">
-          <ReadoutColumn label="True Peak" value="-1.2 dBTP" />
-          <ReadoutColumn label="Peak" value="-3.1 dB" />
-          <ReadoutColumn label="Integrated" value="-16.2 LUFS" />
-          <ReadoutColumn label="Range" value="12.4 LU" />
-        </div>
+function formatTimecode(sec: number): string {
+	// MM:SS.mmm — match the pre-pivot Transport's three-decimal milliseconds
+	// (font-technical tabular-nums keeps the column width stable as digits
+	// change). Always two-digit minutes/seconds; three-digit milliseconds.
+	if (!Number.isFinite(sec) || sec < 0) return "00:00.000";
 
-        {/* Frequency */}
-        <div className="hidden flex-col gap-0.5 border-l border-chrome-border-subtle px-4 wide:flex">
-          <Readout label="Low" value="20 Hz" />
-          <Readout label="High" value="20.0 kHz" />
-          <Readout label="Range" value="20.0 kHz" />
-        </div>
+	const totalMs = Math.floor(sec * 1000);
+	const ms = totalMs % 1000;
+	const totalSec = Math.floor(totalMs / 1000);
+	const mins = Math.floor(totalSec / 60);
+	const secs = totalSec % 60;
 
-        {/* Format */}
-        <div className="flex flex-col gap-0.5 border-l border-chrome-border-subtle px-4">
-          <Readout label="Rate" value="44100" />
-          <Readout label="Depth" value="24-bit" />
-        </div>
-      </div>
+	return `${mins.toString().padStart(2, "0")}:${secs
+		.toString()
+		.padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
+}
 
-      {/* Center: Media controls -- absolutely centered */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <div className="flex items-center gap-1.5">
-          <div className="flex items-center">
-            <TransportButton icon="lucide:skip-back" label="Skip to start" />
-            <TransportButton icon="lucide:chevrons-left" label="Jump back" />
-            <TransportButton icon="lucide:chevron-left" label="Frame back" />
-            <TransportButton icon="lucide:play" label="Play" large />
-            <TransportButton icon="lucide:chevron-right" label="Frame forward" />
-            <TransportButton icon="lucide:chevrons-right" label="Jump forward" />
-            <TransportButton icon="lucide:skip-forward" label="Skip to end" />
-          </div>
+/**
+ * MediaButton — button grammar: the outer `<button>` is a padded, transparent
+ * click target; an inner `<span>` carries the background "chip" and hugs the
+ * glyph. The chip only appears when `active`. The play button passes `large`
+ * (bigger glyph) and `active` while playing.
+ */
+function MediaButton({
+	icon,
+	label,
+	large,
+	active,
+	disabled,
+	onClick,
+}: {
+	readonly icon: string;
+	readonly label: string;
+	readonly large?: boolean;
+	readonly active?: boolean;
+	readonly disabled?: boolean;
+	readonly onClick?: () => void;
+}) {
+	const interactive = !disabled && Boolean(onClick);
 
-          {/* Loop */}
-          <IconButton icon="lucide:repeat" label="Loop" size={16} variant="ghost" dim />
-        </div>
+	return (
+		<button
+			type="button"
+			disabled={disabled}
+			onClick={() => {
+				if (interactive) onClick?.();
+			}}
+			className={`flex items-center justify-center px-1.5 py-1.5 ${
+				disabled
+					? "cursor-not-allowed text-chrome-text-dim"
+					: active
+						? "text-void"
+						: "text-chrome-text-secondary hover:text-chrome-text"
+			}`}
+			aria-label={label}
+		>
+			<span
+				className={`flex items-center justify-center ${
+					active && !disabled ? "bg-primary" : ""
+				}`}
+			>
+				<Icon icon={icon} width={large ? 24 : 17} height={large ? 24 : 17} />
+			</span>
+		</button>
+	);
+}
 
-        {/* Speed + Timecode */}
-        <div className="mt-1 flex items-center gap-4">
-          <button
-            type="button"
-            className="flex items-center gap-0.5 px-2 py-0.5 font-technical text-[length:var(--text-sm)] italic text-chrome-text"
-          >
-            <span className="flex items-center gap-0.5 bg-chrome-raised">
-              <span>1x</span>
-              <Icon icon="lucide:chevron-down" width={12} height={12} />
-            </span>
-          </button>
-          <span className="font-technical text-[length:var(--text-sm)] tabular-nums text-chrome-text">
-            01:32.450
-            <span className="text-chrome-text-dim"> / </span>
-            30:00.000
-          </span>
-        </div>
-      </div>
+/** One point's readout. `freq` is optional — the In / Out selection markers
+ *  carry only a time and an amplitude. */
+interface PointReadout {
+	readonly time: string;
+	readonly amp: string;
+	readonly freq?: string;
+}
 
-      {/* Right: Actions -- selection info, snap, cursor modes, apply */}
-      <div className="z-10 ml-auto flex shrink-0 items-center gap-2">
-        {/* Selection info */}
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col">
-            <span className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-dim">Selection</span>
-            <span className="font-technical text-[length:var(--text-sm)] tabular-nums text-chrome-text">00:00.450 – 00:01.200</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-dim">Freq</span>
-            <span className="font-technical text-[length:var(--text-sm)] tabular-nums text-chrome-text">200 Hz – 4.2 kHz</span>
-          </div>
-        </div>
-        <div className="h-6 w-px bg-chrome-border-subtle" />
-        {/* Snap */}
-        <IconButton icon="lucide:magnet" label="Snap to zero crossing" size={16} variant="ghost" dim />
-        <div className="h-6 w-px bg-chrome-border-subtle" />
-        {/* Cursor modes -- collapsed on small screens */}
-        <button
-          type="button"
-          className="flex items-center gap-0.5 px-1 py-1.5 text-chrome-text wide:hidden"
-          aria-label="Cursor mode"
-        >
-          <span className="flex items-center gap-0.5 bg-chrome-raised py-1">
-            <Icon icon="lucide:text-cursor" width={20} height={20} />
-            <Icon icon="lucide:chevron-down" width={12} height={12} />
-          </span>
-        </button>
-        {/* Cursor modes -- expanded on large screens */}
-        <div className="hidden items-center wide:flex">
-          <CursorModeButton icon="lucide:text-cursor" label="Time select" active />
-          <CursorModeButton icon="lucide:square-dashed-mouse-pointer" label="Frequency select" />
-          <CursorModeButton icon="lucide:lasso" label="Frequency lasso" />
-          <CursorModeButton icon="lucide:paintbrush" label="Frequency brush" />
-          <CursorModeButton icon="lucide:hand" label="Pan" />
-          <CursorModeButton icon="lucide:search" label="Zoom" />
-        </div>
-        <div className="h-6 w-px bg-chrome-border-subtle" />
-        {/* Apply */}
-        <button
-          type="button"
-          className="flex h-8 items-center gap-1.5 px-2 py-1 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-void"
-          aria-label="Apply inline transform"
-        >
-          <span className="flex items-center gap-1.5 bg-primary">
-            <Icon icon="lucide:wand-sparkles" width={16} height={16} />
-            <span>Apply</span>
-            <Icon icon="lucide:chevron-down" width={12} height={12} />
-          </span>
-        </button>
-      </div>
-    </div>
-  );
+/**
+ * ReadoutPanel — the transport's left panel. The cursor readout (Time / Freq /
+ * Amp, each a label + value) keeps its original form in the first columns; the
+ * In and Out selection markers are appended as two more value columns, aligned
+ * row-for-row. The markers carry no frequency, so their Freq cell is blank.
+ * `leading-none` keeps the four rows inside the bar height.
+ *
+ *           Cursor      In         Out
+ *    Time   00:00.000   00:07.6    00:13.7
+ *    Freq   — Hz
+ *    Amp    — dB        -19.7 dB   -24.3 dB
+ */
+function ReadoutPanel({
+	cursor,
+	selectionIn,
+	selectionOut,
+	disabled,
+}: {
+	readonly cursor: PointReadout;
+	readonly selectionIn: PointReadout;
+	readonly selectionOut: PointReadout;
+	readonly disabled?: boolean;
+}) {
+	const headClass =
+		"font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-right text-chrome-text-dim";
+	const rowLabelClass =
+		"font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-dim";
+	const valueClass = `font-technical text-[length:var(--text-sm)] tabular-nums text-right ${
+		disabled ? "text-chrome-text-dim" : "text-chrome-text"
+	}`;
+
+	return (
+		<div
+			className="grid items-baseline gap-x-3 gap-y-1 leading-none"
+			style={{ gridTemplateColumns: "auto repeat(3, minmax(0, 1fr))" }}
+		>
+			{/* Header row — a column label over each readout column. */}
+			<span />
+			<span className={headClass}>Cursor</span>
+			<span className={headClass}>In</span>
+			<span className={headClass}>Out</span>
+
+			{/* Time row */}
+			<span className={rowLabelClass}>Time</span>
+			<span className={valueClass}>{cursor.time}</span>
+			<span className={valueClass}>{selectionIn.time}</span>
+			<span className={valueClass}>{selectionOut.time}</span>
+
+			{/* Freq row — cursor only; the In / Out markers carry no frequency. */}
+			<span className={rowLabelClass}>Freq</span>
+			<span className={valueClass}>{cursor.freq ?? "— Hz"}</span>
+			<span />
+			<span />
+
+			{/* Amp row */}
+			<span className={rowLabelClass}>Amp</span>
+			<span className={valueClass}>{cursor.amp}</span>
+			<span className={valueClass}>{selectionIn.amp}</span>
+			<span className={valueClass}>{selectionOut.amp}</span>
+		</div>
+	);
+}
+
+/**
+ * VolumeSlider — monitor-level control in the Transport's right region. A
+ * horizontal track (chrome-raised groove, chrome-text fill + handle) dragged
+ * via pointer capture, with a speaker glyph that reflects the level.
+ *
+ * This is a *monitoring* control — it sets how loud the audition plays, not a
+ * per-source gain. Sources carry no gain rider (per the 2026-05-20 "drop gain
+ * knob" decision); the audition level is a single playback-side control and
+ * the Transport is its home.
+ */
+function VolumeSlider() {
+	const [volume, setVolume] = useState(0.8);
+	const trackRef = useRef<HTMLDivElement>(null);
+
+	const setFromClientX = useCallback((clientX: number) => {
+		const track = trackRef.current;
+
+		if (!track) return;
+
+		const rect = track.getBoundingClientRect();
+
+		if (rect.width <= 0) return;
+
+		const frac = (clientX - rect.left) / rect.width;
+
+		setVolume(Math.max(0, Math.min(1, frac)));
+	}, []);
+
+	const handlePointerDown = useCallback(
+		(ev: React.PointerEvent<HTMLDivElement>) => {
+			ev.currentTarget.setPointerCapture(ev.pointerId);
+			setFromClientX(ev.clientX);
+		},
+		[setFromClientX],
+	);
+
+	const handlePointerMove = useCallback(
+		(ev: React.PointerEvent<HTMLDivElement>) => {
+			// Only track while a button is held (pointer capture keeps events
+			// flowing here even when the cursor leaves the track).
+			if (ev.buttons === 0) return;
+
+			setFromClientX(ev.clientX);
+		},
+		[setFromClientX],
+	);
+
+	const handleKeyDown = useCallback((ev: React.KeyboardEvent<HTMLDivElement>) => {
+		const STEP = 0.05;
+
+		if (ev.key === "ArrowLeft" || ev.key === "ArrowDown") {
+			ev.preventDefault();
+			setVolume((prev) => Math.max(0, prev - STEP));
+		} else if (ev.key === "ArrowRight" || ev.key === "ArrowUp") {
+			ev.preventDefault();
+			setVolume((prev) => Math.min(1, prev + STEP));
+		} else if (ev.key === "Home") {
+			ev.preventDefault();
+			setVolume(0);
+		} else if (ev.key === "End") {
+			ev.preventDefault();
+			setVolume(1);
+		}
+	}, []);
+
+	const pct = volume * 100;
+	const glyph =
+		volume === 0
+			? "lucide:volume-x"
+			: volume < 0.5
+				? "lucide:volume-1"
+				: "lucide:volume-2";
+
+	return (
+		<div className="flex items-center gap-2">
+			<Icon
+				icon={glyph}
+				width={16}
+				height={16}
+				className="shrink-0 text-chrome-text-secondary"
+				aria-hidden="true"
+			/>
+			<div
+				ref={trackRef}
+				role="slider"
+				tabIndex={0}
+				aria-label="Monitor volume"
+				aria-valuemin={0}
+				aria-valuemax={100}
+				aria-valuenow={Math.round(pct)}
+				onPointerDown={handlePointerDown}
+				onPointerMove={handlePointerMove}
+				onKeyDown={handleKeyDown}
+				className="relative h-1 w-24 shrink-0 cursor-pointer bg-chrome-raised outline-none focus-visible:ring-1 focus-visible:ring-primary"
+			>
+				{/* Filled portion — level measured from the left edge. */}
+				<div
+					className="pointer-events-none absolute inset-y-0 left-0 bg-chrome-text"
+					style={{ width: `${pct}%` }}
+				/>
+				{/* Handle — a thin vertical bar at the level position. */}
+				<div
+					className="pointer-events-none absolute top-1/2 h-3 w-1 -translate-x-1/2 -translate-y-1/2 bg-chrome-text"
+					style={{ left: `${pct}%` }}
+				/>
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Transport — the bottom strip of the center workspace column. Media-only:
+ * the readout panel on the left (the cursor's Time / Freq / Amp plus the
+ * In / Out selection markers), the media-control cluster centered with speed
+ * and timecode beneath it, and the monitor volume on the right. There is no
+ * scrub control — seeking is done on the time ruler at the top of each view.
+ *
+ *   ┌──────────────────────────┬───────────────────────┬────────────┐
+ *   │          Cursor  In  Out │  media buttons + loop  │            │
+ *   │   Time   ··      ··  ··  │  speed · timecode      │            │
+ *   │   Freq   ··              │                        │   volume   │
+ *   │   Amp    ··      ··  ··  │                        │            │
+ *   └──────────────────────────┴───────────────────────┴────────────┘
+ *
+ * The left readout panel and the right volume region are equal fixed widths,
+ * so the media cluster centers on the bar's true centerline without any
+ * `absolute` positioning. Skip-back / chevrons / loop are visual stubs —
+ * there's no view-side skip/loop API yet. Play/pause is wired; the In / Out
+ * columns reflect `control.selectionIn*` / `selectionOut*`.
+ */
+export function Transport({ control }: TransportProps) {
+	const {
+		disabled,
+		playing,
+		positionSec,
+		durationSec,
+		onPlayToggle,
+		cursorReadout,
+		selectionInSec,
+		selectionOutSec,
+		selectionInAmp,
+		selectionOutAmp,
+	} = control;
+
+	const timecodeMainClass = disabled ? "text-chrome-text-dim" : "text-chrome-text";
+	const timecodeSecondaryClass = disabled
+		? "text-chrome-text-dim"
+		: "text-chrome-text-secondary";
+
+	// Selection In/Out — em-dash when the active view publishes no selection.
+	const selectionInLabel =
+		selectionInSec !== undefined ? formatTimecode(selectionInSec) : "—";
+	const selectionOutLabel =
+		selectionOutSec !== undefined ? formatTimecode(selectionOutSec) : "—";
+
+	return (
+		<div className="flex h-full items-center gap-4 bg-void px-4">
+			{/* Left — the readout panel: the cursor readout plus the In / Out
+			    selection markers, side by side. */}
+			<div className={`${SIDE_REGION} shrink-0`}>
+				<ReadoutPanel
+					cursor={{
+						time: cursorReadout?.time ?? "—",
+						freq: cursorReadout?.freq ?? "— Hz",
+						amp: cursorReadout?.amp ?? "— dB",
+					}}
+					selectionIn={{
+						time: selectionInLabel,
+						amp: selectionInAmp ?? "— dB",
+					}}
+					selectionOut={{
+						time: selectionOutLabel,
+						amp: selectionOutAmp ?? "— dB",
+					}}
+					disabled={disabled}
+				/>
+			</div>
+
+			{/* Center — media controls + speed/timecode. */}
+			<div className="flex flex-1 flex-col items-center justify-center gap-1.5">
+				<div className="flex items-center gap-2">
+					<div className="flex items-center">
+						<MediaButton icon="lucide:skip-back" label="Skip to start" disabled={disabled} />
+						<MediaButton icon="lucide:chevrons-left" label="Jump back" disabled={disabled} />
+						<MediaButton icon="lucide:chevron-left" label="Frame back" disabled={disabled} />
+						<MediaButton
+							icon={playing ? "lucide:pause" : "lucide:play"}
+							label={playing ? "Pause" : "Play"}
+							large
+							active={playing}
+							disabled={disabled}
+							onClick={onPlayToggle}
+						/>
+						<MediaButton icon="lucide:chevron-right" label="Frame forward" disabled={disabled} />
+						<MediaButton icon="lucide:chevrons-right" label="Jump forward" disabled={disabled} />
+						<MediaButton icon="lucide:skip-forward" label="Skip to end" disabled={disabled} />
+					</div>
+					<IconButton
+						icon="lucide:repeat"
+						label="Loop"
+						size={16}
+						variant="ghost"
+						dim
+						disabled={disabled}
+					/>
+				</div>
+
+				{/* Speed + timecode. The speed control is a visual stub (no
+				    playback-rate plumbing yet) — outer button owns the padding,
+				    inner span owns the chip and hugs its content. */}
+				<div className="flex items-center gap-3">
+					<button
+						type="button"
+						disabled={disabled}
+						className={`flex shrink-0 items-center px-1 py-0.5 font-technical text-[length:var(--text-sm)] italic ${
+							disabled ? "cursor-not-allowed text-chrome-text-dim" : "text-chrome-text"
+						}`}
+					>
+						<span className="flex items-center gap-0.5 bg-chrome-raised">
+							<span>1x</span>
+							<Icon icon="lucide:chevron-down" width={12} height={12} />
+						</span>
+					</button>
+					<span
+						className={`shrink-0 font-technical text-[length:var(--text-sm)] tabular-nums ${timecodeMainClass}`}
+					>
+						{formatTimecode(positionSec)}
+						<span className={timecodeSecondaryClass}> / </span>
+						<span className={timecodeSecondaryClass}>{formatTimecode(durationSec)}</span>
+					</span>
+				</div>
+			</div>
+
+			{/* Right — monitor volume. Equal width to the left readout column
+			    so the media cluster stays centered on the bar. */}
+			<div className={`${SIDE_REGION} flex shrink-0 items-center justify-end`}>
+				<VolumeSlider />
+			</div>
+		</div>
+	);
 }

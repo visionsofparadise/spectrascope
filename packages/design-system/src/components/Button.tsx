@@ -44,7 +44,7 @@ export function Button({ variant = "primary", size = "default", className, child
       )}
     >
       <span className={cn(
-        "flex items-center",
+        "flex items-center gap-1.5",
         variant === "primary" && "bg-primary",
         variant === "secondary" && "bg-secondary",
       )}>

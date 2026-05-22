@@ -55,7 +55,7 @@ export function HomeScreen({ context }: Props) {
 
 	return (
 		<div className="relative flex flex-1 flex-col overflow-hidden bg-void">
-			<TerrainShader colormap={context.app.theme} className="absolute inset-0" />
+			<TerrainShader className="absolute inset-0" />
 			<div className="relative flex h-full flex-col p-4">
 				<h1 className="font-display text-[length:6rem] font-bold leading-none tracking-tight text-chrome-text">ENGINEERING</h1>
 

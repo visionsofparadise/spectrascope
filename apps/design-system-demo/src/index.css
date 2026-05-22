@@ -2,3 +2,12 @@
 @import "@spectrascope/design-system/css/tokens.css";
 @import "@spectrascope/design-system/css/base.css";
 @import "@spectrascope/design-system/css/utilities.css";
+
+/*
+ * Tailwind v4 only auto-scans this app's own files. The workspace shell
+ * components live in the `@spectrascope/design-system` package, so their
+ * utility classes (`h-7`, `bg-chrome-text`, `border-data-selection-border`,
+ * …) must be registered explicitly — without this, any class used *only* in
+ * a design-system component is silently dropped from the compiled CSS.
+ */
+@source "../../../packages/design-system/src";

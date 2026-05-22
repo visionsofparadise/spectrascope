@@ -1,0 +1,667 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSpectralCompute } from "spectral-display";
+import type { LoudnessData, SpectralOptions } from "spectral-display";
+import type { Source } from "../../source";
+import { LinearDbAxis, TimeRuler } from "../spectral/Axes";
+import { MinimapDisplay } from "../spectral/MinimapDisplay";
+import type {
+	TransportControl,
+	TransportCursorReadout,
+} from "../spectral/Transport";
+import type { AudioData } from "../spectral/types";
+import { cn } from "../../cn";
+
+/** Local `#RRGGBB` → `[r, g, b]` helper. Duplicates the per-view copies in the
+ *  SourceStrip-based views. */
+function hexToRgb255(hex: string): [number, number, number] {
+	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
+	const expanded =
+		cleaned.length === 3
+			? cleaned
+					.split("")
+					.map((char) => `${char}${char}`)
+					.join("")
+			: cleaned;
+	const value = Number.parseInt(expanded, 16);
+
+	if (Number.isNaN(value) || expanded.length !== 6) {
+		return [184, 184, 192];
+	}
+
+	return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
+}
+
+/**
+ * LoudnessView — six loudness-metric tabs (True peak / Sample peak /
+ * Integrated / Momentary / Short term / RMS). Momentary / Short term / RMS
+ * render one polyline per visible source against a shared time axis, drawn in
+ * `source.layerColor.primary`. True peak, Sample peak and Integrated are
+ * *scalar* metrics — a single whole-clip value each — so they draw a flat
+ * horizontal line per source plus a labeled readout at the right edge.
+ *
+ * Real loudness data comes from `useSpectralCompute` in the `spectral-display`
+ * package, called per-source via the `<SourceLoudnessTrace>` sub-component (a
+ * hook must be called from a render function — one per source per metric).
+ *
+ * Per-source gain is applied at the PCM boundary by wrapping `readSamples` to
+ * multiply each sample by `10^(gainDb/20)`, mirroring `SourceStrip` so the
+ * loudness numbers reflect what the user hears.
+ */
+
+interface LoudnessViewProps {
+	readonly sources: ReadonlyArray<Source>;
+	readonly audioData: AudioData;
+	readonly onTransportControlChange?: (control: TransportControl) => void;
+}
+
+type Metric =
+	| "truePeak"
+	| "samplePeak"
+	| "integrated"
+	| "momentary"
+	| "shortTerm"
+	| "rms";
+
+interface MetricSpec {
+	readonly id: Metric;
+	readonly label: string;
+	/** dB-axis minimum for this metric. Peak/RMS go down to -60; LUFS down to -40. */
+	readonly axisMin: number;
+}
+
+const METRICS: ReadonlyArray<MetricSpec> = [
+	{ id: "truePeak", label: "True peak", axisMin: -60 },
+	{ id: "samplePeak", label: "Sample peak", axisMin: -60 },
+	{ id: "integrated", label: "Integrated", axisMin: -40 },
+	{ id: "momentary", label: "Momentary", axisMin: -40 },
+	{ id: "shortTerm", label: "Short term", axisMin: -40 },
+	{ id: "rms", label: "RMS", axisMin: -60 },
+];
+
+const DEFAULT_METRIC: MetricSpec = METRICS[2] ?? {
+	id: "integrated",
+	label: "Integrated",
+	axisMin: -40,
+};
+
+const DB_MAX = 0;
+const DB_TICKS_60: ReadonlyArray<number> = [0, -10, -20, -30, -40, -50, -60];
+const DB_TICKS_40: ReadonlyArray<number> = [0, -5, -10, -15, -20, -25, -30, -35, -40];
+
+/** Convert an amplitude (0..1) sample to dB, floored to keep -Infinity out. */
+function ampToDb(amp: number, floorDb: number): number {
+	if (amp <= 0 || !Number.isFinite(amp)) return floorDb;
+
+	const db = 20 * Math.log10(amp);
+
+	return db < floorDb ? floorDb : db;
+}
+
+function dbToY(db: number, axisMin: number): number {
+	const clamped = Math.max(axisMin, Math.min(DB_MAX, db));
+
+	return (DB_MAX - clamped) / (DB_MAX - axisMin);
+}
+
+function formatLufs(lufs: number): string {
+	if (!Number.isFinite(lufs)) return "— LUFS";
+
+	return `${lufs.toFixed(1)} LUFS`;
+}
+
+function formatDbTp(db: number): string {
+	if (!Number.isFinite(db)) return "— dBTP";
+
+	return `${db.toFixed(1)} dBTP`;
+}
+
+function formatDbFs(db: number): string {
+	if (!Number.isFinite(db)) return "— dBFS";
+
+	return `${db.toFixed(1)} dBFS`;
+}
+
+/**
+ * True peak, Sample peak and Integrated are *scalar* metrics — a single value
+ * for the whole clip, not a time series. True peak is the clip's maximum
+ * inter-sample (oversampled) peak; Sample peak is the maximum raw-sample peak;
+ * Integrated LUFS is the gated whole-programme loudness. Each renders as a flat
+ * horizontal line plus a right-edge label, so they read as constant across the
+ * source (they are). The other three metrics are genuine time series.
+ */
+function isScalarMetric(metric: Metric): boolean {
+	return (
+		metric === "truePeak" || metric === "samplePeak" || metric === "integrated"
+	);
+}
+
+function scalarMetricValue(
+	data: LoudnessData,
+	metric: Metric,
+): { readonly value: number; readonly text: string } | null {
+	if (metric === "integrated") {
+		return { value: data.integratedLufs, text: formatLufs(data.integratedLufs) };
+	}
+
+	if (metric === "truePeak") {
+		// Oversampled inter-sample peak; fall back to the sample peak when the
+		// engine didn't compute true-peak for this run.
+		const tp = data.truePeakDb ?? data.peakDb;
+
+		return { value: tp, text: formatDbTp(tp) };
+	}
+
+	if (metric === "samplePeak") {
+		return { value: data.peakDb, text: formatDbFs(data.peakDb) };
+	}
+
+	return null;
+}
+
+/**
+ * Build a polyline `points` string from a time-series Float32Array. Time per
+ * sample is `1 / WAVEFORM_POINTS_PER_SECOND` seconds; X is normalized into the
+ * [0, 1] viewBox by dividing by the total point count. Y is converted to the
+ * [0, 1] viewBox by mapping the value through `mapValueToDb` (which yields dB)
+ * and then `dbToY`. Samples that map to `-Infinity` (or below floor) start a
+ * fresh subpolyline so we don't draw a flat line at the floor.
+ */
+function buildPolylineSegments(
+	series: Float32Array,
+	axisMin: number,
+	mapValueToDb: (value: number) => number,
+): Array<string> {
+	const segments: Array<Array<string>> = [];
+	let current: Array<string> = [];
+	const count = series.length;
+
+	if (count === 0) return [];
+
+	for (let index = 0; index < count; index += 1) {
+		const raw = series[index] ?? Number.NEGATIVE_INFINITY;
+
+		if (!Number.isFinite(raw)) {
+			if (current.length > 0) {
+				segments.push(current);
+				current = [];
+			}
+
+			continue;
+		}
+
+		const db = mapValueToDb(raw);
+		const x = index / (count - 1 || 1);
+		const y = dbToY(db, axisMin);
+
+		current.push(`${x},${y}`);
+	}
+
+	if (current.length > 0) {
+		segments.push(current);
+	}
+
+	return segments.map((segment) => segment.join(" "));
+}
+
+/**
+ * Sub-component that runs `useSpectralCompute` for one source with the
+ * loudness pipeline enabled, and renders the polyline(s) for the active
+ * metric. Bubbles `LoudnessData` up to the parent (only used by the Integrated
+ * tab, which renders a right-edge text label per source).
+ */
+interface SourceLoudnessTraceProps {
+	readonly source: Source;
+	readonly audioData: AudioData;
+	readonly metric: MetricSpec;
+	readonly onLoudnessData: (sourceId: string, data: LoudnessData | null) => void;
+}
+
+function SourceLoudnessTrace({
+	source,
+	audioData,
+	metric,
+	onLoudnessData,
+}: SourceLoudnessTraceProps) {
+	// Wrap readSamples for per-source gain. Identical pattern to SourceStrip.
+	const gainAdjustedReadSamples = useMemo<AudioData["readSamples"]>(() => {
+		if (source.gainDb === 0) {
+			return audioData.readSamples;
+		}
+
+		const linear = Math.pow(10, source.gainDb / 20);
+
+		return async (channel, sampleOffset, sampleCount) => {
+			const raw = await audioData.readSamples(channel, sampleOffset, sampleCount);
+			const scaled = new Float32Array(raw.length);
+
+			for (let index = 0; index < raw.length; index += 1) {
+				const sample = raw[index] ?? 0;
+
+				scaled[index] = sample * linear;
+			}
+
+			return scaled;
+		};
+	}, [audioData.readSamples, source.gainDb]);
+
+	const spectralOptions = useMemo<SpectralOptions>(
+		() => ({
+			metadata: {
+				sampleRate: audioData.sampleRate,
+				sampleCount: audioData.totalSamples,
+				channelCount: audioData.channels,
+			},
+			// Width/height are required but the loudness pipeline doesn't draw a
+			// canvas — keep them minimal but non-zero so the engine still runs.
+			query: { startMs: 0, endMs: audioData.durationMs, width: 64, height: 64 },
+			readSamples: gainAdjustedReadSamples,
+			config: {
+				spectrogram: false,
+				loudness: true,
+				truePeak: true,
+			},
+		}),
+		[
+			audioData.sampleRate,
+			audioData.totalSamples,
+			audioData.channels,
+			audioData.durationMs,
+			gainAdjustedReadSamples,
+		],
+	);
+
+	const computeResult = useSpectralCompute(spectralOptions);
+	const loudnessData =
+		computeResult.status === "ready" ? computeResult.loudnessData : null;
+
+	useEffect(() => {
+		onLoudnessData(source.id, loudnessData);
+
+		return () => {
+			onLoudnessData(source.id, null);
+		};
+	}, [source.id, loudnessData, onLoudnessData]);
+
+	if (!loudnessData) return null;
+
+	const color = source.layerColor.primary;
+
+	if (isScalarMetric(metric.id)) {
+		// Scalar metric (TP / Integrated) — a flat horizontal line at the
+		// whole-clip value.
+		const scalar = scalarMetricValue(loudnessData, metric.id);
+
+		if (!scalar) return null;
+
+		const y = dbToY(scalar.value, metric.axisMin);
+
+		if (!Number.isFinite(y)) return null;
+
+		return (
+			<polyline
+				points={`0,${y} 1,${y}`}
+				fill="none"
+				stroke={color}
+				strokeWidth={1.5}
+				vectorEffect="non-scaling-stroke"
+			/>
+		);
+	}
+
+	const series = pickSeriesForMetric(loudnessData, metric.id);
+
+	if (!series) return null;
+
+	const mapValueToDb = mapperForMetric(metric.id, metric.axisMin);
+	const segments = buildPolylineSegments(series, metric.axisMin, mapValueToDb);
+
+	return (
+		<g>
+			{segments.map((points, index) => (
+				<polyline
+					key={index}
+					points={points}
+					fill="none"
+					stroke={color}
+					strokeWidth={1.5}
+					vectorEffect="non-scaling-stroke"
+				/>
+			))}
+		</g>
+	);
+}
+
+function pickSeriesForMetric(data: LoudnessData, metric: Metric): Float32Array | null {
+	switch (metric) {
+		case "momentary":
+			return data.momentaryLufs;
+		case "shortTerm":
+			return data.shortTermLufs;
+		case "rms":
+			return data.rmsEnvelope;
+		case "truePeak":
+		case "samplePeak":
+		case "integrated":
+		default:
+			return null;
+	}
+}
+
+/**
+ * Map a raw series value to dB for each metric. The RMS envelope is a linear
+ * amplitude in [0, 1] — convert via `20 * log10`. The LUFS series are already
+ * in LUFS (dB-domain) — pass through, but clamp -Infinity to the floor.
+ */
+function mapperForMetric(metric: Metric, floorDb: number): (value: number) => number {
+	if (metric === "rms") {
+		return (value: number) => ampToDb(value, floorDb);
+	}
+
+	return (value: number) => {
+		if (!Number.isFinite(value)) return floorDb;
+
+		return value < floorDb ? floorDb : value;
+	};
+}
+
+interface ScalarLabelsProps {
+	readonly visibleSources: ReadonlyArray<Source>;
+	readonly loudnessMap: ReadonlyMap<string, LoudnessData | null>;
+	readonly metric: MetricSpec;
+}
+
+/**
+ * Right-edge labels for the scalar tabs (True peak / Sample peak /
+ * Integrated). One label per source, positioned at its whole-clip value, in
+ * its `primary`
+ * color. Labels are absolute-positioned over the chart so they ride alongside
+ * the flat lines.
+ */
+function ScalarLabels({ visibleSources, loudnessMap, metric }: ScalarLabelsProps) {
+	return (
+		<>
+			{visibleSources.map((source) => {
+				const data = loudnessMap.get(source.id);
+
+				if (!data) return null;
+
+				const scalar = scalarMetricValue(data, metric.id);
+
+				if (!scalar || !Number.isFinite(scalar.value)) return null;
+
+				const yPct = dbToY(scalar.value, metric.axisMin) * 100;
+
+				return (
+					<div
+						key={source.id}
+						className="pointer-events-none absolute right-2 -translate-y-1/2 whitespace-nowrap font-technical text-[length:var(--text-xs)] tabular-nums"
+						style={{ top: `${yPct}%`, color: source.layerColor.primary }}
+					>
+						{scalar.text}
+					</div>
+				);
+			})}
+		</>
+	);
+}
+
+interface ChartCanvasProps {
+	readonly visibleSources: ReadonlyArray<Source>;
+	readonly audioData: AudioData;
+	readonly metric: MetricSpec;
+}
+
+function ChartCanvas({ visibleSources, audioData, metric }: ChartCanvasProps) {
+	const [loudnessMap, setLoudnessMap] = useState<Map<string, LoudnessData | null>>(
+		() => new Map(),
+	);
+
+	const handleLoudnessData = useCallback(
+		(sourceId: string, data: LoudnessData | null) => {
+			setLoudnessMap((prev) => {
+				const next = new Map(prev);
+
+				if (data === null) {
+					next.delete(sourceId);
+				} else {
+					next.set(sourceId, data);
+				}
+
+				return next;
+			});
+		},
+		[],
+	);
+
+	const dbTicks = metric.axisMin === -60 ? DB_TICKS_60 : DB_TICKS_40;
+
+	return (
+		<div className="relative h-full w-full overflow-hidden bg-void">
+			{dbTicks.map((db) => {
+				const yPct = dbToY(db, metric.axisMin) * 100;
+
+				return (
+					<div
+						key={`h${db}`}
+						className="pointer-events-none absolute left-0 right-0 h-px bg-chrome-border-subtle"
+						style={{ top: `${yPct}%` }}
+					/>
+				);
+			})}
+			<svg
+				className="absolute inset-0 h-full w-full"
+				viewBox="0 0 1 1"
+				preserveAspectRatio="none"
+			>
+				{visibleSources.map((source) => (
+					<SourceLoudnessTrace
+						key={source.id}
+						source={source}
+						audioData={audioData}
+						metric={metric}
+						onLoudnessData={handleLoudnessData}
+					/>
+				))}
+			</svg>
+			{isScalarMetric(metric.id) && (
+				<ScalarLabels
+					visibleSources={visibleSources}
+					loudnessMap={loudnessMap}
+					metric={metric}
+				/>
+			)}
+		</div>
+	);
+}
+
+interface MetricTabsProps {
+	readonly active: Metric;
+	readonly onChange: (metric: Metric) => void;
+}
+
+function MetricTabs({ active, onChange }: MetricTabsProps) {
+	return (
+		<nav className="flex h-8 shrink-0 items-stretch overflow-x-auto bg-void">
+			{METRICS.map((metric) => {
+				const isActive = metric.id === active;
+
+				return (
+					<button
+						key={metric.id}
+						type="button"
+						onClick={() => onChange(metric.id)}
+						className="flex shrink-0 items-center px-3 py-1.5 font-technical text-sm uppercase tracking-[0.06em] text-chrome-text-secondary outline-none hover:text-chrome-text"
+					>
+						{/* Button grammar — outer button owns the padding; the
+						    inner span owns the background and hugs the label. */}
+						<span
+							className={cn(
+								"flex items-center whitespace-nowrap",
+								isActive && "bg-secondary text-chrome-text",
+							)}
+						>
+							{metric.label}
+						</span>
+					</button>
+				);
+			})}
+		</nav>
+	);
+}
+
+export function LoudnessView({
+	sources,
+	audioData,
+	onTransportControlChange,
+}: LoudnessViewProps) {
+	const visibleSources = useMemo(
+		() => sources.filter((source) => source.visible),
+		[sources],
+	);
+
+	const [activeMetric, setActiveMetric] = useState<Metric>("integrated");
+	const metricSpec = useMemo(
+		() => METRICS.find((entry) => entry.id === activeMetric) ?? DEFAULT_METRIC,
+		[activeMetric],
+	);
+
+	const [playing, setPlaying] = useState(false);
+	const [positionSec, setPositionSec] = useState(0);
+	const durationSec = audioData.durationMs / 1000;
+
+	const onPlayToggle = useCallback(() => {
+		setPlaying((prev) => !prev);
+	}, []);
+
+	const onSeek = useCallback(
+		(sec: number) => {
+			setPositionSec(Math.max(0, Math.min(durationSec, sec)));
+		},
+		[durationSec],
+	);
+
+	const [cursorReadout, setCursorReadout] = useState<TransportCursorReadout>({
+		time: "00:00.000",
+		amp: "— dB",
+	});
+
+	// Cursor readout — time on X, dB on Y. Loudness has no frequency dimension,
+	// so the readout publishes only `time` and `amp`; the Transport renders just
+	// those two rows (its `Freq` row is suppressed when `freq` is absent).
+	const handleChartMouseMove = useCallback(
+		(ev: React.MouseEvent<HTMLDivElement>) => {
+			const rect = ev.currentTarget.getBoundingClientRect();
+
+			if (rect.width <= 0 || rect.height <= 0) return;
+
+			const xFrac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+			const yFrac = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
+
+			const totalSec = (xFrac * audioData.durationMs) / 1000;
+			const mins = Math.floor(totalSec / 60);
+			const secs = Math.floor(totalSec % 60);
+			const ms = Math.floor((totalSec % 1) * 1000);
+			const time = `${mins.toString().padStart(2, "0")}:${secs
+				.toString()
+				.padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
+
+			const db = DB_MAX - yFrac * (DB_MAX - metricSpec.axisMin);
+
+			setCursorReadout({ time, amp: `${db.toFixed(1)} dB` });
+		},
+		[audioData.durationMs, metricSpec.axisMin],
+	);
+
+	const control = useMemo<TransportControl>(
+		() => ({
+			disabled: false,
+			playing,
+			positionSec,
+			durationSec,
+			onPlayToggle,
+			onSeek,
+			cursorReadout,
+			// Demo selection range (0.25–0.45 of duration) — surfaces as the
+			// transport's In / Out columns.
+			selectionInSec: durationSec * 0.25,
+			selectionOutSec: durationSec * 0.45,
+			selectionInAmp: "-19.7 dB",
+			selectionOutAmp: "-24.3 dB",
+		}),
+		[playing, positionSec, durationSec, onPlayToggle, onSeek, cursorReadout],
+	);
+
+	useEffect(() => {
+		if (onTransportControlChange) {
+			onTransportControlChange(control);
+		}
+	}, [control, onTransportControlChange]);
+
+	const dbTicks = metricSpec.axisMin === -60 ? DB_TICKS_60 : DB_TICKS_40;
+
+	// The overview minimap renders a single waveform; with N sources the colour
+	// choice is arbitrary, so use the first visible source's primary (a neutral
+	// chrome pair when nothing is visible).
+	const minimapColor = visibleSources[0]?.layerColor ?? {
+		primary: "#B8B8C0",
+		secondary: "#44444C",
+	};
+
+	return (
+		<div className="flex h-full min-h-0 w-full flex-col bg-void">
+			<MetricTabs active={activeMetric} onChange={setActiveMetric} />
+
+			{/* The chart group runs flush to the pane's top, left and bottom
+			    edges — the time ruler, dB axis and overview minimap are the
+			    graph's own chrome there. Only the right edge keeps a `4`-unit
+			    inset. Bottom-flush keeps the minimap-to-Transport gap identical
+			    to the SourceStrip views. */}
+			<div className="flex min-h-0 flex-1 flex-col pr-4">
+				{/* Time ruler at the top — like the waveform views. Offset right
+				    by the dB-axis width so its ticks align with the plot's X. */}
+				<div className="flex shrink-0">
+					<div className="w-10 shrink-0 bg-void" />
+					<div className="min-w-0 flex-1">
+						<TimeRuler startMs={0} endMs={audioData.durationMs} />
+					</div>
+				</div>
+				<div className="flex min-h-0 flex-1">
+					<LinearDbAxis ticks={dbTicks} />
+					<div
+						className="relative min-w-0 flex-1"
+						onMouseMove={handleChartMouseMove}
+					>
+						{visibleSources.length === 0 ? (
+							<div className="flex h-full items-center justify-center bg-void">
+								<p className="font-body text-sm text-chrome-text-secondary">
+									No visible sources.
+								</p>
+							</div>
+						) : (
+							<ChartCanvas
+								visibleSources={visibleSources}
+								audioData={audioData}
+								metric={metricSpec}
+							/>
+						)}
+					</div>
+				</div>
+				{/* Bottom horizontal minimap — overview scroll strip, offset
+				    right by the dB-axis width so it sits under the plot. Flush to
+				    the pane bottom so the gap to the Transport matches the other
+				    views. */}
+				<div className="flex shrink-0">
+					<div className="w-10 shrink-0 bg-void" />
+					<div className="min-w-0 flex-1">
+						<MinimapDisplay
+							audioData={audioData}
+							viewStartFrac={0}
+							viewEndFrac={1}
+							waveformColor={hexToRgb255(minimapColor.primary)}
+						/>
+					</div>
+				</div>
+			</div>
+		</div>
+	);
+}

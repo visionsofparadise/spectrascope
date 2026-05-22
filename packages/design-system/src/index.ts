@@ -30,26 +30,53 @@ export { IconButton } from "./components/IconButton";
 export { DropdownButton } from "./components/DropdownButton";
 export type { DropdownButtonProps, MenuItem } from "./components/DropdownButton";
 export { TerrainShader } from "./components/TerrainShader";
+export { LayerColorPicker } from "./components/LayerColorPicker";
+export { AppShell } from "./components/AppShell";
+export { SourceRow } from "./components/SourceRow";
+export { SourcesPanel } from "./components/SourcesPanel";
+export { ViewTabs } from "./components/ViewTabs";
+export type { ViewId } from "./components/ViewTabs";
+export { Workspace } from "./components/Workspace";
+export { SourceStrip } from "./components/SourceStrip";
+export type { SourceStripProps, SourceStripCursorReadout } from "./components/SourceStrip";
+export { DifferenceView } from "./components/views/DifferenceView";
+export { FrequencyDistributionView } from "./components/views/FrequencyDistributionView";
+export { LoudnessView } from "./components/views/LoudnessView";
+export { OverlayView } from "./components/views/OverlayView";
+export { SliderView } from "./components/views/SliderView";
+export { SumView } from "./components/views/SumView";
+export { TimelineView } from "./components/views/TimelineView";
 
 // Spectral
+export { Curtain } from "./components/spectral/Curtain";
 export { Spectrogram } from "./components/spectral/Spectrogram";
 export { Waveform } from "./components/spectral/Waveform";
-export { FrequencyAxis, DbAxis, ColormapGradient, TimeRuler } from "./components/spectral/Axes";
+export { FrequencyAxis, DbAxis, ColormapGradient, TimeRuler, LinearDbAxis, HorizontalTimeAxis } from "./components/spectral/Axes";
 export { FrequencyMinimap } from "./components/spectral/FrequencyMinimap";
+export { Histogram } from "./components/spectral/Histogram";
 export { LoudnessOverlay } from "./components/spectral/LoudnessOverlay";
 export { LoudnessKey } from "./components/spectral/LoudnessKey";
 export { Minimap } from "./components/spectral/Minimap";
+export { MinimapDisplay } from "./components/spectral/MinimapDisplay";
 export { NodeNav } from "./components/spectral/NodeNav";
 export { Selection } from "./components/spectral/Selection";
 export { StereoMeter } from "./components/spectral/StereoMeter";
 export { Transport } from "./components/spectral/Transport";
+export type { TransportControl, TransportCursorReadout } from "./components/spectral/Transport";
 export { ZoomSliders } from "./components/spectral/ZoomSliders";
 export type { AudioDisplayData, WaveformFrame, LoudnessData, AudioData } from "./components/spectral/types";
 
-// Colors & Theme
-export { THEME_COLORS, COLORMAP_POINTS, colormapGradient, getThemeColors } from "./colors";
-export type { ColormapTheme, ColormapThemeColors } from "./colors";
-export { lavaColormap, viridisColormap } from "./colormaps";
+// Layers
+export type { LayerColor } from "./layers";
+export { DEFAULT_LAYER_PALETTE, buildLayerColormap } from "./layers";
+
+// Source (workspace shell)
+export type { Source } from "./source";
+export { createDefaultSource } from "./source";
+
+// Sync
+export { SyncProvider, useSync } from "./sync";
+export type { SyncState, SyncContextValue } from "./sync";
 
 // Utilities
 export { cn } from "./cn";

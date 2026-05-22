@@ -1,6 +1,6 @@
-import { useRef, useEffect, useCallback } from "react";
-import { COLORMAP_POINTS } from "../../colors";
-import type { ColormapTheme } from "../../colors";
+import { useRef, useEffect, useCallback, useMemo } from "react";
+import { buildLayerColormap } from "../../layers";
+import type { LayerColor } from "../../layers";
 
 // --- Frequency Axis (left side, fixed) ---
 
@@ -95,7 +95,7 @@ export function DbAxis() {
 
       {/* Center: -inf */}
       <div className="absolute left-0 flex items-center" style={{ top: "50%", transform: "translateY(-50%)" }}>
-        <span className="pl-1">{"\u2212\u221E"}</span>
+        <span className="pl-1">−∞</span>
       </div>
 
       {/* Bottom half: mirror */}
@@ -123,27 +123,16 @@ export function DbAxis() {
 
 // --- Colormap Gradient Strip (separate from dB axis) ---
 
-interface ColormapStopDef {
-  readonly pos: number;
-  readonly r: number;
-  readonly g: number;
-  readonly b: number;
+interface ColormapGradientProps {
+  readonly layerColor: LayerColor;
 }
 
-function buildColormapStops(colormap: ColormapTheme): ReadonlyArray<ColormapStopDef> {
-  const points = COLORMAP_POINTS[colormap];
-
-  return points.map((rgb, index) => ({
-    pos: index / (points.length - 1),
-    r: rgb[0],
-    g: rgb[1],
-    b: rgb[2],
-  }));
-}
-
-function interpolateColor(stops: ReadonlyArray<ColormapStopDef>, value: number): string {
+function interpolateColor(
+  stops: ReadonlyArray<{ position: number; color: readonly [number, number, number] }>,
+  value: number,
+): string {
   const clamped = Math.max(0, Math.min(1, value));
-  const fallback = stops[0] ?? { pos: 0, r: 0, g: 0, b: 0 };
+  const fallback = stops[0] ?? { position: 0, color: [0, 0, 0] as const };
   let lo = fallback;
   let hi = stops[stops.length - 1] ?? fallback;
 
@@ -151,32 +140,28 @@ function interpolateColor(stops: ReadonlyArray<ColormapStopDef>, value: number):
     const lower = stops[si] ?? fallback;
     const upper = stops[si + 1] ?? fallback;
 
-    if (clamped >= lower.pos && clamped <= upper.pos) {
+    if (clamped >= lower.position && clamped <= upper.position) {
       lo = lower;
       hi = upper;
       break;
     }
   }
 
-  const range = hi.pos - lo.pos;
-  const tx = range > 0 ? (clamped - lo.pos) / range : 0;
+  const range = hi.position - lo.position;
+  const tx = range > 0 ? (clamped - lo.position) / range : 0;
 
-  const red = Math.round(lo.r + (hi.r - lo.r) * tx);
-  const green = Math.round(lo.g + (hi.g - lo.g) * tx);
-  const blue = Math.round(lo.b + (hi.b - lo.b) * tx);
+  const red = Math.round(lo.color[0] + (hi.color[0] - lo.color[0]) * tx);
+  const green = Math.round(lo.color[1] + (hi.color[1] - lo.color[1]) * tx);
+  const blue = Math.round(lo.color[2] + (hi.color[2] - lo.color[2]) * tx);
 
   return `rgb(${red},${green},${blue})`;
 }
 
-interface ColormapGradientProps {
-  readonly colormap?: ColormapTheme;
-}
-
-export function ColormapGradient({ colormap = "lava" }: ColormapGradientProps) {
+export function ColormapGradient({ layerColor }: ColormapGradientProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const stripWidth = 10;
-  const stops = buildColormapStops(colormap);
+  const stops = useMemo(() => buildLayerColormap(layerColor).colors, [layerColor]);
 
   const renderColormap = useCallback(() => {
     const canvas = canvasRef.current;
@@ -298,20 +283,23 @@ export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
         fontVariantNumeric: "tabular-nums",
       }}
     >
-      {/* Minor ticks */}
+      {/* Minor ticks — chrome-text-dim so they read on the void background.
+          `chrome-border` is a panel-divider value and is far too dark to be
+          visible against `bg-void`. */}
       {minorTicks.map((timeMs) => {
         const fraction = (timeMs - startMs) / spanMs;
 
         return (
           <div
             key={`m${timeMs}`}
-            className="absolute bottom-0 h-1.5 w-px bg-chrome-border-subtle"
+            className="absolute bottom-0 h-1.5 w-px bg-chrome-text-dim"
             style={{ left: `${fraction * 100}%` }}
           />
         );
       })}
 
-      {/* Major ticks with labels */}
+      {/* Major ticks with labels — chrome-text-secondary, matching the tick
+          labels so a labelled tick reads as one unit. */}
       {majorTicks.map(({ timeMs, label }) => {
         const fraction = (timeMs - startMs) / spanMs;
 
@@ -321,13 +309,139 @@ export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
             className="absolute bottom-0"
             style={{ left: `${fraction * 100}%` }}
           >
-            <span className="absolute bottom-0 left-0 h-2.5 w-px bg-chrome-border" />
+            <span className="absolute bottom-0 left-0 h-2.5 w-px bg-chrome-text-secondary" />
             <span className="absolute bottom-0.5 left-1.5">{label}</span>
           </div>
         );
       })}
 
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-chrome-border-subtle" />
+      <div className="absolute bottom-0 left-0 right-0 h-px bg-chrome-border" />
+    </div>
+  );
+}
+
+// --- Linear dB Axis (left side, single-direction linear scale) ---
+
+interface LinearDbAxisProps {
+  /** dB tick values to label. Top = highest value, bottom = lowest. */
+  readonly ticks: ReadonlyArray<number>;
+  /** Width of the axis column. Defaults to `2.5rem` (matches FreqDist precedent). */
+  readonly width?: string;
+}
+
+/**
+ * Single-direction linear dB axis. Top = first entry in `ticks`, bottom = last
+ * entry. Used by chart views (FrequencyDistributionView, LoudnessView) where
+ * the Y axis is a single signed dB range rather than the symmetric waveform-
+ * amplitude axis the spectrogram `DbAxis` represents.
+ *
+ * Promoted to a shared helper in Phase 9 — second use of the same orientation.
+ * Inline copies in `FrequencyDistributionView` previously; both views now
+ * consume this. The tick values are caller-owned so each view picks its own
+ * dB range (FreqDist: 0 → -90; Loudness: 0 → -60).
+ */
+export function LinearDbAxis({ ticks, width = "2.5rem" }: LinearDbAxisProps) {
+  const dbMax = ticks[0] ?? 0;
+  const dbMin = ticks[ticks.length - 1] ?? -90;
+  const dbRange = dbMax - dbMin;
+
+  return (
+    <div
+      className="relative h-full bg-void font-technical text-chrome-text-secondary"
+      style={{
+        width,
+        fontSize: "var(--text-xs)",
+        letterSpacing: "0.02em",
+        fontVariantNumeric: "tabular-nums",
+      }}
+    >
+      {ticks.map((db) => {
+        const yPct = dbRange > 0 ? ((dbMax - db) / dbRange) * 100 : 0;
+
+        return (
+          <div
+            key={db}
+            className="absolute right-0 flex items-center"
+            style={{ top: `${yPct}%`, transform: "translateY(-50%)" }}
+          >
+            <span className="pr-1">{db}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// --- Horizontal Time Axis (bottom of chart, time on X) ---
+
+interface HorizontalTimeAxisProps {
+  readonly startMs: number;
+  readonly endMs: number;
+}
+
+function formatHorizontalTime(ms: number): string {
+  const totalSeconds = ms / 1000;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  const frac = Math.floor((totalSeconds * 10) % 10);
+
+  return `${minutes}:${seconds.toString().padStart(2, "0")}.${frac}`;
+}
+
+/**
+ * Horizontal time axis with ticks along the bottom of a chart pane. Sibling to
+ * `TimeRuler` (which lives at the top of a spectrogram and has a different
+ * label-anchor convention); this variant labels ticks centered below each tick
+ * line, suitable for an under-chart axis on Loudness / chart-style views.
+ *
+ * Promoted to a shared helper in Phase 9 — first use is `LoudnessView`. The
+ * existing `TimeRuler` is kept for spectrogram-top use because its label
+ * anchor (above the bottom border, left of the tick line) is tuned to read as
+ * column headers, not as bottom-axis tick labels.
+ */
+export function HorizontalTimeAxis({ startMs, endMs }: HorizontalTimeAxisProps) {
+  const spanMs = endMs - startMs;
+
+  let majorMs = 5000;
+
+  if (spanMs < 2000) majorMs = 200;
+  else if (spanMs < 5000) majorMs = 500;
+  else if (spanMs < 10000) majorMs = 1000;
+  else if (spanMs < 30000) majorMs = 2000;
+  else if (spanMs < 60000) majorMs = 5000;
+  else majorMs = 10000;
+
+  const ticks: Array<{ timeMs: number; label: string }> = [];
+  const first = Math.ceil(startMs / majorMs) * majorMs;
+
+  for (let tick = first; tick <= endMs; tick += majorMs) {
+    ticks.push({ timeMs: tick, label: formatHorizontalTime(tick) });
+  }
+
+  return (
+    <div
+      className="relative h-6 bg-void font-technical text-chrome-text-secondary"
+      style={{
+        fontSize: "var(--text-xs)",
+        letterSpacing: "0.02em",
+        fontVariantNumeric: "tabular-nums",
+      }}
+    >
+      <div className="absolute top-0 left-0 right-0 h-px bg-chrome-border" />
+      {ticks.map(({ timeMs, label }) => {
+        const fraction = spanMs > 0 ? (timeMs - startMs) / spanMs : 0;
+
+        return (
+          <div
+            key={timeMs}
+            className="absolute top-0"
+            style={{ left: `${fraction * 100}%`, transform: "translateX(-50%)" }}
+          >
+            <span className="absolute top-0 left-1/2 h-1.5 w-px -translate-x-1/2 bg-chrome-text-secondary" />
+            <span className="absolute top-2 left-1/2 -translate-x-1/2 whitespace-nowrap">{label}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }

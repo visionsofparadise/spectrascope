@@ -8,15 +8,15 @@ interface Props {
 
 export function DemoTabBar({ tabs, activeTabId, menuItems }: Props) {
 	return (
-		<div className="flex h-9 shrink-0 items-center gap-2 bg-void px-2">
+		<div className="flex h-12 shrink-0 items-center gap-2 bg-void px-3">
 			{menuItems && menuItems.length > 0 && (
 				<DropdownButton
-					trigger={<IconButton icon="lucide:menu" label="Menu" size={16} />}
+					trigger={<IconButton icon="lucide:menu" label="Menu" size={20} />}
 					items={menuItems}
 				/>
 			)}
 
-			<div className="h-4 w-px bg-chrome-border-subtle" />
+			<div className="h-6 w-px bg-chrome-border-subtle" />
 
 			{tabs.map((tab) => {
 				const isActive = tab.id === activeTabId;
@@ -28,8 +28,8 @@ export function DemoTabBar({ tabs, activeTabId, menuItems }: Props) {
 							isActive ? "bg-primary text-void" : "bg-chrome-raised text-chrome-text"
 						}`}
 					>
-						<span className="font-body text-[length:var(--text-sm)]">{tab.label}</span>
-						<IconButton icon="lucide:x" label="Close tab" size={10} dim />
+						<span className="font-body text-[length:var(--text-base)]">{tab.label}</span>
+						<IconButton icon="lucide:x" label="Close tab" size={14} dim />
 					</div>
 				);
 			})}
@@ -37,6 +37,7 @@ export function DemoTabBar({ tabs, activeTabId, menuItems }: Props) {
 			<IconButton
 				icon="lucide:plus"
 				label="New tab"
+				size={20}
 				active={!tabs.some((tab) => tab.id === activeTabId)}
 				activeVariant="primary"
 			/>

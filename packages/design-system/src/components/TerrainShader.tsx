@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import type { ColormapTheme } from '../colors';
 
 const VERT = `#version 300 es
 in vec2 a_position;
@@ -8,44 +7,13 @@ void main() {
 }
 `;
 
-function buildFrag(colormap: ColormapTheme): string {
-  const colormapFn = colormap === "viridis"
-    ? `vec3 colormapFn(float t) {
-  t = clamp(t, 0.0, 1.0);
-  vec3 c0 = vec3(0.0, 0.0, 0.0);
-  vec3 c1 = vec3(68.0, 1.0, 84.0);
-  vec3 c2 = vec3(64.0, 68.0, 135.0);
-  vec3 c3 = vec3(33.0, 145.0, 140.0);
-  vec3 c4 = vec3(42.0, 182.0, 91.0);
-  vec3 c5 = vec3(253.0, 231.0, 37.0);
-  vec3 col = mix(c0, c1, smoothstep(0.0, 0.15, t));
-  col = mix(col, c2, smoothstep(0.15, 0.3, t));
-  col = mix(col, c3, smoothstep(0.3, 0.5, t));
-  col = mix(col, c4, smoothstep(0.5, 0.75, t));
-  col = mix(col, c5, smoothstep(0.75, 1.0, t));
-  return col / 255.0;
-}`
-    : `vec3 colormapFn(float t) {
-  t = clamp(t, 0.0, 1.0);
-  vec3 c0 = vec3(0.0, 0.0, 0.0);
-  vec3 c1 = vec3(15.0, 20.0, 70.0);
-  vec3 c2 = vec3(80.0, 10.0, 5.0);
-  vec3 c3 = vec3(185.0, 55.0, 0.0);
-  vec3 c4 = vec3(240.0, 155.0, 25.0);
-  vec3 c5 = vec3(255.0, 255.0, 255.0);
-  vec3 col = mix(c0, c1, smoothstep(0.0, 0.2, t));
-  col = mix(col, c2, smoothstep(0.2, 0.35, t));
-  col = mix(col, c3, smoothstep(0.35, 0.55, t));
-  col = mix(col, c4, smoothstep(0.55, 0.75, t));
-  col = mix(col, c5, smoothstep(0.75, 1.0, t));
-  return col / 255.0;
-}`;
-
-  const skyColor = colormap === "viridis"
-    ? `vec3(30.0, 0.0, 36.0) / 255.0`
-    : `vec3(15.0, 20.0, 70.0) / 255.0`;
-
-  return `#version 300 es
+// Phase 1: terrain gradient locked to the viridis chrome accent.
+// Three-stop ramp void -> secondary (#440154 viridis purple) -> primary (#A3E635 neon lime):
+//   - valleys/low recede into the void background
+//   - mid-elevation reads as viridis purple
+//   - peaks pop in neon lime
+// Phase 2+ may swap this for a layer-driven gradient if HomePage gains layer awareness.
+const FRAG = `#version 300 es
 precision mediump float;
 
 uniform vec2 u_resolution;
@@ -114,7 +82,15 @@ float terrain(vec2 p, float camX) {
   return terrainBase(p) + dx * dx * TROUGH;
 }
 
-${colormapFn}
+vec3 colormapFn(float t) {
+  t = clamp(t, 0.0, 1.0);
+  vec3 c0 = vec3(2.0, 2.0, 4.0);
+  vec3 c1 = vec3(68.0, 1.0, 84.0);
+  vec3 c2 = vec3(163.0, 230.0, 53.0);
+  vec3 col = mix(c0, c1, smoothstep(0.0, 0.55, t));
+  col = mix(col, c2, smoothstep(0.55, 1.0, t));
+  return col / 255.0;
+}
 
 void main() {
   vec2 uv = gl_FragCoord.xy / u_resolution;
@@ -170,7 +146,7 @@ void main() {
     float fogFactor = 1.0 - exp(-fogDist * FOG_DENSITY);
     col = mix(col, voidColor, fogFactor);
   } else {
-    vec3 skyBase = ${skyColor};
+    vec3 skyBase = vec3(30.0, 0.0, 36.0) / 255.0;
     float skyGrad = smoothstep(-0.2, 0.5, rd.y);
     col = mix(skyBase, voidColor, skyGrad);
   }
@@ -178,7 +154,6 @@ void main() {
   fragColor = vec4(col, 1.0);
 }
 `;
-}
 
 const DPR = 0.5;
 
@@ -214,7 +189,7 @@ function createProgram(gl: WebGL2RenderingContext, vert: WebGLShader, frag: WebG
   return program;
 }
 
-export function TerrainShader({ className, colormap = "lava" }: { readonly className?: string; readonly colormap?: ColormapTheme }) {
+export function TerrainShader({ className }: { readonly className?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
 
@@ -230,7 +205,7 @@ export function TerrainShader({ className, colormap = "lava" }: { readonly class
     if (!gl) return;
 
     const vert = createShader(gl, gl.VERTEX_SHADER, VERT);
-    const frag = createShader(gl, gl.FRAGMENT_SHADER, buildFrag(colormap));
+    const frag = createShader(gl, gl.FRAGMENT_SHADER, FRAG);
 
     if (!vert || !frag) return;
 
@@ -289,7 +264,7 @@ export function TerrainShader({ className, colormap = "lava" }: { readonly class
       gl.deleteShader(frag);
       gl.deleteBuffer(buffer);
     };
-  }, [colormap]);
+  }, []);
 
   return (
     <canvas
