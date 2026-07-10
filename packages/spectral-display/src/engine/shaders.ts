@@ -225,6 +225,64 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `;
 
+export const VECTORSCOPE_VISUALIZE_SHADER = /* wgsl */ `
+
+struct Uniforms {
+  grid_size: u32,
+  output_width: u32,
+  output_height: u32,
+  max_count: u32,
+  tint_r: f32,
+  tint_g: f32,
+  tint_b: f32,
+  _pad: f32,
+}
+
+@group(0) @binding(0) var<storage, read> histogram_buffer: array<u32>;
+@group(0) @binding(1) var output_texture: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(2) var<uniform> uniforms: Uniforms;
+
+@compute @workgroup_size(64, 1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  let column = global_id.x;
+  let pixel_row = global_id.y;
+
+  if (column >= uniforms.output_width || pixel_row >= uniforms.output_height) {
+    return;
+  }
+
+  // Map the output pixel to a histogram grid cell. The grid is square
+  // (grid_size x grid_size) in (Side, Mid) coordinates: Side -> X, Mid -> Y.
+  let grid_size = uniforms.grid_size;
+  let grid_x = min(column * grid_size / uniforms.output_width, grid_size - 1u);
+  let grid_y = min(pixel_row * grid_size / uniforms.output_height, grid_size - 1u);
+
+  let count = histogram_buffer[grid_y * grid_size + grid_x];
+
+  // Log scaling for the bin-count normalization. A vectorscope's density spans
+  // many orders of magnitude — a few dominant bins on the Mid axis swamp the
+  // diffuse cloud everywhere else. log1p compresses that range so low-density
+  // structure stays visible; linear normalization would render it pure black.
+  let density = clamp(
+    log(1.0 + f32(count)) / log(1.0 + f32(max(uniforms.max_count, 1u))),
+    0.0,
+    1.0,
+  );
+
+  // Tint output: a single-hue cloud on a transparent background. Empty bins
+  // (density 0) are fully transparent; dense bins are the full tint. The result
+  // is premultiplied alpha (rgb already scaled by density) so stacked
+  // vectorscope canvases blend cleanly via the premultiplied canvas context.
+  let tint = vec3<f32>(uniforms.tint_r, uniforms.tint_g, uniforms.tint_b) / 255.0;
+  let color = vec4<f32>(tint * density, density);
+
+  // Flip Y so Mid increases upward, matching the conventional goniometer
+  // orientation (mono signal points up the vertical axis).
+  let pixel_y = uniforms.output_height - 1u - pixel_row;
+  textureStore(output_texture, vec2<i32>(i32(column), i32(pixel_y)), color);
+}
+`;
+
 export const WAVEFORM_VISUALIZE_SHADER = /* wgsl */ `
 
 struct Uniforms {

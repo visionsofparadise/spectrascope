@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import { Icon } from "@iconify/react";
 import { IconButton } from "../IconButton";
 
@@ -49,6 +49,19 @@ export interface TransportControl {
 
 interface TransportProps {
 	readonly control: TransportControl;
+	/**
+	 * Monitor volume — `0` silent, `1` unity. A *controlled* value: the
+	 * Transport renders the `VolumeSlider` from this prop and emits changes via
+	 * `onVolumeChange`; it owns no volume state.
+	 *
+	 * Volume is a separate `Transport`-level prop pair rather than a field on
+	 * `TransportControl` because `TransportControl` is published per *view* and
+	 * volume is a monitor-level, comparison-wide concern — not a view concern.
+	 * This mirrors `Workspace`'s controlled `activeView` / `onActiveViewChange`.
+	 */
+	readonly volume: number;
+	/** Emitted when the monitor volume changes (drag or keyboard). */
+	readonly onVolumeChange: (volume: number) => void;
 }
 
 /** Fixed width of the left readout panel (and the matching right volume
@@ -203,24 +216,37 @@ function ReadoutPanel({
  * per-source gain. Sources carry no gain rider (per the 2026-05-20 "drop gain
  * knob" decision); the audition level is a single playback-side control and
  * the Transport is its home.
+ *
+ * Purely visual / controlled — it owns no volume state. The current `volume`
+ * is rendered from the prop and every change is emitted through
+ * `onVolumeChange`; the consumer (the desktop app, or the demo) owns the
+ * state. This keeps the design-system component a visual element only.
  */
-function VolumeSlider() {
-	const [volume, setVolume] = useState(0.8);
+function VolumeSlider({
+	volume,
+	onVolumeChange,
+}: {
+	readonly volume: number;
+	readonly onVolumeChange: (volume: number) => void;
+}) {
 	const trackRef = useRef<HTMLDivElement>(null);
 
-	const setFromClientX = useCallback((clientX: number) => {
-		const track = trackRef.current;
+	const setFromClientX = useCallback(
+		(clientX: number) => {
+			const track = trackRef.current;
 
-		if (!track) return;
+			if (!track) return;
 
-		const rect = track.getBoundingClientRect();
+			const rect = track.getBoundingClientRect();
 
-		if (rect.width <= 0) return;
+			if (rect.width <= 0) return;
 
-		const frac = (clientX - rect.left) / rect.width;
+			const frac = (clientX - rect.left) / rect.width;
 
-		setVolume(Math.max(0, Math.min(1, frac)));
-	}, []);
+			onVolumeChange(Math.max(0, Math.min(1, frac)));
+		},
+		[onVolumeChange],
+	);
 
 	const handlePointerDown = useCallback(
 		(ev: React.PointerEvent<HTMLDivElement>) => {
@@ -241,23 +267,26 @@ function VolumeSlider() {
 		[setFromClientX],
 	);
 
-	const handleKeyDown = useCallback((ev: React.KeyboardEvent<HTMLDivElement>) => {
-		const STEP = 0.05;
+	const handleKeyDown = useCallback(
+		(ev: React.KeyboardEvent<HTMLDivElement>) => {
+			const STEP = 0.05;
 
-		if (ev.key === "ArrowLeft" || ev.key === "ArrowDown") {
-			ev.preventDefault();
-			setVolume((prev) => Math.max(0, prev - STEP));
-		} else if (ev.key === "ArrowRight" || ev.key === "ArrowUp") {
-			ev.preventDefault();
-			setVolume((prev) => Math.min(1, prev + STEP));
-		} else if (ev.key === "Home") {
-			ev.preventDefault();
-			setVolume(0);
-		} else if (ev.key === "End") {
-			ev.preventDefault();
-			setVolume(1);
-		}
-	}, []);
+			if (ev.key === "ArrowLeft" || ev.key === "ArrowDown") {
+				ev.preventDefault();
+				onVolumeChange(Math.max(0, volume - STEP));
+			} else if (ev.key === "ArrowRight" || ev.key === "ArrowUp") {
+				ev.preventDefault();
+				onVolumeChange(Math.min(1, volume + STEP));
+			} else if (ev.key === "Home") {
+				ev.preventDefault();
+				onVolumeChange(0);
+			} else if (ev.key === "End") {
+				ev.preventDefault();
+				onVolumeChange(1);
+			}
+		},
+		[volume, onVolumeChange],
+	);
 
 	const pct = volume * 100;
 	const glyph =
@@ -323,8 +352,11 @@ function VolumeSlider() {
  * `absolute` positioning. Skip-back / chevrons / loop are visual stubs —
  * there's no view-side skip/loop API yet. Play/pause is wired; the In / Out
  * columns reflect `control.selectionIn*` / `selectionOut*`.
+ *
+ * The monitor `VolumeSlider` is controlled — `volume` / `onVolumeChange` are
+ * `Transport`-level props the consumer owns.
  */
-export function Transport({ control }: TransportProps) {
+export function Transport({ control, volume, onVolumeChange }: TransportProps) {
 	const {
 		disabled,
 		playing,
@@ -430,7 +462,7 @@ export function Transport({ control }: TransportProps) {
 			{/* Right — monitor volume. Equal width to the left readout column
 			    so the media cluster stays centered on the bar. */}
 			<div className={`${SIDE_REGION} flex shrink-0 items-center justify-end`}>
-				<VolumeSlider />
+				<VolumeSlider volume={volume} onVolumeChange={onVolumeChange} />
 			</div>
 		</div>
 	);

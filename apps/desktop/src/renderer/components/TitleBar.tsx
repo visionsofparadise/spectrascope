@@ -49,12 +49,10 @@ export function TitleBar({ context }: Props) {
 						<IconButton icon="lucide:menu" label="Menu" size={16} />
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="start">
-						<AppMenuItem icon="lucide:file-plus" label="New Graph" shortcut="Ctrl+N" onSelect={() => void context.newBagTab()} />
-						<AppMenuItem icon="lucide:folder-open" label="Open Graph" shortcut="Ctrl+O" onSelect={() => void context.openBagTab()} />
+						<AppMenuItem icon="lucide:file-plus" label="New Session" shortcut="Ctrl+N" onSelect={() => void context.newComparison()} />
+						<AppMenuItem icon="lucide:folder-open" label="Open Session…" shortcut="Ctrl+O" onSelect={() => void context.openComparison()} />
 						<AppMenuItem icon="lucide:save" label="Save" shortcut="Ctrl+S" disabled={!hasActiveGraphTab} />
 						<AppMenuItem icon="lucide:save-all" label="Save As…" shortcut="Ctrl+Shift+S" disabled={!hasActiveGraphTab} />
-						<DropdownMenuSeparator />
-						<AppMenuItem icon="lucide:settings" label="Settings" shortcut="Ctrl+," />
 						<DropdownMenuSeparator />
 						<AppMenuItem icon="lucide:x" label="Close" shortcut="Ctrl+Q" onSelect={() => void context.main.quitApp()} />
 					</DropdownMenuContent>
@@ -62,7 +60,7 @@ export function TitleBar({ context }: Props) {
 			</div>
 
 			<span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 select-none font-display font-bold leading-none tracking-tight text-chrome-text text-[length:var(--text-sm)]">
-				ENGINEERING
+				SPECTRASCOPE
 			</span>
 		</div>
 	);

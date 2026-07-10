@@ -7,11 +7,15 @@ import { VitePlugin } from '@electron-forge/plugin-vite';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- Forge config runs in a CJS context; ffmpeg-static is a CJS module exporting the bundled binary path
+const ffmpegStaticPath = require('ffmpeg-static') as string;
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     icon: './assets/icon',
     appBundleId: 'media.zcross.spectrascope',
+    extraResource: [ffmpegStaticPath],
   },
   rebuildConfig: {},
   makers: [

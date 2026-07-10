@@ -32,6 +32,10 @@ export interface PipelineResult {
 	waveformPointCount: number;
 	loudnessData: LoudnessData | null;
 	spectrogramTexture: GPUTexture | null;
+	/** Per-point inter-channel correlation envelope; null unless `stereo` was set. */
+	correlationEnvelope: Float32Array | null;
+	/** Whole-clip (Side, Mid) density histogram; null unless `stereo` was set. */
+	vectorscopeHistogram: Uint32Array | null;
 	options: ResolvedPipelineOptions;
 }
 
@@ -58,9 +62,9 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 	const pointCount = Math.ceil(sampleCount / samplesPerPoint);
 
 	const resolvedConfig = resolveConfig(config);
-	const { spectrogram, loudness, truePeak: computeTruePeak } = resolvedConfig;
+	const { spectrogram, loudness, truePeak: computeTruePeak, stereo, channelInput } = resolvedConfig;
 
-	const scanContext = createScanContext(metadata, pointCount, samplesPerPoint, DEFAULT_CHUNK_SIZE, loudness, computeTruePeak);
+	const scanContext = createScanContext(metadata, pointCount, samplesPerPoint, DEFAULT_CHUNK_SIZE, loudness, computeTruePeak, stereo, channelInput);
 
 	const spectralContext = spectrogram ? await engine.prepare(sampleCount, sampleRate, resolvedConfig) : null;
 
@@ -81,7 +85,11 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 			scanSamples(channelBuffers, chunkFrames, scanContext);
 
 			if (spectralContext) {
-				engine.submitChunk(scanContext.monoBuffer, chunkFrames, spectralContext);
+				// "mono" feeds the FFT the cross-channel mono mix; "mid"/"side"
+				// feed the derived signal scanSamples wrote into channelInputBuffer.
+				const fftInput = channelInput === "mono" ? scanContext.monoBuffer : scanContext.channelInputBuffer;
+
+				engine.submitChunk(fftInput, chunkFrames, spectralContext);
 			}
 
 			offset += chunkFrames;
@@ -110,6 +118,8 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 		waveformPointCount: scanContext.state.pointIndex,
 		loudnessData,
 		spectrogramTexture,
+		correlationEnvelope: stereo ? scanContext.correlationEnvelope : null,
+		vectorscopeHistogram: stereo ? scanContext.vectorscopeHistogram : null,
 		options: resolvedOptions,
 	};
 }

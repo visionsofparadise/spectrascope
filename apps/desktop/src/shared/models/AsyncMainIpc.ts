@@ -1,10 +1,12 @@
 import type { BrowserWindow } from "electron";
 import type { FileWatcherManager } from "../../main/FileWatcherManager";
+import type { RenderManager } from "../../main/RenderManager";
 import { Logger } from "./Logger";
 
 export interface IpcHandlerDependencies {
 	readonly browserWindow: BrowserWindow;
 	readonly fileWatcherManager: FileWatcherManager;
+	readonly renderManager: RenderManager;
 	readonly logger: Logger;
 	readonly windowId: string;
 }

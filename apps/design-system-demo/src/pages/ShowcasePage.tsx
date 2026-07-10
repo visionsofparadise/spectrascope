@@ -15,6 +15,7 @@ import {
   AppShell,
   Button,
   ButtonSelection,
+  CorrelationView,
   Curtain,
   DEFAULT_LAYER_PALETTE,
   DifferenceView,
@@ -35,6 +36,7 @@ import {
   SyncProvider,
   TimelineView,
   Transport,
+  VectorscopeView,
   ViewTabs,
   createDefaultSource,
   useSync,
@@ -47,6 +49,7 @@ import type {
   TransportControl,
   ViewId,
 } from "@spectrascope/design-system";
+import type { ChannelInput } from "spectral-display";
 import { loadAudio } from "../data/audioLoader";
 
 const SHOWCASE_LAYER_FALLBACK: LayerColor = { primary: "#F59E0B", secondary: "#7C2D12" };
@@ -321,7 +324,7 @@ function MiniSyncedPairDemo() {
   );
 
   return (
-    <SyncProvider initial={initial}>
+    <SyncProvider enabled initial={initial}>
       <div className="grid grid-cols-2 gap-4">
         <MiniSyncedStrip id="synced-a" magnitudes={magsA} layerColor={SHOWCASE_LAYER} dbRange={[-60, 0]} />
         <MiniSyncedStrip id="synced-b" magnitudes={magsB} layerColor={SHOWCASE_LAYER_B} dbRange={[-60, 0]} />
@@ -395,7 +398,7 @@ function seedDemoSources(count: number): Array<Source> {
   return Array.from({ length: count }, (_, index) =>
     createDefaultSource(index, {
       name: names[index] ?? `Source ${index + 1}`,
-      filePath: paths[index] ?? `demo/source-${index + 1}.wav`,
+      audioFilePath: paths[index] ?? `demo/source-${index + 1}.wav`,
     }),
   );
 }
@@ -447,7 +450,13 @@ function AppShellPreview() {
               </span>
             </div>
           }
-          transport={<Transport control={DISABLED_TRANSPORT_CONTROL} />}
+          transport={
+            <Transport
+              control={DISABLED_TRANSPORT_CONTROL}
+              volume={0.8}
+              onVolumeChange={() => {}}
+            />
+          }
         />
       </div>
     </div>
@@ -466,7 +475,7 @@ function SourcesPanelPreview() {
 
 function SourceRowPreview() {
   const [source, setSource] = useState<Source>(() =>
-    createDefaultSource(0, { name: "Reference", filePath: "demo/reference-mix.wav" }),
+    createDefaultSource(0, { name: "Reference", audioFilePath: "demo/reference-mix.wav" }),
   );
 
   return (
@@ -478,10 +487,23 @@ function SourceRowPreview() {
 
 function ViewTabsPreview() {
   const [active, setActive] = useState<ViewId>("overlay");
+  const [channelInput, setChannelInput] = useState<ChannelInput>("mono");
+  const [syncEnabled, setSyncEnabled] = useState(false);
 
   return (
     <div className="w-[600px] border border-chrome-border">
-      <ViewTabs active={active} onActiveChange={setActive} />
+      <ViewTabs
+        active={active}
+        onActiveChange={setActive}
+        channelInput={channelInput}
+        onChannelInputChange={setChannelInput}
+        syncEnabled={syncEnabled}
+        onSyncEnabledChange={setSyncEnabled}
+        onUndo={() => {}}
+        onRedo={() => {}}
+        canUndo={false}
+        canRedo={false}
+      />
     </div>
   );
 }
@@ -493,6 +515,8 @@ function TransportPreview() {
   const durationSec = 192; // 03:12
   const [position, setPosition] = useState(67);
   const [playing, setPlaying] = useState(true);
+  // The `VolumeSlider` is controlled — the preview holds the volume locally.
+  const [volume, setVolume] = useState(0.8);
 
   const control: TransportControl = {
     playing,
@@ -515,7 +539,7 @@ function TransportPreview() {
 
   return (
     <div className="h-11 w-full border border-chrome-border bg-chrome-surface">
-      <Transport control={control} />
+      <Transport control={control} volume={volume} onVolumeChange={setVolume} />
     </div>
   );
 }
@@ -561,7 +585,7 @@ function LoadingFrame({ width, height }: { readonly width: number; readonly heig
 
 function SourceStripPreview({ audioData }: { readonly audioData: AudioData }) {
   const source = useMemo(
-    () => createDefaultSource(0, { name: "Reference", filePath: "demo/reference-mix.wav" }),
+    () => createDefaultSource(0, { name: "Reference", audioFilePath: "demo/reference-mix.wav" }),
     [],
   );
   const startMs = audioData.durationMs * 0.3;
@@ -577,6 +601,7 @@ function SourceStripPreview({ audioData }: { readonly audioData: AudioData }) {
           endMs={endMs}
           fftSize={2048}
           hopOverlap={16}
+          channelInput="mono"
         />
       </div>
     </PreviewFrame>
@@ -586,6 +611,27 @@ function SourceStripPreview({ audioData }: { readonly audioData: AudioData }) {
 interface ViewPreviewProps {
   readonly audioData: AudioData;
   readonly sources: ReadonlyArray<Source>;
+}
+
+/**
+ * Build a `sourceId → AudioData` map keying the single demo buffer for every
+ * source id — the workspace views take per-source audio after the desktop
+ * migration's Phase 3.4 change. The demo has one shared buffer, so every
+ * source resolves to it.
+ */
+function useSourceAudioMap(
+  sources: ReadonlyArray<Source>,
+  audioData: AudioData,
+): ReadonlyMap<string, AudioData> {
+  return useMemo(() => {
+    const map = new Map<string, AudioData>();
+
+    for (const source of sources) {
+      map.set(source.id, audioData);
+    }
+
+    return map;
+  }, [sources, audioData]);
 }
 
 function ViewFrame({
@@ -608,42 +654,51 @@ function ViewFrame({
 }
 
 function OverlayViewPreview({ audioData, sources }: ViewPreviewProps) {
+  const sourceAudio = useSourceAudioMap(sources, audioData);
+
   return (
     <ViewFrame width={600} height={320}>
-      <OverlayView sources={sources} audioData={audioData} />
+      <OverlayView sources={sources} sourceAudio={sourceAudio} channelInput="mono" />
     </ViewFrame>
   );
 }
 
 function TimelineViewPreview({ audioData, sources }: ViewPreviewProps) {
+  const sourceAudio = useSourceAudioMap(sources, audioData);
+
   return (
     <ViewFrame width={600} height={320}>
-      <TimelineView sources={sources} audioData={audioData} />
+      <TimelineView sources={sources} sourceAudio={sourceAudio} channelInput="mono" />
     </ViewFrame>
   );
 }
 
 function SliderViewPreview({ audioData, sources }: ViewPreviewProps) {
-  // SliderView shows the first two visible sources. Slice to two so the
+  // SliderView shows the first two renderable sources. Slice to two so the
   // showcase doesn't depend on view-internal behaviour for a clean two-source
   // example.
   const twoSources = sources.slice(0, 2);
+  const sourceAudio = useSourceAudioMap(twoSources, audioData);
 
   return (
     <ViewFrame width={600} height={320}>
-      <SliderView sources={twoSources} audioData={audioData} />
+      <SliderView sources={twoSources} sourceAudio={sourceAudio} channelInput="mono" />
     </ViewFrame>
   );
 }
 
 function DifferenceViewPreview({ audioData, sources }: ViewPreviewProps) {
-  // DifferenceView's first-pass shape derives N-1 pairs from N inputs — give
-  // it two so a single A-B strip renders.
+  // DifferenceView renders a single derived strip — give it two sources so the
+  // pseudo-source borrows a meaningful color anchor.
   const twoSources = sources.slice(0, 2);
 
   return (
     <ViewFrame width={600} height={320}>
-      <DifferenceView sources={twoSources} audioData={audioData} />
+      <DifferenceView
+        sources={twoSources}
+        derivedAudio={audioData}
+        channelInput="mono"
+      />
     </ViewFrame>
   );
 }
@@ -651,23 +706,47 @@ function DifferenceViewPreview({ audioData, sources }: ViewPreviewProps) {
 function SumViewPreview({ audioData, sources }: ViewPreviewProps) {
   return (
     <ViewFrame width={600} height={320}>
-      <SumView sources={sources} audioData={audioData} />
+      <SumView sources={sources} derivedAudio={audioData} channelInput="mono" />
     </ViewFrame>
   );
 }
 
 function FrequencyDistributionViewPreview({ audioData, sources }: ViewPreviewProps) {
+  const sourceAudio = useSourceAudioMap(sources, audioData);
+
   return (
     <ViewFrame width={600} height={320}>
-      <FrequencyDistributionView sources={sources} audioData={audioData} />
+      <FrequencyDistributionView sources={sources} sourceAudio={sourceAudio} />
     </ViewFrame>
   );
 }
 
 function LoudnessViewPreview({ audioData, sources }: ViewPreviewProps) {
+  const sourceAudio = useSourceAudioMap(sources, audioData);
+
   return (
     <ViewFrame width={600} height={320}>
-      <LoudnessView sources={sources} audioData={audioData} />
+      <LoudnessView sources={sources} sourceAudio={sourceAudio} />
+    </ViewFrame>
+  );
+}
+
+function CorrelationViewPreview({ audioData, sources }: ViewPreviewProps) {
+  const sourceAudio = useSourceAudioMap(sources, audioData);
+
+  return (
+    <ViewFrame width={600} height={320}>
+      <CorrelationView sources={sources} sourceAudio={sourceAudio} />
+    </ViewFrame>
+  );
+}
+
+function VectorscopeViewPreview({ audioData, sources }: ViewPreviewProps) {
+  const sourceAudio = useSourceAudioMap(sources, audioData);
+
+  return (
+    <ViewFrame width={600} height={320}>
+      <VectorscopeView sources={sources} sourceAudio={sourceAudio} />
     </ViewFrame>
   );
 }
@@ -742,9 +821,9 @@ export function ShowcasePage() {
 
       <Section label="View Tabs">
         <p className="font-body text-[length:var(--text-sm)] text-chrome-text-secondary">
-          The seven first-pass view tabs that drive the workspace switcher: Timeline / Overlay / Slider / Difference / Sum / Freq Dist / Loudness.
+          The nine view tabs that drive the workspace switcher: Timeline / Overlay / Slider / Difference / Sum / Freq Dist / Loudness / Correlation / Vectorscope.
           Active state is a background-value shift; no underline, no animation on switch. The right-side cluster is global on every view —
-          a cross-view Sync toggle, a Mono / Stereo channel-mode selector, and undo / redo.
+          a cross-view Sync toggle, a Mono / Mid / Side channel-input selector, and undo / redo.
         </p>
         <ViewTabsPreview />
       </Section>
@@ -836,6 +915,28 @@ export function ShowcasePage() {
           >
             {audioData ? (
               <LoudnessViewPreview audioData={audioData} sources={demoSources} />
+            ) : (
+              <LoadingFrame width={600} height={320} />
+            )}
+          </SubSection>
+
+          <SubSection
+            label="CorrelationView"
+            description="One inter-channel correlation trace per visible source on a shared time axis, drawn in that source's `layerColor.primary`. The Y axis is the fixed +1..-1 correlation range: +1 mono-like, 0 decorrelated/wide, -1 inverted. The envelope is a real spectral-display scan product (config.stereo) — silence gaps break the polyline."
+          >
+            {audioData ? (
+              <CorrelationViewPreview audioData={audioData} sources={demoSources} />
+            ) : (
+              <LoadingFrame width={600} height={320} />
+            )}
+          </SubSection>
+
+          <SubSection
+            label="VectorscopeView"
+            description="A single shared (Side, Mid) density scope with every visible source's cloud overlaid on it. Each cloud is tinted in that source's layerColor.primary and the clouds are blended (mix-blend-mode: lighten) so they stay distinguishable; a legend keys names to tint. The scope is the largest square fitting the pane, centred, with the Mid/Side crosshair extending full-bleed to the container edges. GPU-rendered from the spectral-display vectorscope histogram (config.stereo); no transport (whole-clip aggregate)."
+          >
+            {audioData ? (
+              <VectorscopeViewPreview audioData={audioData} sources={demoSources} />
             ) : (
               <LoadingFrame width={600} height={320} />
             )}

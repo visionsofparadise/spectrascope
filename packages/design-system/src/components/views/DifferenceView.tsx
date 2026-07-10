@@ -1,23 +1,26 @@
-// Placeholder synthetic data — real signal synthesis is out of first-pass scope.
-// Each derived strip renders against the SAME demo `audioData` as the inputs;
-// visual differentiation comes from the pseudo-source's `layerColor` only.
-// Wiring a real difference signal (A−B PCM arithmetic against AudioContext
-// buffers) is a follow-up plan.
+// DifferenceView renders a single `SourceStrip` against the `derivedAudio`
+// prop — the difference signal. Phase 3 routes a placeholder `derivedAudio`
+// (the first source's buffer); Phase 5 populates it with the ffmpeg-rendered
+// Difference temp file (reference minus the polarity-inverted rest).
 
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ChannelInput } from "spectral-display";
 import { Knob } from "../controls/Knob";
 import { IconButton } from "../IconButton";
 import { SourceStrip } from "../SourceStrip";
 import type { SourceStripCursorReadout } from "../SourceStrip";
 import type { Source } from "../../source";
 import type { LayerColor } from "../../layers";
+import { useViewSync } from "../../sync";
 import type { TransportControl } from "../spectral/Transport";
 import type { AudioData } from "../spectral/types";
 import { FrequencyAxis, DbAxis, TimeRuler } from "../spectral/Axes";
 import { FrequencyMinimap } from "../spectral/FrequencyMinimap";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
 import { Selection } from "../spectral/Selection";
+import { useLayerOpacity } from "./layerOpacity";
+import { eventToTime, timeToFraction } from "./viewCursor";
 
 /** Local `#RRGGBB` → `[r,g,b]` helper. Duplicates OverlayView's hexToRgb255. */
 function hexToRgb255(hex: string): [number, number, number] {
@@ -40,7 +43,14 @@ function hexToRgb255(hex: string): [number, number, number] {
 
 interface DifferenceViewProps {
   readonly sources: ReadonlyArray<Source>;
-  readonly audioData: AudioData;
+  /**
+   * The derived (difference) signal as a single PCM reader. Phase 5 populates
+   * this with the ffmpeg-rendered Difference temp file; Phase 3 routes a
+   * placeholder.
+   */
+  readonly derivedAudio: AudioData;
+  /** The global Mono/Mid/Side channel-input mode — passed to the strip. */
+  readonly channelInput: ChannelInput;
   readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
@@ -53,9 +63,12 @@ type GridMode = "freq" | "amp";
 const INITIAL_VIEW_START_FRAC = 0.3;
 const INITIAL_VIEW_END_FRAC = 0.5;
 
-const SELECTION_START_FRAC = 0.25;
-const SELECTION_END_FRAC = 0.45;
-const CURSOR_FRAC = 0.38;
+/** Empty sync state — no cursor / selection until the user interacts. */
+const EMPTY_VIEW_SYNC = {
+  cursor: null,
+  selection: null,
+  timeRange: { start: 0, end: 0 },
+} as const;
 
 const FFT_OPTIONS = ["1024", "2048", "4096", "8192", "16384"] as const;
 const HOP_OPTIONS = ["2", "4", "8", "16", "32"] as const;
@@ -206,11 +219,11 @@ function MiniDropdown({
 }
 
 /**
- * DifferenceView — single full-pane `<SourceStrip>` rendering a synthesised
- * "difference" pseudo-source. The pseudo-source borrows the first visible
- * source's `layerColor` (or a neutral chrome fallback when no sources are
- * visible). Real PCM arithmetic is out of scope; the strip currently renders
- * against the shared demo `audioData`.
+ * DifferenceView — single full-pane `<SourceStrip>` rendering a "difference"
+ * pseudo-source against the `derivedAudio` prop. The pseudo-source borrows the
+ * first visible source's `layerColor` (or a neutral chrome fallback when no
+ * sources are visible). Phase 5 feeds `derivedAudio` the ffmpeg-rendered
+ * Difference temp file; this phase routes a placeholder.
  *
  * Page-level chrome (grid template + TimeRuler + FrequencyAxis + DbAxis +
  * FrequencyMinimap + right-column controls + GridOverlay + Selection +
@@ -223,7 +236,8 @@ const DIFFERENCE_NEUTRAL_COLOR: LayerColor = {
 
 export function DifferenceView({
   sources,
-  audioData,
+  derivedAudio,
+  channelInput,
   onTransportControlChange,
 }: DifferenceViewProps) {
   const [cursorReadout, setCursorReadout] =
@@ -239,12 +253,19 @@ export function DifferenceView({
   void setViewStartFrac;
   void setViewEndFrac;
 
+  // Cross-view sync — the inspection cursor / selection (shared when the
+  // global Sync toggle is on, local otherwise).
+  const viewSync = useViewSync("difference", EMPTY_VIEW_SYNC);
+
+  // Right-column layer-opacity knob values (waveform / spectrogram / loudness).
+  const layerOpacity = useLayerOpacity();
+
   const [playing, setPlaying] = useState(false);
   const [positionSec, setPositionSec] = useState(0);
-  const durationSec = audioData.durationMs / 1000;
+  const durationSec = derivedAudio.durationMs / 1000;
 
-  const startMs = audioData.durationMs * viewStartFrac;
-  const endMs = audioData.durationMs * viewEndFrac;
+  const startMs = derivedAudio.durationMs * viewStartFrac;
+  const endMs = derivedAudio.durationMs * viewEndFrac;
 
   const visibleSources = useMemo(
     () => sources.filter((source) => source.visible),
@@ -269,12 +290,12 @@ export function DifferenceView({
     return {
       id: "difference",
       name: "Difference",
-      filePath: "derived",
+      audioFilePath: "derived",
+      timelineOffsetMs: 0,
       layerColor: anchorColor,
       visible: true,
       muted: false,
       soloed: false,
-      gainDb: 0,
     };
   }, [visibleSources]);
 
@@ -289,6 +310,16 @@ export function DifferenceView({
     [durationSec],
   );
 
+  // Place the inspection cursor at the clicked time (sync-aware).
+  const handleCursorClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const time = eventToTime(event, startMs, endMs);
+
+      if (time !== null) viewSync.setCursor(time);
+    },
+    [viewSync, startMs, endMs],
+  );
+
   const transportControl = useMemo<TransportControl>(
     () => ({
       playing,
@@ -297,14 +328,22 @@ export function DifferenceView({
       onPlayToggle,
       onSeek,
       cursorReadout,
-      // Demo selection range (0.25–0.45 of duration) — surfaces as the
-      // transport's In / Out columns.
-      selectionInSec: durationSec * 0.25,
-      selectionOutSec: durationSec * 0.45,
-      selectionInAmp: "-19.7 dB",
-      selectionOutAmp: "-24.3 dB",
+      // Selection range — driven by the (sync-aware) selection; `—` columns
+      // when nothing is selected.
+      selectionInSec:
+        viewSync.selection !== null ? viewSync.selection.start / 1000 : undefined,
+      selectionOutSec:
+        viewSync.selection !== null ? viewSync.selection.end / 1000 : undefined,
     }),
-    [playing, positionSec, durationSec, onPlayToggle, onSeek, cursorReadout],
+    [
+      playing,
+      positionSec,
+      durationSec,
+      onPlayToggle,
+      onSeek,
+      cursorReadout,
+      viewSync.selection,
+    ],
   );
 
   useEffect(() => {
@@ -312,6 +351,19 @@ export function DifferenceView({
       onTransportControlChange(transportControl);
     }
   }, [onTransportControlChange, transportControl]);
+
+  // Cursor / selection display fractions within the content window.
+  const cursorFrac = timeToFraction(viewSync.cursor, startMs, endMs);
+  const selectionStartFrac = timeToFraction(
+    viewSync.selection?.start ?? null,
+    startMs,
+    endMs,
+  );
+  const selectionEndFrac = timeToFraction(
+    viewSync.selection?.end ?? null,
+    startMs,
+    endMs,
+  );
 
   // Frequency minimap mirrors the strip's color anchor.
   const minimapLayerColor = differenceSource.layerColor;
@@ -336,20 +388,21 @@ export function DifferenceView({
         <FrequencyAxis />
 
         {/* Content cell — one full-pane SourceStrip of the difference
-            pseudo-source. */}
+            pseudo-source. Clicking places the inspection cursor (sync-aware). */}
         <div
-          className="relative overflow-hidden bg-void"
-          onMouseMove={(ev) => {
-            void ev;
-          }}
+          className="relative cursor-crosshair overflow-hidden bg-void"
+          onClick={handleCursorClick}
         >
           <SourceStrip
             source={differenceSource}
-            audioData={audioData}
+            audioData={derivedAudio}
             startMs={startMs}
             endMs={endMs}
             fftSize={fftSize}
             hopOverlap={hopOverlap}
+            channelInput={channelInput}
+            waveformOpacity={layerOpacity.waveformOpacity}
+            spectrogramOpacity={layerOpacity.spectrogramOpacity}
             onCursorMove={setCursorReadout}
           />
           <GridOverlay
@@ -358,20 +411,24 @@ export function DifferenceView({
             mode={gridMode}
             opacity={gridOpacity}
           />
-          <Selection
-            startFraction={SELECTION_START_FRAC}
-            endFraction={SELECTION_END_FRAC}
-          />
-          <div
-            className="pointer-events-none absolute top-0 bottom-0 w-px bg-data-cursor"
-            style={{ left: `${CURSOR_FRAC * 100}%` }}
-          />
+          {selectionStartFrac !== null && selectionEndFrac !== null && (
+            <Selection
+              startFraction={selectionStartFrac}
+              endFraction={selectionEndFrac}
+            />
+          )}
+          {cursorFrac !== null && cursorFrac >= 0 && cursorFrac <= 1 && (
+            <div
+              className="pointer-events-none absolute top-0 bottom-0 w-px bg-data-cursor"
+              style={{ left: `${cursorFrac * 100}%` }}
+            />
+          )}
           {/* The cursor readout is published up to the Transport (see
               `transportControl.cursorReadout`); no in-pane readout chip. */}
         </div>
 
         <FrequencyMinimap
-          audioData={audioData}
+          audioData={derivedAudio}
           startMs={startMs}
           endMs={endMs}
           layerColor={minimapLayerColor}
@@ -382,7 +439,7 @@ export function DifferenceView({
             with the vertical FrequencyMinimap to give a 2D zoom/pan overview. */}
         <div className="bg-void" />
         <MinimapDisplay
-          audioData={audioData}
+          audioData={derivedAudio}
           viewStartFrac={viewStartFrac}
           viewEndFrac={viewEndFrac}
           waveformColor={hexToRgb255(minimapLayerColor.primary)}
@@ -437,9 +494,15 @@ export function DifferenceView({
 
           <div className="my-3 w-6 border-t border-chrome-border-subtle" />
 
-          {/* Waveform layer opacity stub (matches OverlayView). */}
+          {/* Waveform layer opacity knob — wired (matches OverlayView). */}
           <div className="flex flex-col items-center gap-0.5">
-            <Knob value={0.8} label="" size={24} hideValue />
+            <Knob
+              value={layerOpacity.waveformOpacity}
+              label=""
+              size={24}
+              hideValue
+              onChange={layerOpacity.setWaveformOpacity}
+            />
             <Icon
               icon="lucide:audio-waveform"
               width={12}
@@ -450,9 +513,15 @@ export function DifferenceView({
 
           <div className="my-3 w-6 border-t border-chrome-border-subtle" />
 
-          {/* Spectrogram layer opacity stub (matches OverlayView). */}
+          {/* Spectrogram layer opacity knob — wired (matches OverlayView). */}
           <div className="flex flex-col items-center gap-0.5">
-            <Knob value={0.7} label="" size={24} hideValue />
+            <Knob
+              value={layerOpacity.spectrogramOpacity}
+              label=""
+              size={24}
+              hideValue
+              onChange={layerOpacity.setSpectrogramOpacity}
+            />
             <Icon
               icon="lucide:flame"
               width={12}
@@ -490,9 +559,16 @@ export function DifferenceView({
 
           <div className="my-1 w-6 border-t border-chrome-border-subtle" />
 
-          {/* Loudness layer opacity stub (matches OverlayView). */}
+          {/* Loudness layer opacity knob — controlled but unconsumed; the
+              strip has no loudness layer (matches OverlayView). */}
           <div className="flex flex-col items-center gap-0.5">
-            <Knob value={0.5} label="" size={24} hideValue />
+            <Knob
+              value={layerOpacity.loudnessOpacity}
+              label=""
+              size={24}
+              hideValue
+              onChange={layerOpacity.setLoudnessOpacity}
+            />
             <Icon
               icon="lucide:activity"
               width={12}

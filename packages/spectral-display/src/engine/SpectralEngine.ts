@@ -9,6 +9,9 @@ export interface Dimensions {
 	height: number;
 }
 
+/** Which derived channel signal feeds the spectrogram FFT. */
+export type ChannelInput = "mono" | "mid" | "side";
+
 export interface SpectralConfig {
 	fftSize: number;
 	frequencyScale: FrequencyScale;
@@ -20,6 +23,10 @@ export interface SpectralConfig {
 	spectrogram: boolean;
 	loudness: boolean;
 	truePeak: boolean;
+	/** Opt-in flag gating the stereo scan products (correlation envelope, vectorscope histogram). Default false. */
+	stereo: boolean;
+	/** Which derived channel signal feeds the spectrogram FFT. Default "mono". */
+	channelInput: ChannelInput;
 	/** Hop overlap factor — higher = more time resolution. Default 4. */
 	hopOverlap: number;
 }
@@ -80,6 +87,8 @@ export function resolveConfig(config: RequiredProperties<SpectralConfig, "device
 		spectrogram: config.spectrogram ?? true,
 		loudness: config.loudness ?? true,
 		truePeak: config.truePeak ?? true,
+		stereo: config.stereo ?? false,
+		channelInput: config.channelInput ?? "mono",
 		hopOverlap: config.hopOverlap ?? HOP_OVERLAP_FACTOR,
 	};
 }

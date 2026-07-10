@@ -1,8 +1,9 @@
-import { BrowserWindow } from "electron";
+import { app, BrowserWindow } from "electron";
 import path from "path";
 import { ASYNC_MAIN_IPCS } from "../shared/ipc/asyncMainIpcs";
 import type { Logger } from "../shared/models/Logger";
 import { FileWatcherManager } from "./FileWatcherManager";
+import { RenderManager } from "./RenderManager";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -34,9 +35,10 @@ export const createWindow = (logger: Logger): BrowserWindow => {
 
 	const windowId = crypto.randomUUID();
 	const fileWatcherManager = new FileWatcherManager(browserWindow);
+	const renderManager = new RenderManager(app.getPath("userData"));
 
 	for (const AsyncMainIpc of ASYNC_MAIN_IPCS) {
-		new AsyncMainIpc().register({ browserWindow, fileWatcherManager, logger, windowId });
+		new AsyncMainIpc().register({ browserWindow, fileWatcherManager, renderManager, logger, windowId });
 	}
 
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -63,6 +65,7 @@ export const createWindow = (logger: Logger): BrowserWindow => {
 
 	browserWindow.on("closed", () => {
 		fileWatcherManager.dispose();
+		renderManager.dispose();
 	});
 
 	if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {

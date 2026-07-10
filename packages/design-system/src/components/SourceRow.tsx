@@ -27,7 +27,7 @@ interface SourceRowProps {
  * source with no file yet).
  */
 function fileNameOf(source: Source): string {
-	const segment = source.filePath
+	const segment = source.audioFilePath
 		.replace(/[/\\]+$/, "")
 		.split(/[/\\]/)
 		.pop();
@@ -143,7 +143,7 @@ export function SourceRow({
 				{/* Filename — the source's identity. Not editable. */}
 				<span
 					className="min-w-0 truncate font-body text-base font-medium leading-tight text-chrome-text"
-					title={source.filePath || label}
+					title={source.audioFilePath || label}
 				>
 					{label}
 				</span>
@@ -154,10 +154,10 @@ export function SourceRow({
 					<span
 						className="block min-w-0 overflow-hidden truncate font-body text-xs text-chrome-text-dim"
 						style={{ direction: "rtl", textAlign: "left" }}
-						title={source.filePath}
+						title={source.audioFilePath}
 					>
 						‎
-						{source.filePath || " "}
+						{source.audioFilePath || " "}
 					</span>
 				</div>
 

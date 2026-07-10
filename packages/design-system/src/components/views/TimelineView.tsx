@@ -1,5 +1,6 @@
 import { Icon } from "@iconify/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ChannelInput } from "spectral-display";
 import { Knob } from "../controls/Knob";
 import { SourceStrip } from "../SourceStrip";
 import type { SourceStripCursorReadout } from "../SourceStrip";
@@ -8,6 +9,8 @@ import type { TransportControl } from "../spectral/Transport";
 import type { AudioData } from "../spectral/types";
 import { TimeRuler } from "../spectral/Axes";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
+import { useLayerOpacity } from "./layerOpacity";
+import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
 
 const DEFAULT_CURSOR: SourceStripCursorReadout = {
   time: "00:00.000",
@@ -140,35 +143,294 @@ function MiniDropdown({
   );
 }
 
+/**
+ * One DAW-style track row — a `SourceStrip` placed on the shared comparison
+ * timeline at its `timelineOffsetMs`, draggable horizontally to re-place it.
+ *
+ * Purely presentational + interactive: the row reports a *new* offset out via
+ * `onOffsetChange` and never owns the persisted `timelineOffsetMs` itself. The
+ * incoming `offsetMs` prop is the source of truth between drags; a `dragOffsetMs`
+ * local state holds the live position only for the duration of one drag gesture
+ * (so the strip tracks the pointer without waiting for a prop round-trip), and
+ * is cleared the moment the parent's prop catches up.
+ *
+ * Drag math is plain pointer events against the track's own rect — a horizontal
+ * drag is simple enough that a gesture library would be overkill (and none is in
+ * the design-system's dependencies). During a drag, only the transient
+ * `dragOffsetMs` visual state tracks the pointer; `onOffsetChange` is called
+ * exactly once, on pointer-up, with the final offset (clamped to
+ * `[0, maxOffsetMs]`) — one mutation per completed gesture, so the consumer's
+ * store and any undo history get a single entry per drag. Arrow-key nudges
+ * commit per keypress (each keypress is a discrete intentional edit).
+ */
+function TimelineTrack({
+  source,
+  audioData,
+  offsetMs,
+  timelineSpanMs,
+  fftSize,
+  hopOverlap,
+  channelInput,
+  gridOpacity,
+  waveformOpacity,
+  spectrogramOpacity,
+  draggable,
+  onCursorMove,
+  onOffsetChange,
+}: {
+  readonly source: Source;
+  readonly audioData: AudioData;
+  /** This source's placement on the shared timeline, in ms (≥ 0). */
+  readonly offsetMs: number;
+  /** Total timeline span the row is laid out against, in ms (> 0). */
+  readonly timelineSpanMs: number;
+  readonly fftSize: number;
+  readonly hopOverlap: number;
+  readonly channelInput: ChannelInput;
+  readonly gridOpacity: number;
+  /** Per-layer opacity for the clip's `SourceStrip` (right-column knobs). */
+  readonly waveformOpacity: number;
+  readonly spectrogramOpacity: number;
+  /** Whether the clip can be dragged — false when no offset callback is wired. */
+  readonly draggable: boolean;
+  readonly onCursorMove: (readout: SourceStripCursorReadout) => void;
+  /** Emits the final (clamped) offset for this source — once per completed
+   *  drag (on pointer-up) and once per arrow-key nudge. */
+  readonly onOffsetChange: (offsetMs: number) => void;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  // Live offset for the duration of a drag gesture only — `null` when not
+  // dragging, in which case the `offsetMs` prop is authoritative.
+  const [dragOffsetMs, setDragOffsetMs] = useState<number | null>(null);
+
+  const durationMs = audioData.durationMs;
+  // The clip cannot start so late that it would extend past the timeline end.
+  // The span carries a headroom pad (the longest source's duration) so this
+  // bound is always positive for a renderable clip — every clip is draggable.
+  const maxOffsetMs = Math.max(0, timelineSpanMs - durationMs);
+  const effectiveOffsetMs = dragOffsetMs ?? offsetMs;
+
+  // Latest values captured for the global pointer listeners (drag gesture).
+  const onOffsetChangeRef = useRef(onOffsetChange);
+  const maxOffsetRef = useRef(maxOffsetMs);
+  const spanRef = useRef(timelineSpanMs);
+
+  useEffect(() => {
+    onOffsetChangeRef.current = onOffsetChange;
+  }, [onOffsetChange]);
+  useEffect(() => {
+    maxOffsetRef.current = maxOffsetMs;
+  }, [maxOffsetMs]);
+  useEffect(() => {
+    spanRef.current = timelineSpanMs;
+  }, [timelineSpanMs]);
+
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (!draggable) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const track = trackRef.current;
+
+      if (!track) return;
+
+      const rect = track.getBoundingClientRect();
+
+      if (rect.width <= 0) return;
+
+      // Pointer offset within the clip at grab time, in ms — keeps the grab
+      // point under the cursor for the whole drag (no jump-to-pointer).
+      const grabFracInTrack = (event.clientX - rect.left) / rect.width;
+      const grabMs = grabFracInTrack * spanRef.current;
+      const grabWithinClipMs = grabMs - effectiveOffsetMs;
+
+      // Resolve a clamped offset from a pointer x-coordinate. Pure — does not
+      // touch state or emit; the callers decide what to do with the result.
+      const offsetFromClientX = (clientX: number) => {
+        const lo = 0;
+        const hi = maxOffsetRef.current;
+        const pointerMs =
+          ((clientX - rect.left) / rect.width) * spanRef.current;
+
+        return Math.min(hi, Math.max(lo, pointerMs - grabWithinClipMs));
+      };
+
+      const onMove = (moveEvent: PointerEvent) => {
+        // During the drag, update only the transient visual state so the strip
+        // tracks the pointer smoothly — no `onOffsetChange` here. Emitting per
+        // `pointermove` would thrash the consumer's store/disk and flood the
+        // undo/redo history with one entry per move event.
+        setDragOffsetMs(offsetFromClientX(moveEvent.clientX));
+      };
+
+      const onUp = (upEvent: PointerEvent) => {
+        const finalOffsetMs = offsetFromClientX(upEvent.clientX);
+
+        // Commit exactly once, at drag-end — one state mutation (and one
+        // undo/redo entry) per completed drag gesture.
+        onOffsetChangeRef.current(finalOffsetMs);
+        // Hand control back to the `offsetMs` prop; the consumer's mutation has
+        // been emitted, so the prop will arrive with the committed value.
+        setDragOffsetMs(null);
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+      };
+
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    },
+    [draggable, effectiveOffsetMs],
+  );
+
+  // Keyboard nudge — arrow keys move the clip by a coarse/fine step so the
+  // affordance is operable without a pointer.
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (!draggable) return;
+
+      const fine = event.shiftKey ? 10 : 100;
+      let next: number | null = null;
+
+      if (event.key === "ArrowLeft") next = offsetMs - fine;
+      else if (event.key === "ArrowRight") next = offsetMs + fine;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = maxOffsetMs;
+
+      if (next === null) return;
+
+      event.preventDefault();
+      onOffsetChange(Math.min(maxOffsetMs, Math.max(0, next)));
+    },
+    [draggable, offsetMs, maxOffsetMs, onOffsetChange],
+  );
+
+  const span = timelineSpanMs > 0 ? timelineSpanMs : 1;
+  const leftPct = (effectiveOffsetMs / span) * 100;
+  const widthPct = (durationMs / span) * 100;
+  const dragging = dragOffsetMs !== null;
+
+  return (
+    <div ref={trackRef} className="relative min-h-0 flex-1 overflow-hidden">
+      {/* The clip — a `SourceStrip` positioned on the shared timeline. The
+          strip itself still renders its source's full content (0 → duration);
+          placement is this wrapper's left/width. */}
+      <div
+        className="absolute inset-y-0"
+        style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+      >
+        <SourceStrip
+          source={source}
+          audioData={audioData}
+          startMs={0}
+          endMs={durationMs}
+          fftSize={fftSize}
+          hopOverlap={hopOverlap}
+          channelInput={channelInput}
+          waveformOpacity={waveformOpacity}
+          spectrogramOpacity={spectrogramOpacity}
+          onCursorMove={onCursorMove}
+        />
+        {/* Per-clip time grid — drawn over this clip's own content span. */}
+        <GridOverlay startMs={0} endMs={durationMs} opacity={gridOpacity} />
+        {/* A thin leading edge marks the clip's start on the timeline. While
+            dragging it brightens to the primary accent. */}
+        <div
+          aria-hidden
+          className={`pointer-events-none absolute inset-y-0 left-0 w-0.5 ${
+            dragging ? "bg-primary" : "bg-chrome-text/60"
+          }`}
+        />
+        {/* Drag handle — a DAW-style clip header strip across the top of the
+            clip. The whole header is the grab target; the grip dots make the
+            draggable affordance read. Hidden entirely when no offset callback
+            is wired (the demo), so the view stays a pure display there. */}
+        {draggable && (
+          <button
+            type="button"
+            onPointerDown={handlePointerDown}
+            onKeyDown={handleKeyDown}
+            aria-label={`Timeline offset for ${source.name}`}
+            role="slider"
+            aria-valuemin={0}
+            aria-valuemax={Math.round(maxOffsetMs)}
+            aria-valuenow={Math.round(effectiveOffsetMs)}
+            aria-valuetext={`${(effectiveOffsetMs / 1000).toFixed(2)} seconds`}
+            className={`absolute top-0 left-0 right-0 flex h-4 cursor-ew-resize items-center gap-1 px-1.5 outline-none focus-visible:ring-1 focus-visible:ring-primary ${
+              dragging
+                ? "bg-primary/30"
+                : "bg-chrome-raised/70 hover:bg-chrome-raised"
+            }`}
+          >
+            <span aria-hidden className="flex items-center gap-0.5">
+              <span className="block h-2 w-px bg-chrome-text/70" />
+              <span className="block h-2 w-px bg-chrome-text/70" />
+              <span className="block h-2 w-px bg-chrome-text/70" />
+            </span>
+            <span className="truncate font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-secondary">
+              {source.name}
+            </span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface TimelineViewProps {
   readonly sources: ReadonlyArray<Source>;
-  readonly audioData: AudioData;
+  /** Per-source PCM readers, keyed by `Source.id`. */
+  readonly sourceAudio: ReadonlyMap<string, AudioData>;
+  /** The global Mono/Mid/Side channel-input mode — passed to every strip. */
+  readonly channelInput: ChannelInput;
+  /**
+   * Emitted when a source's clip is dragged (or keyboard-nudged) on the
+   * timeline — `(sourceId, offsetMs)` with `offsetMs ≥ 0`. Controlled,
+   * props-in / callbacks-out: the view owns no placement state, it renders
+   * position from each `Source.timelineOffsetMs` and reports drag results out.
+   * When omitted, the timeline still lays strips out by offset but the drag
+   * affordance is not rendered (the component-showcase case).
+   */
+  readonly onSourceOffsetChange?: (sourceId: string, offsetMs: number) => void;
   readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
 /**
  * TimelineView — DAW-style multi-track timeline. Layout:
- *   - A main grid: horizontal `TimeRuler` (top), N equal-flex `SourceStrip`
- *     track rows with a per-track `GridOverlay` and a single full-height
- *     vertical playhead, and a horizontal overview `MinimapDisplay` (bottom).
+ *   - A main grid: horizontal `TimeRuler` (top), N equal-flex track rows each
+ *     carrying one `SourceStrip` *placed on the shared comparison timeline*,
+ *     and a horizontal overview `MinimapDisplay` (bottom).
  *   - A right-hand display-controls column — a trimmed copy of OverlayView's:
  *     grid opacity, layer-opacity knobs, FFT size, hop overlap.
  *
  * No frequency axis, no dB axis, no frequency minimap, no selection, no cursor
- * readout chip — those stay Overlay/Slider concerns. The per-track grid is
- * time-only (vertical lines aligned to the `TimeRuler`); the strips carry no
- * frequency or amplitude axis to draw horizontal lines against.
+ * readout chip — those stay Overlay/Slider concerns. The per-clip grid is
+ * time-only (vertical lines aligned to the `TimeRuler`).
  *
- * Each strip renders the full duration (`0 → audioData.durationMs`); there is
- * no per-view zoom window. Transport playback drives `positionSec`, and the
- * playhead is positioned at `positionSec / durationSec` (clamped to [0, 1]).
+ * **Shared comparison timeline.** Unlike the other per-source views, the
+ * Timeline lays its strips out on one shared timeline: it spans `0` to
+ * `max(timelineOffsetMs + durationMs)` across all renderable sources **plus a
+ * headroom pad of the longest source's duration**, so every clip — including
+ * the longest, and equal-length clips at offset 0 — has room to be dragged past
+ * the current content end. Each clip is positioned horizontally so it starts at
+ * its source's `timelineOffsetMs` and is sized proportionally to that source's
+ * duration. A clip can be dragged (or arrow-key nudged) to re-place it; the new
+ * offset is reported out via `onSourceOffsetChange` — the view owns no placement
+ * state (controlled, props-in / callbacks-out). Transport playback drives
+ * `positionSec`, and the playhead is positioned against the *timeline* span.
  *
- * Visible-source filtering and audibility (solo overrides mute) match the
- * other per-source views so the DAW grammar carries through.
+ * Each track carries its own `AudioData` (resolved from the `sourceAudio` map
+ * by id). Audibility (solo overrides mute) matches the other per-source views
+ * so the DAW grammar carries through.
  */
 export function TimelineView({
   sources,
-  audioData,
+  sourceAudio,
+  channelInput,
+  onSourceOffsetChange,
   onTransportControlChange,
 }: TimelineViewProps) {
   const [playing, setPlaying] = useState(false);
@@ -178,17 +440,52 @@ export function TimelineView({
   const [gridOpacity, setGridOpacity] = useState(0.3);
   const [fftSize, setFftSize] = useState(2048);
   const [hopOverlap, setHopOverlap] = useState(16);
-  const durationSec = audioData.durationMs / 1000;
 
-  const visibleSources = useMemo(
-    () => sources.filter((source) => source.visible),
-    [sources],
+  // Right-column layer-opacity knob values (waveform / spectrogram / loudness).
+  const layerOpacity = useLayerOpacity();
+
+  // Visible sources that have decoded audio, paired with their `AudioData`.
+  const renderableSources = useMemo(
+    () => resolveVisibleSourceAudio(sources, sourceAudio),
+    [sources, sourceAudio],
   );
 
-  // The horizontal overview minimap renders a single waveform; with N tracks
-  // the colour choice is arbitrary, so use the first visible source's primary
-  // (a neutral chrome pair when nothing is visible).
-  const minimapColor = visibleSources[0]?.layerColor ?? {
+  // The shared comparison timeline span. It is the latest clip end across all
+  // renderable sources (`timelineOffsetMs + durationMs`) **plus a headroom pad
+  // of the longest source's duration**. The pad is deliberate: without it the
+  // longest clip's `maxOffsetMs` (`span − duration`) would always be 0 — and
+  // when every source has the same duration sitting at offset 0 (the common
+  // null test: one take through different chains) *every* clip would be pinned
+  // at 0 with a dead drag handle. Padding by one full clip-length gives every
+  // renderable clip a positive draggable range — any clip can be pushed up to
+  // one clip-length past the current content end. The `TimeRuler`, the overview
+  // minimap, the per-track placement, and the playhead all lay out against this
+  // same padded span so the visual layout stays coherent. A zero-duration
+  // fallback when nothing is renderable.
+  const timelineSpanMs = useMemo(() => {
+    let contentEndMs = 0;
+    let longestDurationMs = 0;
+
+    for (const { source, audioData } of renderableSources) {
+      const end = Math.max(0, source.timelineOffsetMs) + audioData.durationMs;
+
+      if (end > contentEndMs) contentEndMs = end;
+      if (audioData.durationMs > longestDurationMs) {
+        longestDurationMs = audioData.durationMs;
+      }
+    }
+
+    return contentEndMs + longestDurationMs;
+  }, [renderableSources]);
+
+  const durationSec = timelineSpanMs / 1000;
+
+  // The overview minimap renders the whole timeline as a single waveform; with
+  // N tracks placed at different offsets there is no one buffer that spans it,
+  // so the minimap shows the first renderable source's audio as a stand-in
+  // (its colour likewise). A neutral chrome pair when nothing is renderable.
+  const minimapAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
+  const minimapColor = renderableSources[0]?.source.layerColor ?? {
     primary: "#B8B8C0",
     secondary: "#44444C",
   };
@@ -251,12 +548,12 @@ export function TimelineView({
           gridTemplateRows: "auto minmax(0, 1fr) auto",
         }}
       >
-        {/* Row 1 — full-duration time ruler. */}
-        <TimeRuler startMs={0} endMs={audioData.durationMs} />
+        {/* Row 1 — time ruler across the full shared timeline. */}
+        <TimeRuler startMs={0} endMs={timelineSpanMs} />
 
         {/* Row 2 — track stack + playhead. */}
         <div className="relative flex flex-col overflow-hidden bg-void">
-          {visibleSources.length === 0 ? (
+          {renderableSources.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <p className="font-body text-sm text-chrome-text-secondary">
                 No visible sources.
@@ -264,25 +561,25 @@ export function TimelineView({
             </div>
           ) : (
             <>
-              {visibleSources.map((source) => (
-                <div key={source.id} className="relative min-h-0 flex-1">
-                  <SourceStrip
-                    source={source}
-                    audioData={audioData}
-                    startMs={0}
-                    endMs={audioData.durationMs}
-                    fftSize={fftSize}
-                    hopOverlap={hopOverlap}
-                    onCursorMove={setCursorReadout}
-                  />
-                  {/* Per-track grid — drawn inside each strip so its
-                      frequency lines map to that strip's own axis. */}
-                  <GridOverlay
-                    startMs={0}
-                    endMs={audioData.durationMs}
-                    opacity={gridOpacity}
-                  />
-                </div>
+              {renderableSources.map(({ source, audioData }) => (
+                <TimelineTrack
+                  key={source.id}
+                  source={source}
+                  audioData={audioData}
+                  offsetMs={Math.max(0, source.timelineOffsetMs)}
+                  timelineSpanMs={timelineSpanMs}
+                  fftSize={fftSize}
+                  hopOverlap={hopOverlap}
+                  channelInput={channelInput}
+                  gridOpacity={gridOpacity}
+                  waveformOpacity={layerOpacity.waveformOpacity}
+                  spectrogramOpacity={layerOpacity.spectrogramOpacity}
+                  draggable={onSourceOffsetChange !== undefined}
+                  onCursorMove={setCursorReadout}
+                  onOffsetChange={(offsetMs) => {
+                    onSourceOffsetChange?.(source.id, offsetMs);
+                  }}
+                />
               ))}
               <div
                 aria-hidden
@@ -293,9 +590,9 @@ export function TimelineView({
           )}
         </div>
 
-        {/* Row 3 — horizontal overview minimap across the full duration. */}
+        {/* Row 3 — horizontal overview minimap across the full timeline. */}
         <MinimapDisplay
-          audioData={audioData}
+          audioData={minimapAudio}
           viewStartFrac={0}
           viewEndFrac={1}
           waveformColor={hexToRgb255(minimapColor.primary)}
@@ -327,9 +624,15 @@ export function TimelineView({
 
           <div className="my-3 w-6 border-t border-chrome-border-subtle" />
 
-          {/* Waveform layer opacity knob — visual stub, matches OverlayView. */}
+          {/* Waveform layer opacity knob — wired, matches OverlayView. */}
           <div className="flex flex-col items-center gap-0.5">
-            <Knob value={0.8} label="" size={24} hideValue />
+            <Knob
+              value={layerOpacity.waveformOpacity}
+              label=""
+              size={24}
+              hideValue
+              onChange={layerOpacity.setWaveformOpacity}
+            />
             <Icon
               icon="lucide:audio-waveform"
               width={12}
@@ -340,9 +643,15 @@ export function TimelineView({
 
           <div className="my-3 w-6 border-t border-chrome-border-subtle" />
 
-          {/* Spectrogram layer opacity knob — visual stub, matches OverlayView. */}
+          {/* Spectrogram layer opacity knob — wired, matches OverlayView. */}
           <div className="flex flex-col items-center gap-0.5">
-            <Knob value={0.7} label="" size={24} hideValue />
+            <Knob
+              value={layerOpacity.spectrogramOpacity}
+              label=""
+              size={24}
+              hideValue
+              onChange={layerOpacity.setSpectrogramOpacity}
+            />
             <Icon
               icon="lucide:flame"
               width={12}
@@ -382,9 +691,16 @@ export function TimelineView({
 
           <div className="my-1 w-6 border-t border-chrome-border-subtle" />
 
-          {/* Loudness layer opacity knob — visual stub, matches OverlayView. */}
+          {/* Loudness layer opacity knob — controlled but unconsumed; the
+              strip has no loudness layer (matches OverlayView). */}
           <div className="flex flex-col items-center gap-0.5">
-            <Knob value={0.5} label="" size={24} hideValue />
+            <Knob
+              value={layerOpacity.loudnessOpacity}
+              label=""
+              size={24}
+              hideValue
+              onChange={layerOpacity.setLoudnessOpacity}
+            />
             <Icon
               icon="lucide:activity"
               width={12}

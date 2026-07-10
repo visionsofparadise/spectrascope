@@ -4,16 +4,10 @@ import type { State } from ".";
 import { useCreateState } from "../ProxyStore/hooks/useCreateState";
 import type { ProxyStore } from "../ProxyStore/ProxyStore";
 
+/** Each tab is one comparison; it references its comparison by id. */
 const TabEntrySchema = z.object({
 	id: z.string(),
-	bagPath: z.string(),
-});
-
-const RecentFileSchema = z.object({
-	id: z.string(),
-	bagPath: z.string(),
-	name: z.string(),
-	lastOpened: z.number(),
+	comparisonId: z.string(),
 });
 
 const WindowBoundsSchema = z.object({
@@ -23,17 +17,78 @@ const WindowBoundsSchema = z.object({
 	height: z.number(),
 });
 
+/** A layer's user-assignable color pair — mirrors `LayerColor` from the design-system. */
+const LayerColorSchema = z.object({
+	primary: z.string(),
+	secondary: z.string(),
+});
+
+/**
+ * Serializable mirror of the design-system `Source`. Carries no PCM and no
+ * functions — only the persisted fields. `AudioData` is resolved at runtime
+ * from `audioFilePath`.
+ */
+const SourceSchema = z.object({
+	id: z.string(),
+	name: z.string(),
+	audioFilePath: z.string(),
+	timelineOffsetMs: z.number(),
+	layerColor: LayerColorSchema,
+	visible: z.boolean(),
+	muted: z.boolean(),
+	soloed: z.boolean(),
+});
+
+/** The set of view tabs the workspace exposes — mirrors the design-system `ViewId`. */
+const ViewIdSchema = z.enum([
+	"timeline",
+	"overlay",
+	"slider",
+	"difference",
+	"sum",
+	"frequency-distribution",
+	"loudness",
+	"correlation",
+	"vectorscope",
+]);
+
+/** The channel-collapse mode passed to `spectral-display` — mirrors its `ChannelInput`. */
+const ChannelInputSchema = z.enum(["mono", "mid", "side"]);
+
+/** A time-range selection in milliseconds, or `null` when nothing is selected. */
+const SelectionSchema = z
+	.object({
+		start: z.number(),
+		end: z.number(),
+	})
+	.nullable();
+
+/**
+ * A comparison — the contents of one tab. Sources placed on a shared timeline,
+ * the active view, the channel input, and transport/selection state. Fully
+ * serializable; the autosaved `state.json` carries it verbatim.
+ */
+const ComparisonSchema = z.object({
+	id: z.string(),
+	sources: z.array(SourceSchema).default([]),
+	activeView: ViewIdSchema.default("overlay"),
+	channelInput: ChannelInputSchema.default("mono"),
+	positionSec: z.number().default(0),
+	selection: SelectionSchema.default(null),
+});
+
 export const AppStateSchema = z.object({
 	tabs: z.array(TabEntrySchema).default([]),
 	activeTabId: z.string().nullable().default(null),
 	theme: z.enum(["lava", "viridis"]).default("lava"),
 	windowBounds: WindowBoundsSchema.optional(),
-	recentFiles: z.array(RecentFileSchema).default([]),
+	comparisons: z.array(ComparisonSchema).default([]),
 });
 
 export type TabEntry = z.infer<typeof TabEntrySchema>;
-export type RecentFile = z.infer<typeof RecentFileSchema>;
 export type WindowBounds = z.infer<typeof WindowBoundsSchema>;
+export type SourceState = z.infer<typeof SourceSchema>;
+export type Comparison = z.infer<typeof ComparisonSchema>;
 export type AppState = z.infer<typeof AppStateSchema> & State;
 
 const SavedStateSchema = AppStateSchema.pick({
@@ -41,7 +96,7 @@ const SavedStateSchema = AppStateSchema.pick({
 	activeTabId: true,
 	theme: true,
 	windowBounds: true,
-	recentFiles: true,
+	comparisons: true,
 }).partial();
 
 export async function loadAppState(main: { getUserDataPath: () => Promise<string>; readFile: (path: string) => Promise<string> }): Promise<Omit<AppState, "_key">> {
@@ -61,7 +116,13 @@ export async function loadAppState(main: { getUserDataPath: () => Promise<string
 		// no saved state
 	}
 
-	const tabs = saved.tabs ?? [];
+	const comparisons = saved.comparisons ?? [];
+
+	// Reconcile each tab against the loaded comparisons — drop tabs whose
+	// referenced comparison no longer exists so a dangling `comparisonId` can
+	// never reach the renderer.
+	const comparisonIds = new Set(comparisons.map((comparison) => comparison.id));
+	const tabs = (saved.tabs ?? []).filter((tab) => comparisonIds.has(tab.comparisonId));
 
 	const activeTabId = tabs.some((tab) => tab.id === saved.activeTabId) ? (saved.activeTabId ?? null) : (tabs[0]?.id ?? null);
 
@@ -70,7 +131,7 @@ export async function loadAppState(main: { getUserDataPath: () => Promise<string
 		activeTabId,
 		theme: saved.theme ?? "lava",
 		windowBounds: saved.windowBounds,
-		recentFiles: saved.recentFiles ?? [],
+		comparisons,
 	};
 }
 

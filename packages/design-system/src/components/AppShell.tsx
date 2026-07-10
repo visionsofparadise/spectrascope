@@ -16,7 +16,7 @@ interface AppShellProps {
  *
  * CSS grid:
  *   columns: [sidebar 240px | workspace 1fr]
- *   rows:    [main 1fr | transport auto (~76px)]   (transport row omitted
+ *   rows:    [main 1fr | transport auto (~92px)]   (transport row omitted
  *            entirely when no transport is supplied)
  *
  * The sidebar spans both rows on the left; the workspace and transport split
@@ -58,7 +58,7 @@ export function AppShell({ sidebar, workspace, transport }: AppShellProps) {
           `bg-void` background; the shell row contributes no chrome of its
           own. */}
       {hasTransport && (
-        <div style={{ gridColumn: "2", gridRow: "2", height: "76px" }}>
+        <div style={{ gridColumn: "2", gridRow: "2", height: "92px" }}>
           {transport}
         </div>
       )}

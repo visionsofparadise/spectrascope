@@ -16,6 +16,7 @@ import { GetUserDataPathRendererIpc } from "./System/getUserDataPath/Renderer";
 import { GetWindowIdRendererIpc } from "./System/getWindowId/Renderer";
 import { QuitAppRendererIpc } from "./System/quitApp/Renderer";
 import { SetBoundsRendererIpc } from "./System/setBounds/Renderer";
+import { RenderDerivedRendererIpc } from "./Render/renderDerived/Renderer";
 
 export const ASYNC_RENDERER_IPCS = [
 	DeleteFileRendererIpc,
@@ -35,6 +36,7 @@ export const ASYNC_RENDERER_IPCS = [
 	GetAppVersionRendererIpc,
 	QuitAppRendererIpc,
 	SetBoundsRendererIpc,
+	RenderDerivedRendererIpc,
 ];
 
 export type AsyncIpcAction = IpcHandlerAction<InstanceType<(typeof ASYNC_RENDERER_IPCS)[number]>>;

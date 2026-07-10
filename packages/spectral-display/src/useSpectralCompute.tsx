@@ -25,6 +25,8 @@ export type ComputeResult =
 			waveformBuffer: Float32Array | null;
 			waveformPointCount: number;
 			loudnessData: LoudnessData | null;
+			correlationEnvelope: Float32Array | null;
+			vectorscopeHistogram: Uint32Array | null;
 			options: ResolvedPipelineOptions;
 	  };
 

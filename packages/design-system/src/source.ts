@@ -13,13 +13,14 @@ import type { LayerColor } from "./layers";
 export interface Source {
 	readonly id: string;
 	readonly name: string;
-	readonly filePath: string;
+	/** Absolute path of the real audio file this source represents. */
+	readonly audioFilePath: string;
+	/** Position of the source on the comparison's shared timeline, in milliseconds (≥ 0). Default 0. */
+	readonly timelineOffsetMs: number;
 	readonly layerColor: LayerColor;
 	readonly visible: boolean;
 	readonly muted: boolean;
 	readonly soloed: boolean;
-	/** Per-source gain in dB. Applied to PCM samples at the SourceStrip boundary. Default 0. */
-	readonly gainDb: number;
 }
 
 /**
@@ -55,12 +56,12 @@ export function createDefaultSource(index: number, partial?: Partial<Source>): S
 	return {
 		id: generateId(),
 		name: `Source ${index + 1}`,
-		filePath: "",
+		audioFilePath: "",
+		timelineOffsetMs: 0,
 		layerColor,
 		visible: true,
 		muted: false,
 		soloed: false,
-		gainDb: 0,
 		...partial,
 	};
 }

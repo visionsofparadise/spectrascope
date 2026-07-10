@@ -15,7 +15,7 @@ export function AppTabBar({ context }: Props) {
 
 	const tabs = app.tabs.map((tab) => ({
 		id: tab.id,
-		label: context.tabNames.get(tab.id) ?? tab.bagPath.split(/[\\/]/).pop()?.replace(/\.bag$/i, "") ?? tab.bagPath,
+		label: context.tabNames.get(tab.id) ?? "Comparison",
 	}));
 
 	const selectTab = (id: string): void => {
@@ -68,7 +68,7 @@ export function AppTabBar({ context }: Props) {
 	}, [editingTabId]);
 
 	return (
-		<div className="flex h-9 shrink-0 items-center gap-2 bg-void px-2">
+		<div className="flex h-11 shrink-0 items-center gap-2 bg-void px-2">
 			<div className="h-4 w-px bg-chrome-border-subtle" />
 
 			{tabs.map((tab) => {
@@ -78,7 +78,7 @@ export function AppTabBar({ context }: Props) {
 				return (
 					<div
 						key={tab.id}
-						className={`flex items-center gap-2 ${
+						className={`flex items-center gap-2 px-3 py-1.5 ${
 							isActive ? "bg-primary text-void" : "bg-chrome-raised text-chrome-text"
 						}`}
 						onClick={() => selectTab(tab.id)}
@@ -113,7 +113,7 @@ export function AppTabBar({ context }: Props) {
 								{tab.label}
 							</span>
 						)}
-						<IconButton icon="lucide:x" label="Close tab" size={10} dim onClick={() => closeTab(tab.id)} />
+						<IconButton icon="lucide:x" label="Close tab" size={12} dim onClick={() => closeTab(tab.id)} />
 					</div>
 				);
 			})}
@@ -121,6 +121,7 @@ export function AppTabBar({ context }: Props) {
 			<IconButton
 				icon="lucide:plus"
 				label="Home"
+				size={18}
 				active={app.activeTabId === null}
 				activeVariant="primary"
 				onClick={() =>

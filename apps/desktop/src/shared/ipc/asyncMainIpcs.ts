@@ -15,6 +15,7 @@ import { GetUserDataPathMainIpc } from "./System/getUserDataPath/Main";
 import { GetWindowIdMainIpc } from "./System/getWindowId/Main";
 import { QuitAppMainIpc } from "./System/quitApp/Main";
 import { SetBoundsMainIpc } from "./System/setBounds/Main";
+import { RenderDerivedMainIpc } from "./Render/renderDerived/Main";
 
 export const ASYNC_MAIN_IPCS = [
 	DeleteFileMainIpc,
@@ -34,4 +35,5 @@ export const ASYNC_MAIN_IPCS = [
 	GetAppVersionMainIpc,
 	QuitAppMainIpc,
 	SetBoundsMainIpc,
+	RenderDerivedMainIpc,
 ];

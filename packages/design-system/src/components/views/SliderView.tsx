@@ -1,10 +1,12 @@
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ChannelInput } from "spectral-display";
 import { Knob } from "../controls/Knob";
 import { IconButton } from "../IconButton";
 import { SourceStrip } from "../SourceStrip";
 import type { SourceStripCursorReadout } from "../SourceStrip";
 import type { Source } from "../../source";
+import { useViewSync } from "../../sync";
 import { Curtain } from "../spectral/Curtain";
 import type { TransportControl } from "../spectral/Transport";
 import type { AudioData } from "../spectral/types";
@@ -12,6 +14,9 @@ import { FrequencyAxis, DbAxis, TimeRuler } from "../spectral/Axes";
 import { FrequencyMinimap } from "../spectral/FrequencyMinimap";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
 import { Selection } from "../spectral/Selection";
+import { useLayerOpacity } from "./layerOpacity";
+import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
+import { eventToTime, timeToFraction } from "./viewCursor";
 
 /**
  * Local `#RRGGBB` → `[r, g, b]` helper. Duplicates the one in OverlayView /
@@ -37,7 +42,10 @@ function hexToRgb255(hex: string): [number, number, number] {
 
 interface SliderViewProps {
   readonly sources: ReadonlyArray<Source>;
-  readonly audioData: AudioData;
+  /** Per-source PCM readers, keyed by `Source.id`. */
+  readonly sourceAudio: ReadonlyMap<string, AudioData>;
+  /** The global Mono/Mid/Side channel-input mode — passed to every strip. */
+  readonly channelInput: ChannelInput;
   readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
@@ -50,9 +58,12 @@ type GridMode = "freq" | "amp";
 const INITIAL_VIEW_START_FRAC = 0.3;
 const INITIAL_VIEW_END_FRAC = 0.5;
 
-const SELECTION_START_FRAC = 0.25;
-const SELECTION_END_FRAC = 0.45;
-const CURSOR_FRAC = 0.38;
+/** Empty sync state — no cursor / selection until the user interacts. */
+const EMPTY_VIEW_SYNC = {
+  cursor: null,
+  selection: null,
+  timeRange: { start: 0, end: 0 },
+} as const;
 
 const FFT_OPTIONS = ["1024", "2048", "4096", "8192", "16384"] as const;
 const HOP_OPTIONS = ["2", "4", "8", "16", "32"] as const;
@@ -217,13 +228,14 @@ function MiniDropdown({
  * instances exist.
  *
  * First-pass judgment calls (recorded in the plan):
- *   - **>2 visible sources**: takes the first two visible (`visibleSources[0]`
- *     and `visibleSources[1]`). Picking which two to wipe between is a future
- *     follow-up; default behaviour is documented rather than silently
- *     clamped without a record.
- *   - **<2 visible sources**: content cell shows a "Need at least two visible
- *     sources" message in `font-technical text-sm text-chrome-text-dim`. The
- *     rest of the page chrome stays mounted so the view remains navigable.
+ *   - **>2 renderable sources**: takes the first two renderable
+ *     (`renderableSources[0]` and `renderableSources[1]`). Picking which two to
+ *     wipe between is a future follow-up; default behaviour is documented
+ *     rather than silently clamped without a record.
+ *   - **<2 renderable sources**: content cell shows a "Need at least two
+ *     visible sources" message in `font-technical text-sm text-chrome-text-dim`.
+ *     The rest of the page chrome stays mounted so the view remains navigable.
+ *     A source is renderable when it is visible *and* has decoded audio.
  *   - **Audio-playback switching at the handle is out of scope.** The published
  *     `TransportControl` mirrors OverlayView/TimelineView — visual-only.
  *   - **Curtain reuse**: the existing `Curtain` primitive is used unchanged.
@@ -233,7 +245,8 @@ function MiniDropdown({
  */
 export function SliderView({
   sources,
-  audioData,
+  sourceAudio,
+  channelInput,
   onTransportControlChange,
 }: SliderViewProps) {
   const [cursorReadout, setCursorReadout] =
@@ -251,17 +264,29 @@ export function SliderView({
 
   const [handleX, setHandleX] = useState(0.5);
 
+  // Cross-view sync — the inspection cursor / selection (shared when the
+  // global Sync toggle is on, local otherwise).
+  const viewSync = useViewSync("slider", EMPTY_VIEW_SYNC);
+
+  // Right-column layer-opacity knob values (waveform / spectrogram / loudness).
+  const layerOpacity = useLayerOpacity();
+
+  // Visible sources that have decoded audio, paired with their `AudioData`.
+  const renderableSources = useMemo(
+    () => resolveVisibleSourceAudio(sources, sourceAudio),
+    [sources, sourceAudio],
+  );
+
+  // Shared chrome (time ruler, minimaps, duration) sizes against the first
+  // renderable source's audio; a zero-duration fallback when none.
+  const chromeAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
+
   const [playing, setPlaying] = useState(false);
   const [positionSec, setPositionSec] = useState(0);
-  const durationSec = audioData.durationMs / 1000;
+  const durationSec = chromeAudio.durationMs / 1000;
 
-  const startMs = audioData.durationMs * viewStartFrac;
-  const endMs = audioData.durationMs * viewEndFrac;
-
-  const visibleSources = useMemo(
-    () => sources.filter((source) => source.visible),
-    [sources],
-  );
+  const startMs = chromeAudio.durationMs * viewStartFrac;
+  const endMs = chromeAudio.durationMs * viewEndFrac;
 
   // Audibility — solo overrides mute. Reserved for future audio-pipeline
   // wiring; the visual stack uses `visible === true` only.
@@ -283,6 +308,16 @@ export function SliderView({
     [durationSec],
   );
 
+  // Place the inspection cursor at the clicked time (sync-aware).
+  const handleCursorClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const time = eventToTime(event, startMs, endMs);
+
+      if (time !== null) viewSync.setCursor(time);
+    },
+    [viewSync, startMs, endMs],
+  );
+
   const transportControl = useMemo<TransportControl>(
     () => ({
       playing,
@@ -291,14 +326,22 @@ export function SliderView({
       onPlayToggle,
       onSeek,
       cursorReadout,
-      // Demo selection range (0.25–0.45 of duration) — surfaces as the
-      // transport's In / Out columns.
-      selectionInSec: durationSec * 0.25,
-      selectionOutSec: durationSec * 0.45,
-      selectionInAmp: "-19.7 dB",
-      selectionOutAmp: "-24.3 dB",
+      // Selection range — driven by the (sync-aware) selection; `—` columns
+      // when nothing is selected.
+      selectionInSec:
+        viewSync.selection !== null ? viewSync.selection.start / 1000 : undefined,
+      selectionOutSec:
+        viewSync.selection !== null ? viewSync.selection.end / 1000 : undefined,
     }),
-    [playing, positionSec, durationSec, onPlayToggle, onSeek, cursorReadout],
+    [
+      playing,
+      positionSec,
+      durationSec,
+      onPlayToggle,
+      onSeek,
+      cursorReadout,
+      viewSync.selection,
+    ],
   );
 
   useEffect(() => {
@@ -307,15 +350,28 @@ export function SliderView({
     }
   }, [onTransportControlChange, transportControl]);
 
-  const top = visibleSources[0];
-  const bottom = visibleSources[1];
+  // Cursor / selection display fractions within the content window.
+  const cursorFrac = timeToFraction(viewSync.cursor, startMs, endMs);
+  const selectionStartFrac = timeToFraction(
+    viewSync.selection?.start ?? null,
+    startMs,
+    endMs,
+  );
+  const selectionEndFrac = timeToFraction(
+    viewSync.selection?.end ?? null,
+    startMs,
+    endMs,
+  );
+
+  const top = renderableSources[0];
+  const bottom = renderableSources[1];
   const hasPair = top !== undefined && bottom !== undefined;
 
   // Frequency minimap is a single-source overview. With a wipe between two
   // sources the choice is arbitrary — pick the top (visually-foreground)
   // source's color, falling back to a neutral chrome pair when no pair.
   const minimapLayerColor =
-    top?.layerColor ?? {
+    top?.source.layerColor ?? {
       primary: "#B8B8C0",
       secondary: "#44444C",
     };
@@ -341,31 +397,41 @@ export function SliderView({
 
         {/* Content cell — wipe-compare. Two SourceStrips z-stacked; top is
             clip-pathed to leave only its left portion (up to handleX) visible.
-            Curtain renders the draggable vertical handle. */}
-        <div className="relative overflow-hidden bg-void">
+            Curtain renders the draggable vertical handle. Clicking places the
+            inspection cursor (sync-aware). */}
+        <div
+          className="relative cursor-crosshair overflow-hidden bg-void"
+          onClick={handleCursorClick}
+        >
           {hasPair ? (
             <>
               {/* Bottom strip — full opacity, no clip. Revealed wherever the
                   top strip is masked away. */}
               <SourceStrip
-                source={bottom}
-                audioData={audioData}
+                source={bottom.source}
+                audioData={bottom.audioData}
                 startMs={startMs}
                 endMs={endMs}
                 fftSize={fftSize}
                 hopOverlap={hopOverlap}
+                channelInput={channelInput}
+                waveformOpacity={layerOpacity.waveformOpacity}
+                spectrogramOpacity={layerOpacity.spectrogramOpacity}
                 onCursorMove={setCursorReadout}
               />
               {/* Top strip — clip-pathed so only the left `handleX` fraction is
                   visible. The bottom strip shows through everywhere else. */}
               <SourceStrip
-                source={top}
-                audioData={audioData}
+                source={top.source}
+                audioData={top.audioData}
                 startMs={startMs}
                 endMs={endMs}
                 fftSize={fftSize}
                 hopOverlap={hopOverlap}
+                channelInput={channelInput}
                 clipPath={`inset(0 ${(1 - handleX) * 100}% 0 0)`}
+                waveformOpacity={layerOpacity.waveformOpacity}
+                spectrogramOpacity={layerOpacity.spectrogramOpacity}
                 onCursorMove={setCursorReadout}
               />
               {/* Draggable handle. Curtain reads its parent's rect for dragging,
@@ -383,14 +449,18 @@ export function SliderView({
                 mode={gridMode}
                 opacity={gridOpacity}
               />
-              <Selection
-                startFraction={SELECTION_START_FRAC}
-                endFraction={SELECTION_END_FRAC}
-              />
-              <div
-                className="pointer-events-none absolute top-0 bottom-0 w-px bg-data-cursor"
-                style={{ left: `${CURSOR_FRAC * 100}%` }}
-              />
+              {selectionStartFrac !== null && selectionEndFrac !== null && (
+                <Selection
+                  startFraction={selectionStartFrac}
+                  endFraction={selectionEndFrac}
+                />
+              )}
+              {cursorFrac !== null && cursorFrac >= 0 && cursorFrac <= 1 && (
+                <div
+                  className="pointer-events-none absolute top-0 bottom-0 w-px bg-data-cursor"
+                  style={{ left: `${cursorFrac * 100}%` }}
+                />
+              )}
               {/* The cursor readout is published up to the Transport (see
                   `transportControl.cursorReadout`); no in-pane readout chip. */}
             </>
@@ -404,7 +474,7 @@ export function SliderView({
         </div>
 
         <FrequencyMinimap
-          audioData={audioData}
+          audioData={chromeAudio}
           startMs={startMs}
           endMs={endMs}
           layerColor={minimapLayerColor}
@@ -417,7 +487,7 @@ export function SliderView({
             context even with no strips). */}
         <div className="bg-void" />
         <MinimapDisplay
-          audioData={audioData}
+          audioData={chromeAudio}
           viewStartFrac={viewStartFrac}
           viewEndFrac={viewEndFrac}
           waveformColor={hexToRgb255(minimapLayerColor.primary)}
@@ -472,9 +542,15 @@ export function SliderView({
 
           <div className="my-3 w-6 border-t border-chrome-border-subtle" />
 
-          {/* Waveform layer opacity stub (matches OverlayView). */}
+          {/* Waveform layer opacity knob — wired (matches OverlayView). */}
           <div className="flex flex-col items-center gap-0.5">
-            <Knob value={0.8} label="" size={24} hideValue />
+            <Knob
+              value={layerOpacity.waveformOpacity}
+              label=""
+              size={24}
+              hideValue
+              onChange={layerOpacity.setWaveformOpacity}
+            />
             <Icon
               icon="lucide:audio-waveform"
               width={12}
@@ -485,9 +561,15 @@ export function SliderView({
 
           <div className="my-3 w-6 border-t border-chrome-border-subtle" />
 
-          {/* Spectrogram layer opacity stub (matches OverlayView). */}
+          {/* Spectrogram layer opacity knob — wired (matches OverlayView). */}
           <div className="flex flex-col items-center gap-0.5">
-            <Knob value={0.7} label="" size={24} hideValue />
+            <Knob
+              value={layerOpacity.spectrogramOpacity}
+              label=""
+              size={24}
+              hideValue
+              onChange={layerOpacity.setSpectrogramOpacity}
+            />
             <Icon
               icon="lucide:flame"
               width={12}
@@ -525,9 +607,16 @@ export function SliderView({
 
           <div className="my-1 w-6 border-t border-chrome-border-subtle" />
 
-          {/* Loudness layer opacity stub (matches OverlayView). */}
+          {/* Loudness layer opacity knob — controlled but unconsumed; the
+              strip has no loudness layer (matches OverlayView). */}
           <div className="flex flex-col items-center gap-0.5">
-            <Knob value={0.5} label="" size={24} hideValue />
+            <Knob
+              value={layerOpacity.loudnessOpacity}
+              label=""
+              size={24}
+              hideValue
+              onChange={layerOpacity.setLoudnessOpacity}
+            />
             <Icon
               icon="lucide:activity"
               width={12}

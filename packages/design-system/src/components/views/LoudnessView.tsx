@@ -10,6 +10,9 @@ import type {
 } from "../spectral/Transport";
 import type { AudioData } from "../spectral/types";
 import { cn } from "../../cn";
+import { buildPolylineSegments } from "./chartTrace";
+import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
+import type { SourceWithAudio } from "./viewAudio";
 
 /** Local `#RRGGBB` → `[r, g, b]` helper. Duplicates the per-view copies in the
  *  SourceStrip-based views. */
@@ -42,15 +45,12 @@ function hexToRgb255(hex: string): [number, number, number] {
  * Real loudness data comes from `useSpectralCompute` in the `spectral-display`
  * package, called per-source via the `<SourceLoudnessTrace>` sub-component (a
  * hook must be called from a render function — one per source per metric).
- *
- * Per-source gain is applied at the PCM boundary by wrapping `readSamples` to
- * multiply each sample by `10^(gainDb/20)`, mirroring `SourceStrip` so the
- * loudness numbers reflect what the user hears.
  */
 
 interface LoudnessViewProps {
 	readonly sources: ReadonlyArray<Source>;
-	readonly audioData: AudioData;
+	/** Per-source PCM readers, keyed by `Source.id`. */
+	readonly sourceAudio: ReadonlyMap<string, AudioData>;
 	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
@@ -159,51 +159,6 @@ function scalarMetricValue(
 }
 
 /**
- * Build a polyline `points` string from a time-series Float32Array. Time per
- * sample is `1 / WAVEFORM_POINTS_PER_SECOND` seconds; X is normalized into the
- * [0, 1] viewBox by dividing by the total point count. Y is converted to the
- * [0, 1] viewBox by mapping the value through `mapValueToDb` (which yields dB)
- * and then `dbToY`. Samples that map to `-Infinity` (or below floor) start a
- * fresh subpolyline so we don't draw a flat line at the floor.
- */
-function buildPolylineSegments(
-	series: Float32Array,
-	axisMin: number,
-	mapValueToDb: (value: number) => number,
-): Array<string> {
-	const segments: Array<Array<string>> = [];
-	let current: Array<string> = [];
-	const count = series.length;
-
-	if (count === 0) return [];
-
-	for (let index = 0; index < count; index += 1) {
-		const raw = series[index] ?? Number.NEGATIVE_INFINITY;
-
-		if (!Number.isFinite(raw)) {
-			if (current.length > 0) {
-				segments.push(current);
-				current = [];
-			}
-
-			continue;
-		}
-
-		const db = mapValueToDb(raw);
-		const x = index / (count - 1 || 1);
-		const y = dbToY(db, axisMin);
-
-		current.push(`${x},${y}`);
-	}
-
-	if (current.length > 0) {
-		segments.push(current);
-	}
-
-	return segments.map((segment) => segment.join(" "));
-}
-
-/**
  * Sub-component that runs `useSpectralCompute` for one source with the
  * loudness pipeline enabled, and renders the polyline(s) for the active
  * metric. Bubbles `LoudnessData` up to the parent (only used by the Integrated
@@ -222,28 +177,6 @@ function SourceLoudnessTrace({
 	metric,
 	onLoudnessData,
 }: SourceLoudnessTraceProps) {
-	// Wrap readSamples for per-source gain. Identical pattern to SourceStrip.
-	const gainAdjustedReadSamples = useMemo<AudioData["readSamples"]>(() => {
-		if (source.gainDb === 0) {
-			return audioData.readSamples;
-		}
-
-		const linear = Math.pow(10, source.gainDb / 20);
-
-		return async (channel, sampleOffset, sampleCount) => {
-			const raw = await audioData.readSamples(channel, sampleOffset, sampleCount);
-			const scaled = new Float32Array(raw.length);
-
-			for (let index = 0; index < raw.length; index += 1) {
-				const sample = raw[index] ?? 0;
-
-				scaled[index] = sample * linear;
-			}
-
-			return scaled;
-		};
-	}, [audioData.readSamples, source.gainDb]);
-
 	const spectralOptions = useMemo<SpectralOptions>(
 		() => ({
 			metadata: {
@@ -254,7 +187,7 @@ function SourceLoudnessTrace({
 			// Width/height are required but the loudness pipeline doesn't draw a
 			// canvas — keep them minimal but non-zero so the engine still runs.
 			query: { startMs: 0, endMs: audioData.durationMs, width: 64, height: 64 },
-			readSamples: gainAdjustedReadSamples,
+			readSamples: audioData.readSamples,
 			config: {
 				spectrogram: false,
 				loudness: true,
@@ -266,7 +199,7 @@ function SourceLoudnessTrace({
 			audioData.totalSamples,
 			audioData.channels,
 			audioData.durationMs,
-			gainAdjustedReadSamples,
+			audioData.readSamples,
 		],
 	);
 
@@ -313,7 +246,9 @@ function SourceLoudnessTrace({
 	if (!series) return null;
 
 	const mapValueToDb = mapperForMetric(metric.id, metric.axisMin);
-	const segments = buildPolylineSegments(series, metric.axisMin, mapValueToDb);
+	const segments = buildPolylineSegments(series, (value) =>
+		dbToY(mapValueToDb(value), metric.axisMin),
+	);
 
 	return (
 		<g>
@@ -406,12 +341,11 @@ function ScalarLabels({ visibleSources, loudnessMap, metric }: ScalarLabelsProps
 }
 
 interface ChartCanvasProps {
-	readonly visibleSources: ReadonlyArray<Source>;
-	readonly audioData: AudioData;
+	readonly renderableSources: ReadonlyArray<SourceWithAudio>;
 	readonly metric: MetricSpec;
 }
 
-function ChartCanvas({ visibleSources, audioData, metric }: ChartCanvasProps) {
+function ChartCanvas({ renderableSources, metric }: ChartCanvasProps) {
 	const [loudnessMap, setLoudnessMap] = useState<Map<string, LoudnessData | null>>(
 		() => new Map(),
 	);
@@ -453,7 +387,7 @@ function ChartCanvas({ visibleSources, audioData, metric }: ChartCanvasProps) {
 				viewBox="0 0 1 1"
 				preserveAspectRatio="none"
 			>
-				{visibleSources.map((source) => (
+				{renderableSources.map(({ source, audioData }) => (
 					<SourceLoudnessTrace
 						key={source.id}
 						source={source}
@@ -465,7 +399,7 @@ function ChartCanvas({ visibleSources, audioData, metric }: ChartCanvasProps) {
 			</svg>
 			{isScalarMetric(metric.id) && (
 				<ScalarLabels
-					visibleSources={visibleSources}
+					visibleSources={renderableSources.map((entry) => entry.source)}
 					loudnessMap={loudnessMap}
 					metric={metric}
 				/>
@@ -511,13 +445,18 @@ function MetricTabs({ active, onChange }: MetricTabsProps) {
 
 export function LoudnessView({
 	sources,
-	audioData,
+	sourceAudio,
 	onTransportControlChange,
 }: LoudnessViewProps) {
-	const visibleSources = useMemo(
-		() => sources.filter((source) => source.visible),
-		[sources],
+	// Visible sources that have decoded audio, paired with their `AudioData`.
+	const renderableSources = useMemo(
+		() => resolveVisibleSourceAudio(sources, sourceAudio),
+		[sources, sourceAudio],
 	);
+
+	// Shared chrome (time ruler, minimap, duration) sizes against the first
+	// renderable source's audio; a zero-duration fallback when none.
+	const chromeAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
 
 	const [activeMetric, setActiveMetric] = useState<Metric>("integrated");
 	const metricSpec = useMemo(
@@ -527,7 +466,7 @@ export function LoudnessView({
 
 	const [playing, setPlaying] = useState(false);
 	const [positionSec, setPositionSec] = useState(0);
-	const durationSec = audioData.durationMs / 1000;
+	const durationSec = chromeAudio.durationMs / 1000;
 
 	const onPlayToggle = useCallback(() => {
 		setPlaying((prev) => !prev);
@@ -557,7 +496,7 @@ export function LoudnessView({
 			const xFrac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
 			const yFrac = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
 
-			const totalSec = (xFrac * audioData.durationMs) / 1000;
+			const totalSec = (xFrac * chromeAudio.durationMs) / 1000;
 			const mins = Math.floor(totalSec / 60);
 			const secs = Math.floor(totalSec % 60);
 			const ms = Math.floor((totalSec % 1) * 1000);
@@ -569,7 +508,7 @@ export function LoudnessView({
 
 			setCursorReadout({ time, amp: `${db.toFixed(1)} dB` });
 		},
-		[audioData.durationMs, metricSpec.axisMin],
+		[chromeAudio.durationMs, metricSpec.axisMin],
 	);
 
 	const control = useMemo<TransportControl>(
@@ -600,9 +539,9 @@ export function LoudnessView({
 	const dbTicks = metricSpec.axisMin === -60 ? DB_TICKS_60 : DB_TICKS_40;
 
 	// The overview minimap renders a single waveform; with N sources the colour
-	// choice is arbitrary, so use the first visible source's primary (a neutral
-	// chrome pair when nothing is visible).
-	const minimapColor = visibleSources[0]?.layerColor ?? {
+	// choice is arbitrary, so use the first renderable source's primary (a
+	// neutral chrome pair when nothing is renderable).
+	const minimapColor = renderableSources[0]?.source.layerColor ?? {
 		primary: "#B8B8C0",
 		secondary: "#44444C",
 	};
@@ -622,7 +561,7 @@ export function LoudnessView({
 				<div className="flex shrink-0">
 					<div className="w-10 shrink-0 bg-void" />
 					<div className="min-w-0 flex-1">
-						<TimeRuler startMs={0} endMs={audioData.durationMs} />
+						<TimeRuler startMs={0} endMs={chromeAudio.durationMs} />
 					</div>
 				</div>
 				<div className="flex min-h-0 flex-1">
@@ -631,7 +570,7 @@ export function LoudnessView({
 						className="relative min-w-0 flex-1"
 						onMouseMove={handleChartMouseMove}
 					>
-						{visibleSources.length === 0 ? (
+						{renderableSources.length === 0 ? (
 							<div className="flex h-full items-center justify-center bg-void">
 								<p className="font-body text-sm text-chrome-text-secondary">
 									No visible sources.
@@ -639,8 +578,7 @@ export function LoudnessView({
 							</div>
 						) : (
 							<ChartCanvas
-								visibleSources={visibleSources}
-								audioData={audioData}
+								renderableSources={renderableSources}
 								metric={metricSpec}
 							/>
 						)}
@@ -654,7 +592,7 @@ export function LoudnessView({
 					<div className="w-10 shrink-0 bg-void" />
 					<div className="min-w-0 flex-1">
 						<MinimapDisplay
-							audioData={audioData}
+							audioData={chromeAudio}
 							viewStartFrac={0}
 							viewEndFrac={1}
 							waveformColor={hexToRgb255(minimapColor.primary)}

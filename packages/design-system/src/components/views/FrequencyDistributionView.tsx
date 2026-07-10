@@ -3,6 +3,7 @@ import type { Source } from "../../source";
 import { LinearDbAxis } from "../spectral/Axes";
 import type { TransportControl } from "../spectral/Transport";
 import type { AudioData } from "../spectral/types";
+import { resolveVisibleSourceAudio } from "./viewAudio";
 
 /**
  * FrequencyDistributionView — per-source long-term-average-spectrum (LTAS) lines
@@ -40,7 +41,8 @@ import type { AudioData } from "../spectral/types";
 
 interface FrequencyDistributionViewProps {
 	readonly sources: ReadonlyArray<Source>;
-	readonly audioData: AudioData;
+	/** Per-source PCM readers, keyed by `Source.id`. */
+	readonly sourceAudio: ReadonlyMap<string, AudioData>;
 	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
@@ -254,14 +256,14 @@ function HorizontalFrequencyAxis() {
 	);
 }
 
-export function FrequencyDistributionView({ sources, audioData, onTransportControlChange }: FrequencyDistributionViewProps) {
-	// `audioData` is part of the prop contract for view containers (every other
-	// view consumes it). LTAS extraction against real PCM is a follow-up.
-	void audioData;
-
+export function FrequencyDistributionView({ sources, sourceAudio, onTransportControlChange }: FrequencyDistributionViewProps) {
+	// `sourceAudio` is part of the prop contract for view containers; the LTAS
+	// curves are still synthetic placeholders, so only the *set* of sources
+	// with decoded audio is consumed here. Real magnitude-spectrum extraction
+	// against each source's PCM is a follow-up.
 	const visibleSources = useMemo(
-		() => sources.filter((source) => source.visible),
-		[sources],
+		() => resolveVisibleSourceAudio(sources, sourceAudio).map((entry) => entry.source),
+		[sources, sourceAudio],
 	);
 
 	useEffect(() => {

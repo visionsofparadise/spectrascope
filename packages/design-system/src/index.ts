@@ -39,6 +39,7 @@ export type { ViewId } from "./components/ViewTabs";
 export { Workspace } from "./components/Workspace";
 export { SourceStrip } from "./components/SourceStrip";
 export type { SourceStripProps, SourceStripCursorReadout } from "./components/SourceStrip";
+export { CorrelationView } from "./components/views/CorrelationView";
 export { DifferenceView } from "./components/views/DifferenceView";
 export { FrequencyDistributionView } from "./components/views/FrequencyDistributionView";
 export { LoudnessView } from "./components/views/LoudnessView";
@@ -46,6 +47,7 @@ export { OverlayView } from "./components/views/OverlayView";
 export { SliderView } from "./components/views/SliderView";
 export { SumView } from "./components/views/SumView";
 export { TimelineView } from "./components/views/TimelineView";
+export { VectorscopeView } from "./components/views/VectorscopeView";
 
 // Spectral
 export { Curtain } from "./components/spectral/Curtain";
@@ -75,8 +77,8 @@ export type { Source } from "./source";
 export { createDefaultSource } from "./source";
 
 // Sync
-export { SyncProvider, useSync } from "./sync";
-export type { SyncState, SyncContextValue } from "./sync";
+export { SyncProvider, useSync, useViewSync } from "./sync";
+export type { SyncState, SyncContextValue, ViewSync } from "./sync";
 
 // Utilities
 export { cn } from "./cn";

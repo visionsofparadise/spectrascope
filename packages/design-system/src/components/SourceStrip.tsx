@@ -5,6 +5,7 @@ import {
   useSpectralCompute,
 } from "spectral-display";
 import type {
+  ChannelInput,
   ColormapDefinition,
   SpectralOptions,
 } from "spectral-display";
@@ -23,15 +24,32 @@ export interface SourceStripCursorReadout {
 }
 
 export interface SourceStripProps {
-  /** Source identity + per-source `layerColor` + `gainDb`. */
+  /** Source identity + per-source `layerColor`. */
   readonly source: Source;
   readonly audioData: AudioData;
   readonly startMs: number;
   readonly endMs: number;
   readonly fftSize: number;
   readonly hopOverlap: number;
+  /**
+   * Which derived signal feeds the spectrogram FFT — `"mono"` (channel sum),
+   * `"mid"` (`(L+R)/2`), or `"side"` (`(L-R)/2`). A *compute* parameter:
+   * changing it re-runs the spectrogram pipeline (it must therefore be in the
+   * `spectralOptions` `useMemo` config AND its dependency array).
+   */
+  readonly channelInput: ChannelInput;
   readonly opacity?: number;
   readonly clipPath?: string;
+  /**
+   * Per-layer opacity for the two stacked canvas layers — the waveform drawn
+   * on top and the spectrogram underneath. `0..1`, default `1`. This is the
+   * compositing hook the per-view right-column layer-opacity knobs drive; it
+   * is distinct from the strip-level `opacity` above (the Overlay view's
+   * per-strip blend opacity). The strip has no loudness layer, so there is no
+   * loudness-opacity prop.
+   */
+  readonly waveformOpacity?: number;
+  readonly spectrogramOpacity?: number;
   readonly onCursorMove?: (readout: SourceStripCursorReadout) => void;
 }
 
@@ -92,10 +110,6 @@ function hexToRgb255(hex: string): [number, number, number] {
 /**
  * SourceStrip — the atomic per-source visual unit. Spectrogram + waveform
  * only; the loudness overlay was removed in the second iteration.
- *
- * Per-source gain is applied at the PCM boundary by wrapping `readSamples` to
- * multiply each sample by `10^(gainDb/20)`. When `gainDb === 0` the original
- * reader is passed through unchanged so identity stays stable.
  */
 export function SourceStrip({
   source,
@@ -104,8 +118,11 @@ export function SourceStrip({
   endMs,
   fftSize,
   hopOverlap,
+  channelInput,
   opacity = 1,
   clipPath,
+  waveformOpacity = 1,
+  spectrogramOpacity = 1,
   onCursorMove,
 }: SourceStripProps) {
   const displayRef = useRef<HTMLDivElement>(null);
@@ -157,30 +174,6 @@ export function SourceStrip({
     [onCursorMove, startMs, endMs],
   );
 
-  // Wrap `readSamples` to apply per-source gain. When gainDb is exactly 0 the
-  // original reader is passed through so we don't churn function identity (and
-  // thus `useSpectralCompute`'s dependency) for the common case.
-  const gainAdjustedReadSamples = useMemo<AudioData["readSamples"]>(() => {
-    if (source.gainDb === 0) {
-      return audioData.readSamples;
-    }
-
-    const linear = Math.pow(10, source.gainDb / 20);
-
-    return async (channel, sampleOffset, sampleCount) => {
-      const raw = await audioData.readSamples(channel, sampleOffset, sampleCount);
-      const scaled = new Float32Array(raw.length);
-
-      for (let index = 0; index < raw.length; index += 1) {
-        const sample = raw[index] ?? 0;
-
-        scaled[index] = sample * linear;
-      }
-
-      return scaled;
-    };
-  }, [audioData.readSamples, source.gainDb]);
-
   const spectralOptions = useMemo<SpectralOptions>(
     () => ({
       metadata: {
@@ -189,12 +182,13 @@ export function SourceStrip({
         channelCount: audioData.channels,
       },
       query: { startMs, endMs, width, height },
-      readSamples: gainAdjustedReadSamples,
+      readSamples: audioData.readSamples,
       config: {
         fftSize,
         hopOverlap,
         frequencyScale: "mel",
         colormap,
+        channelInput,
         loudness: false,
         truePeak: false,
       },
@@ -203,13 +197,14 @@ export function SourceStrip({
       audioData.sampleRate,
       audioData.totalSamples,
       audioData.channels,
-      gainAdjustedReadSamples,
+      audioData.readSamples,
       startMs,
       endMs,
       width,
       height,
       fftSize,
       hopOverlap,
+      channelInput,
       colormap,
     ],
   );
@@ -225,10 +220,16 @@ export function SourceStrip({
     >
       {computeResult.status === "ready" && (
         <>
-          <div className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full">
+          <div
+            className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full"
+            style={{ opacity: spectrogramOpacity }}
+          >
             <SpectrogramCanvas computeResult={computeResult} />
           </div>
-          <div className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full">
+          <div
+            className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full"
+            style={{ opacity: waveformOpacity }}
+          >
             <WaveformCanvas computeResult={computeResult} color={waveformColor} />
           </div>
         </>
