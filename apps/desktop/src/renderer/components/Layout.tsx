@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Logger } from "../../shared/models/Logger";
 import { AUDIO_FILE_EXTENSIONS, createComparison, createTabId } from "../comparison/createComparison";
 import { useAutosave } from "../hooks/useAutosave";
@@ -9,8 +9,8 @@ import { main } from "../models/Main";
 import { MainEvents } from "../models/MainEvents";
 import type { ProxyStore } from "../models/ProxyStore/ProxyStore";
 import { useAppState, type AppState, type Comparison } from "../models/State/App";
-import { AppTabBar } from "./TabBar";
-import { TitleBar } from "./TitleBar";
+import type { HistoryControl } from "../state/useComparisonHistory";
+import { AppBar } from "./AppBar";
 import { TabContent } from "./Tab";
 
 interface Props {
@@ -32,6 +32,13 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 
 	const tabNamesRef = useRef(new Map<string, string>());
 	const renameCallbacksRef = useRef(new Map<string, (name: string) => void>());
+
+	// The active comparison's undo/redo control, published up from `ComparisonTab`
+	// (the `TransportControl` publishing pattern) so the app bar can drive it. Reset
+	// to `null` when no tab is active (Home) — the publisher only lives inside a
+	// mounted `ComparisonTab`, so Home would otherwise keep the last tab's stale
+	// control.
+	const [historyControl, setHistoryControl] = useState<HistoryControl | null>(null);
 
 	/**
 	 * The tab label for a comparison — the first source's name (its file name),
@@ -116,6 +123,12 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 	);
 
 	useEffect(() => {
+		if (app.activeTabId === null) {
+			setHistoryControl(null);
+		}
+	}, [app.activeTabId]);
+
+	useEffect(() => {
 		if (app.theme === "viridis") {
 			document.documentElement.setAttribute("data-theme", "viridis");
 		} else {
@@ -125,9 +138,8 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 
 	return (
 		<div className="flex flex-col h-screen">
-			<TitleBar context={context} />
-			<AppTabBar context={context} />
-			<TabContent context={context} />
+			<AppBar context={context} historyControl={historyControl} />
+			<TabContent context={context} onHistoryControlChange={setHistoryControl} />
 		</div>
 	);
 }

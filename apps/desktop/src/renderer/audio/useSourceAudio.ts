@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AudioData, Source } from "@spectrascope/design-system";
+import type { AudioData } from "../workspace/spectral/types";
+import type { Source } from "../workspace/source";
 import { decodeAudio } from "./decodeAudio";
 
 /** Per-source decode status — `loading` until the file decodes, then `ready` or `error`. */

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Source } from "@spectrascope/design-system";
+import type { Source } from "../workspace/source";
 import { MixPlayer } from "./MixPlayer";
 import type { MixSource } from "./MixPlayer";
 import { PlaybackEngine } from "./PlaybackEngine";

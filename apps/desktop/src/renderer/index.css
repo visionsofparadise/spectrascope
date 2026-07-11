@@ -1,10 +1,86 @@
 @import "tailwindcss";
-@import "@spectrascope/design-system/css/tokens.css";
-@import "@spectrascope/design-system/styles.css";
-@import "@spectrascope/design-system/css/base.css";
-@import "@spectrascope/design-system/css/utilities.css";
+@import "@fontsource-variable/space-grotesk";
+@import "@fontsource/dm-mono/400.css";
+@import "@fontsource/dm-mono/500.css";
+@import "@fontsource/dm-mono/400-italic.css";
+@import "@fontsource/dm-mono/500-italic.css";
+
+@theme {
+  --color-chrome-base: #0D0D0F;
+  --color-chrome-surface: #1E1E23;
+  --color-chrome-raised: #28282E;
+  --color-chrome-border: #2A2A30;
+  --color-chrome-border-subtle: #1F1F24;
+  --color-chrome-text: #B8B8C0;
+  --color-chrome-text-secondary: #6E6E78;
+  --color-chrome-text-dim: #44444C;
+
+  --color-primary: #A3E635;
+  --color-secondary: #440154;
+  --color-void: #020204;
+
+  --color-state-rendered: #34D399;
+  --color-state-stale: #FBBF24;
+  --color-state-processing: #60A5FA;
+  --color-state-error: #F87171;
+  --color-state-bypassed: #44444C;
+
+  --color-data-waveform: #C8C8D0;
+  --color-data-waveform-selected: #5A9ECF;
+  --color-data-cursor: #E0E0E8;
+  --color-data-selection: #5A9ECF20;
+  --color-data-selection-border: #5A9ECF;
+
+  --color-edge-idle: #2A2A30;
+  --color-edge-active: #60A5FA;
+  --color-edge-complete: #34D399;
+
+  --color-interactive-hover: #1F1F24;
+  --color-interactive-active: #252528;
+  --color-interactive-focus: #A3E635;
+
+  --font-display: "Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif;
+  --font-body: "Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif;
+  --font-technical: "DM Mono", ui-monospace, monospace;
+
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-6: 1.5rem;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+  --text-3xl: 3rem;
+
+  --breakpoint-wide: 1920px;
+}
 
 @layer base {
+  :root {
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "kern" 1, "liga" 1;
+  }
+
+  body {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    line-height: 1.5;
+    color: var(--color-chrome-text);
+    background-color: var(--color-chrome-base);
+  }
+
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+
   *::-webkit-scrollbar { width: 6px; height: 6px; }
   *::-webkit-scrollbar-track { background: var(--color-chrome-border); }
   *::-webkit-scrollbar-thumb { background: var(--color-chrome-text-dim); }

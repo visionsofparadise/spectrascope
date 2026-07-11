@@ -1,4 +1,4 @@
-import type { AudioData } from "@spectrascope/design-system";
+import type { AudioData } from "../workspace/spectral/types";
 import { toMediaUrl } from "./mediaUrl";
 
 /**

@@ -5,7 +5,7 @@ import type { AppState, Comparison } from "../models/State/App";
 import { ComparisonHistory, classifyEdit, toHistoryState } from "./comparisonHistory";
 
 /** What `useComparisonHistory` exposes — bind these to the actions-cluster buttons and keyboard shortcuts. */
-export interface UseComparisonHistoryResult {
+export interface HistoryControl {
 	/** Restore the previous comparison edit. No-op when `canUndo` is false. */
 	readonly undo: () => void;
 	/** Restore the next comparison edit. No-op when `canRedo` is false. */
@@ -42,7 +42,7 @@ export function useComparisonHistory(
 	comparison: Snapshot<Comparison>,
 	app: Snapshot<AppState>,
 	appStore: ProxyStore,
-): UseComparisonHistoryResult {
+): HistoryControl {
 	// The history instance. Re-created when the comparison identity changes,
 	// seeded with that comparison's current history-relevant state. Keyed on
 	// `comparison.id` only — re-seeding on every snapshot change would discard

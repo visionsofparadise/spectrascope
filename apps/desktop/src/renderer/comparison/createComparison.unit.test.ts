@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Source } from "@spectrascope/design-system";
+import type { Source } from "../workspace/source";
 import { createComparison, createSourceFromFile, isBareAddSource } from "./createComparison";
 
 /** Minimal `Source` factory for the diff tests — only the fields `isBareAddSource` reads. */

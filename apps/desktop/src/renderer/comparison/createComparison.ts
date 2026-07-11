@@ -1,5 +1,5 @@
-import { createDefaultSource } from "@spectrascope/design-system";
-import type { Source } from "@spectrascope/design-system";
+import { createDefaultSource } from "../workspace/source";
+import type { Source } from "../workspace/source";
 import type { Comparison, SourceState } from "../models/State/App";
 
 /** Audio file extensions offered in the open dialog. */

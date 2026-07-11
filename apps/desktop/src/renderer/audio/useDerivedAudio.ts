@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AudioData, Source } from "@spectrascope/design-system";
+import type { AudioData } from "../workspace/spectral/types";
+import type { Source } from "../workspace/source";
 import type { RenderOperation, RenderSpec } from "../../main/ffmpeg/renderSpec";
 import { main } from "../models/Main";
 import { decodeAudio } from "./decodeAudio";

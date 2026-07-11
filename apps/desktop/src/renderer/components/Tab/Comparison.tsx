@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ChannelInput } from "spectral-display";
 import type { Snapshot } from "valtio/vanilla";
-import {
-	AppShell,
-	SourcesPanel,
-	SyncProvider,
-	Transport,
-	Workspace,
-} from "@spectrascope/design-system";
-import type { AudioData, Source, SyncState, TransportControl, ViewId } from "@spectrascope/design-system";
+import { AppShell } from "../../workspace/AppShell";
+import { Sidebar } from "../../workspace/Sidebar";
+import { SyncProvider } from "../../workspace/sync";
+import type { SyncState } from "../../workspace/sync";
+import { Transport } from "../../workspace/Transport";
+import type { TransportControl } from "../../workspace/Transport";
+import { Workspace } from "../../workspace/Workspace";
+import { TransportViewControls } from "../../workspace/TransportViewControls";
+import { INITIAL_VIEW_CONTROL_SETTINGS } from "../../workspace/viewSettings";
+import type { ViewId } from "../../workspace/Workspace";
+import type { Source } from "../../workspace/source";
+import type { AudioData } from "../../workspace/spectral/types";
 import { main } from "../../models/Main";
 import { AUDIO_FILE_EXTENSIONS, createSourceFromFile, isBareAddSource } from "../../comparison/createComparison";
 import { useSourceAudio } from "../../audio/useSourceAudio";
@@ -16,6 +21,7 @@ import { usePlayer } from "../../audio/usePlayer";
 import type { PlaybackKind } from "../../audio/usePlayer";
 import type { RenderOperation } from "../../../main/ffmpeg/renderSpec";
 import { useComparisonHistory } from "../../state/useComparisonHistory";
+import type { HistoryControl } from "../../state/useComparisonHistory";
 import type { AppContext } from "../../models/Context";
 import type { Comparison, SourceState } from "../../models/State/App";
 
@@ -27,6 +33,12 @@ interface Props {
 	 * `appStore.mutate`).
 	 */
 	readonly comparison: Snapshot<Comparison>;
+	/**
+	 * Publish this comparison's undo/redo control up to the layout (which feeds
+	 * the app bar). Called with the current `{ undo, redo, canUndo, canRedo }` on
+	 * every change and with `null` on unmount.
+	 */
+	readonly onHistoryControlChange: (control: HistoryControl | null) => void;
 }
 
 /**
@@ -135,7 +147,7 @@ function toSourceState(source: Source): SourceState {
  * `Workspace` as a `sourceId → AudioData` map; a still-decoding source is
  * simply absent from the map and skipped by the views.
  */
-export function ComparisonTab({ context, comparison }: Props) {
+export function ComparisonTab({ context, comparison, onHistoryControlChange }: Props) {
 	const { app, appStore } = context;
 
 	const [transportControl, setTransportControl] = useState<TransportControl>(
@@ -149,14 +161,21 @@ export function ComparisonTab({ context, comparison }: Props) {
 	// it to whichever player the active view builds.
 	const [volume, setVolume] = useState(INITIAL_VOLUME);
 
-	// Cross-view sync on/off — controlled state for the `ViewTabs` Sync toggle
-	// and the `SyncProvider` mounted around the workspace. Kept transient (not
+	// Cross-view sync on/off — controlled state for the Timeline transport's Sync
+	// toggle and the `SyncProvider` mounted around the workspace. Kept transient (not
 	// in the autosaved comparison state): like monitor volume it is an
 	// inspection-side preference, not analytical content, so it stays out of
 	// `state.json` and the Phase-8 undo/redo history. When on, the per-source
 	// views read/write a shared cursor / selection; when off they are
 	// independent.
 	const [syncEnabled, setSyncEnabled] = useState(false);
+
+	// The shared view-control settings (grid mode / opacity, layer opacities,
+	// FFT size, hop overlap, loudness metric), consumed by the SourceStrip views
+	// + Loudness and edited from the transport's left-region controls. Transient
+	// like monitor volume / sync — a display preference, not analytical content,
+	// so it stays out of `state.json` and the undo/redo history.
+	const [viewSettings, setViewSettings] = useState(INITIAL_VIEW_CONTROL_SETTINGS);
 
 	// The comparison's sources, as the design-system `Source` shape. The
 	// serializable `SourceState` mirror is structurally a `Source`; the valtio
@@ -397,15 +416,43 @@ export function ComparisonTab({ context, comparison }: Props) {
 		[app, appStore, comparison.id],
 	);
 
+	// The global Mono/Mid/Side channel input — writes the selected mode into the
+	// comparison state, where `useAutosave` persists it and `classifyEdit` lands
+	// it in undo history. A change re-runs every per-source spectrogram compute.
+	const handleChannelInputChange = useCallback(
+		(next: ChannelInput) => {
+			appStore.mutate(app, (proxy) => {
+				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
+
+				if (!target) return;
+
+				target.channelInput = next;
+			});
+		},
+		[app, appStore, comparison.id],
+	);
+
 	// --- Undo / redo ---------------------------------------------------------
 
 	// The comparison-edit history. `useComparisonHistory` observes the
 	// `comparison` snapshot prop, pushes a history entry on each user edit
 	// (source add/remove, timeline offset, mute/solo/visibility, view / channel
 	// / selection state — the transient `positionSec` is excluded), and exposes
-	// `undo`/`redo` that restore a snapshot back into the valtio proxy. The
-	// actions-cluster undo/redo buttons in `ViewTabs` are controlled by this.
+	// `undo`/`redo` that restore a snapshot back into the valtio proxy. The app
+	// bar's undo/redo buttons (via the published history control) and the
+	// keyboard shortcuts below are controlled by this.
 	const { undo, redo, canUndo, canRedo } = useComparisonHistory(comparison, app, appStore);
+
+	// Publish this comparison's history control up to the layout (the app bar's
+	// undo/redo consume it). Republished whenever a handler or flag changes;
+	// cleared to `null` on unmount so the app bar dims once no comparison is active.
+	useEffect(() => {
+		onHistoryControlChange({ undo, redo, canUndo, canRedo });
+
+		return () => {
+			onHistoryControlChange(null);
+		};
+	}, [undo, redo, canUndo, canRedo, onHistoryControlChange]);
 
 	// Workspace-level keyboard shortcuts: Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z
 	// (or Ctrl/Cmd+Y) redoes. Bound on `window` so the shortcut works regardless
@@ -450,29 +497,29 @@ export function ComparisonTab({ context, comparison }: Props) {
 		<div className="relative flex flex-1 flex-col bg-void">
 			<AppShell
 				sidebar={
-					<SourcesPanel
+					<Sidebar
+						activeView={activeView}
+						onActiveViewChange={handleActiveViewChange}
+						channelInput={comparison.channelInput}
+						onChannelInputChange={handleChannelInputChange}
 						sources={sources}
-						onChange={handleSourcesChange}
+						onSourcesChange={handleSourcesChange}
 					/>
 				}
 				workspace={
 					// `SyncProvider` owns the shared cross-view cursor / selection /
 					// time-range; `syncEnabled` (controlled here) gates whether the
-					// views read it or fall back to their own local state. The
-					// `Workspace` forwards `syncEnabled` to the `ViewTabs` Sync toggle.
+					// views read it or fall back to their own local state. The Sync
+					// toggle lives in the transport's Timeline controls
+					// (`TransportViewControls`), which drives `setSyncEnabled`.
 					<SyncProvider enabled={syncEnabled} initial={INITIAL_SYNC_STATE}>
 						<Workspace
 							sources={sources}
 							sourceAudio={sourceAudio}
 							derivedAudio={derivedAudio}
 							activeView={activeView}
-							onActiveViewChange={handleActiveViewChange}
-							syncEnabled={syncEnabled}
-							onSyncEnabledChange={setSyncEnabled}
-							onUndo={undo}
-							onRedo={redo}
-							canUndo={canUndo}
-							canRedo={canRedo}
+							channelInput={comparison.channelInput}
+							settings={viewSettings}
 							onSourceOffsetChange={handleSourceOffsetChange}
 							onTransportControlChange={setTransportControl}
 						/>
@@ -484,6 +531,15 @@ export function ComparisonTab({ context, comparison }: Props) {
 							control={boundTransportControl}
 							volume={volume}
 							onVolumeChange={handleVolumeChange}
+							viewControls={
+								<TransportViewControls
+									activeView={activeView}
+									settings={viewSettings}
+									onSettingsChange={setViewSettings}
+									syncEnabled={syncEnabled}
+									onSyncEnabledChange={setSyncEnabled}
+								/>
+							}
 						/>
 					)
 				}
