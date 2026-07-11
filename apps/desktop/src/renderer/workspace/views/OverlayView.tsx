@@ -11,6 +11,7 @@ import { FrequencyAxis, DbAxis, TimeRuler } from "../spectral/Axes";
 import { FrequencyMinimap } from "../spectral/FrequencyMinimap";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
 import { Selection } from "../spectral/Selection";
+import { useTimeViewport } from "../useTimeViewport";
 import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
 import { eventToTime, timeToFraction } from "./viewCursor";
 
@@ -48,20 +49,10 @@ interface OverlayViewProps {
   readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
-/**
- * Per-cell view window — initial fractions mirror SpectralPage's hardcoded
- * preview window. Zoom and scroll are not interactive yet; this view holds
- * the window in state so subsequent phases can wire interaction here without
- * shape changes. Documented as a Phase 4 deferral.
- */
-const INITIAL_VIEW_START_FRAC = 0.3;
-const INITIAL_VIEW_END_FRAC = 0.5;
-
 /** Empty sync state — no cursor / selection until the user interacts. */
 const EMPTY_VIEW_SYNC = {
   cursor: null,
   selection: null,
-  timeRange: { start: 0, end: 0 },
 } as const;
 
 const DEFAULT_CURSOR: SourceStripCursorReadout = {
@@ -182,9 +173,9 @@ function GridOverlay({
  *   unobtrusive overlay in the bottom-left of the content cell. The Phase 1
  *   stripped Transport doesn't render readouts; wiring readouts back into
  *   Transport is deferred.
- * - The view window (`startMs/endMs`) is held in state with placeholder
- *   fractions (matching SpectralPage's hardcoded preview). Interactive
- *   zoom/scroll is future work.
+ * - The view window (`startMs/endMs`) is the committed window of a per-view
+ *   `useTimeViewport` — scroll pans, ctrl+scroll zooms about the cursor, and a
+ *   minimap click/drag recentres it.
  * - Each source carries its own `AudioData` (resolved from the `sourceAudio`
  *   map by id); the shared view chrome sizes against the first renderable
  *   source's audio.
@@ -211,18 +202,10 @@ export function OverlayView({
 }: OverlayViewProps) {
   const [cursorReadout, setCursorReadout] =
     useState<SourceStripCursorReadout>(DEFAULT_CURSOR);
-  const [viewStartFrac, setViewStartFrac] = useState(INITIAL_VIEW_START_FRAC);
-  const [viewEndFrac, setViewEndFrac] = useState(INITIAL_VIEW_END_FRAC);
-
-  // Reserved for future zoom/scroll wiring — the setters are not yet bound to
-  // any interaction. Silence the unused-setter lint without dropping the API
-  // surface.
-  void setViewStartFrac;
-  void setViewEndFrac;
 
   // Cross-view sync — the inspection cursor / selection. Shared `SyncProvider`
   // state when the global Sync toggle is on, this view's own local state when
-  // off. `timeRange` is plumbed through but not yet consumed (no zoom UI).
+  // off.
   const viewSync = useViewSync("overlay", EMPTY_VIEW_SYNC);
 
   // Visible sources that have decoded audio, paired with their `AudioData`.
@@ -235,12 +218,31 @@ export function OverlayView({
   // first renderable source's audio; an empty zero-duration fallback when none.
   const chromeAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
 
+  // Transient time viewport — extent is the first renderable source's duration.
+  // The committed window feeds the strips / ruler; the live window drives the
+  // minimap bracket and the gesture transform.
+  const viewport = useTimeViewport(0, chromeAudio.durationMs);
+  const startMs = viewport.committedStartMs;
+  const endMs = viewport.committedEndMs;
+
+  const setViewportToFraction = useCallback(
+    (fraction: number) => {
+      const centerMs = fraction * chromeAudio.durationMs;
+      const span = viewport.endMs - viewport.startMs;
+
+      viewport.setViewport({ startMs: centerMs - span / 2, endMs: centerMs + span / 2 });
+    },
+    [chromeAudio.durationMs, viewport],
+  );
+
+  const viewStartFrac =
+    chromeAudio.durationMs > 0 ? viewport.startMs / chromeAudio.durationMs : 0;
+  const viewEndFrac =
+    chromeAudio.durationMs > 0 ? viewport.endMs / chromeAudio.durationMs : 1;
+
   const [playing, setPlaying] = useState(false);
   const [positionSec, setPositionSec] = useState(0);
   const durationSec = chromeAudio.durationMs / 1000;
-
-  const startMs = chromeAudio.durationMs * viewStartFrac;
-  const endMs = chromeAudio.durationMs * viewEndFrac;
 
   // Audibility — solo overrides mute. Reserved for future audio-pipeline
   // wiring; the visual stack uses `visible === true` only.
@@ -349,8 +351,11 @@ export function OverlayView({
         <FrequencyAxis />
 
         {/* Content cell — N stacked SourceStrips + shared view chrome.
-            Clicking places the inspection cursor (sync-aware). */}
+            Clicking places the inspection cursor (sync-aware); scroll pans,
+            ctrl+scroll zooms (the viewport's non-passive wheel listener binds
+            to this element's ref). */}
         <div
+          ref={viewport.wheelHandlers.ref}
           className="relative cursor-crosshair overflow-hidden bg-void"
           onClick={handleCursorClick}
         >
@@ -362,9 +367,16 @@ export function OverlayView({
             </div>
           ) : (
             <>
+              {/* Strip stack — the gesture `transform` maps the committed render
+                  onto the live window during a scroll/zoom, reset to identity on
+                  commit. */}
               <div
                 className="absolute inset-0"
-                style={{ mixBlendMode: "lighten" }}
+                style={{
+                  mixBlendMode: "lighten",
+                  transform: viewport.transform,
+                  transformOrigin: "left",
+                }}
               >
                 {renderableSources.map(({ source, audioData }) => (
                   <SourceStrip
@@ -427,6 +439,7 @@ export function OverlayView({
           viewStartFrac={viewStartFrac}
           viewEndFrac={viewEndFrac}
           waveformColor={hexToRgb255(minimapLayerColor.primary)}
+          onScrubToFraction={setViewportToFraction}
         />
         <div className="bg-void" />
         <div className="bg-void" />

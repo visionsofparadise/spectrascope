@@ -16,7 +16,6 @@ import { GetUserDataPathRendererIpc } from "./System/getUserDataPath/Renderer";
 import { GetWindowIdRendererIpc } from "./System/getWindowId/Renderer";
 import { QuitAppRendererIpc } from "./System/quitApp/Renderer";
 import { SetBoundsRendererIpc } from "./System/setBounds/Renderer";
-import { RenderDerivedRendererIpc } from "./Render/renderDerived/Renderer";
 import { PrepareSourceRendererIpc } from "./Source/prepareSource/Renderer";
 import { RegisterStreamRendererIpc } from "./Stream/registerStream/Renderer";
 
@@ -38,7 +37,6 @@ export const ASYNC_RENDERER_IPCS = [
 	GetAppVersionRendererIpc,
 	QuitAppRendererIpc,
 	SetBoundsRendererIpc,
-	RenderDerivedRendererIpc,
 	PrepareSourceRendererIpc,
 	RegisterStreamRendererIpc,
 ];

@@ -78,9 +78,8 @@ const buildPrepared = (pcmPath: string, header: WavHeader, nativeSampleRate: num
  * Prepares a source for streaming: a PCM WAV already at the canonical rate
  * passes through unchanged; anything else transcodes once via ffmpeg into a
  * bounded LRU cache under `<userData>/source-cache/`, keyed by content identity
- * plus target rate. Modelled on `RenderManager`: hash-as-filename dedup,
- * in-flight job tracking, atomic `.partial`-then-rename writes, disposed on
- * window close.
+ * plus target rate: hash-as-filename dedup, in-flight job tracking, atomic
+ * `.partial`-then-rename writes, disposed on window close.
  */
 export class SourceCacheManager {
 	private readonly cacheDirectory: string;

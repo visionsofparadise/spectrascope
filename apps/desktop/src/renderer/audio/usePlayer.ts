@@ -1,20 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Source } from "../workspace/source";
-import { MixPlayer } from "./MixPlayer";
-import type { MixSource } from "./MixPlayer";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PlaybackEngine } from "./PlaybackEngine";
 import type { Player } from "./Player";
-
-/**
- * Which playback path the active view uses.
- *
- * - `mix` — the per-source / chart views audition a live `MixPlayer` over the
- *   audible source buffers.
- * - `file` — the Sum / Difference views audition the single ffmpeg-rendered
- *   temp file through a `PlaybackEngine`.
- * - `none` — the view has no playback (Frequency Distribution, Vectorscope).
- */
-export type PlaybackKind = "mix" | "file" | "none";
 
 export interface UsePlayerResult {
 	/** Whether playback is currently running. */
@@ -31,68 +17,42 @@ export interface UsePlayerResult {
 	readonly onVolumeChange: (volume: number) => void;
 }
 
-/** Resolve the audible source set — solo overrides mute (`visible` is display-only). */
-function resolveAudibleSources(sources: ReadonlyArray<Source>): ReadonlyArray<Source> {
-	const anySoloed = sources.some((source) => source.soloed);
-
-	if (anySoloed) {
-		return sources.filter((source) => source.soloed);
-	}
-
-	return sources.filter((source) => !source.muted);
-}
-
-/**
- * Stable identity for the live-mix audible set — the ordered list of audible
- * source ids and their timeline offsets. The `MixPlayer` is rebuilt only when
- * this key changes (a source muted / soloed / moved / added / removed), so a
- * re-render that does not touch the audible set keeps the same player and
- * preserves the playhead.
- */
-function mixKey(mixSources: ReadonlyArray<MixSource>): string {
-	return mixSources.map((source) => `${source.id}@${String(source.timelineOffsetMs)}`).join("|");
-}
-
 /**
  * Own the active view's playback player and expose a uniform transport API.
  *
- * Per the design's playback split, the player kind depends on the active view:
- * the Sum / Difference views audition the ffmpeg-rendered temp file through a
- * `PlaybackEngine` (`kind: "file"`, `filePath` set); the per-source / chart
- * views audition a live `MixPlayer` over the audible source `AudioBuffer`s
- * (`kind: "mix"`). Both implement the `Player` interface, so this hook drives
- * either through the same `play` / `pause` / `seek` / `setVolume` calls and the
- * same position / playing subscriptions.
+ * Every audible view plays one registered `media://` stream through a single
+ * `PlaybackEngine`: the per-source and Sum views point at the sum-of-audible
+ * stream, Difference points at the diff stream, and Frequency Distribution /
+ * Vectorscope have no player (`streamUrl === null`). A live mix *is* a sum, so
+ * there is no separate mix player — a parameter change (mute / solo / offset /
+ * A/B) is a URL swap on the same engine.
  *
- * The `MixPlayer` is rebuilt when the audible set changes (mute / solo /
- * offset / add / remove) so a live mix always reflects the current comparison.
- * The `PlaybackEngine` is built once and re-pointed at a new `filePath` via
- * `setSource` when the derived render changes. Switching views disposes the
- * old player and constructs the kind the new view needs.
+ * The engine is built the first time a URL exists and disposed when it goes
+ * away (a view with no playback). A URL change on the live engine is a
+ * `setSourceUrl` + seek-to-current-position + resume-if-playing, so an edit
+ * mid-playback rebuffers briefly but keeps the playhead and keeps playing.
  *
- * `onPositionChange` is reported back through `onPositionCommit` (the desktop
- * host persists it into the comparison's `positionSec`); the hook also keeps a
- * live `positionSec` in React state so the Transport timecode advances.
+ * `durationSec` comes from the caller (the registered stream's exact
+ * `StreamInfo.durationMs`); the `<audio>` element's own `durationchange`
+ * refines it when it reports a finite value. Position is reported back through
+ * `onPositionCommit` (the desktop host persists it into the comparison's
+ * `positionSec`) on discrete events only, never per animation frame; the hook
+ * also keeps a live `positionSec` in React state so the Transport advances.
  */
 export function usePlayer(
-	kind: PlaybackKind,
-	sources: ReadonlyArray<Source>,
-	sourceBuffers: ReadonlyMap<string, AudioBuffer>,
-	derivedFilePath: string | undefined,
+	streamUrl: string | null,
+	durationSec: number,
 	initialPositionSec: number,
 	onPositionCommit: (positionSec: number) => void,
 	volume: number,
 ): UsePlayerResult {
 	const [playing, setPlaying] = useState(false);
 	const [positionSec, setPositionSec] = useState(initialPositionSec);
-	const [durationSec, setDurationSec] = useState(0);
+	const [reportedDurationSec, setReportedDurationSec] = useState(0);
 
-	// The latest live position — kept in a ref so `pause`/view-switch can
+	// The latest live position — kept in a ref so a URL swap / teardown can
 	// persist it without depending on a state value that lags a frame.
 	const livePositionRef = useRef(initialPositionSec);
-	// The position to restore a freshly-built player to (the comparison's
-	// persisted `positionSec`, or wherever the previous player left off).
-	const restorePositionRef = useRef(initialPositionSec);
 	const onPositionCommitRef = useRef(onPositionCommit);
 	// The current monitor volume — kept in a ref so the player-build effect can
 	// apply it to a freshly-constructed player without `volume` being one of its
@@ -107,74 +67,33 @@ export function usePlayer(
 		volumeRef.current = volume;
 	}, [volume]);
 
-	// The audible source buffers for the live mix, ordered by the comparison's
-	// source order. A source with no decoded buffer yet is skipped.
-	const mixSources = useMemo<ReadonlyArray<MixSource>>(() => {
-		if (kind !== "mix") return [];
-
-		const audible = resolveAudibleSources(sources);
-		const result: Array<MixSource> = [];
-
-		for (const source of audible) {
-			const audioBuffer = sourceBuffers.get(source.id);
-
-			if (!audioBuffer) continue;
-
-			result.push({ id: source.id, audioBuffer, timelineOffsetMs: Math.max(0, source.timelineOffsetMs) });
-		}
-
-		return result;
-	}, [kind, sources, sourceBuffers]);
-
-	// The identity the `MixPlayer` is rebuilt on — changes when the audible set,
-	// the offsets, or their decoded buffers change.
-	const mixIdentity = useMemo(() => mixKey(mixSources), [mixSources]);
-
-	// The active player. Rebuilt when the player *kind* changes, or — for a mix
-	// — when the audible set changes. A re-render that touches neither keeps the
-	// existing player (and its playhead).
+	// The active player. Built while a URL exists, disposed when it goes null. A
+	// URL change between two non-null values keeps the same engine (and its
+	// playhead) — the URL effect below re-points it.
 	const playerRef = useRef<Player | null>(null);
 
-	// What the disposed player was, captured by the build effect's cleanup so
-	// the next build can resume playback after a mid-playback `MixPlayer`
-	// rebuild (a mute/solo/move edit) — the live mix must "reflect mute/solo
-	// edits instantly", i.e. keep playing across the rebuild.
-	const priorPlayerRef = useRef<{ readonly kind: PlaybackKind; readonly wasPlaying: boolean } | null>(null);
+	const hasUrl = streamUrl !== null;
 
+	// Build / tear down the engine on the has-url transition. Building it here
+	// (not in render) keeps the Web Audio graph construction out of React's
+	// render pass.
 	useEffect(() => {
-		// Consume the prior-player record once per build — it describes only the
-		// immediately-disposed player, so the resume check below must not see a
-		// record left over from an earlier teardown.
-		const prior = priorPlayerRef.current;
-
-		priorPlayerRef.current = null;
-
-		// `file` and `none` players carry no per-render identity; `mix` rebuilds
-		// per `mixIdentity`. Building the player here (not in render) keeps the
-		// Web Audio graph construction out of React's render pass.
-		let player: Player | null = null;
-
-		if (kind === "mix") {
-			player = new MixPlayer(mixSources);
-		} else if (kind === "file") {
-			player = new PlaybackEngine();
-		}
-
-		playerRef.current = player;
-
-		if (player === null) {
+		if (!hasUrl) {
+			playerRef.current = null;
 			setPlaying(false);
-			setDurationSec(0);
+			setReportedDurationSec(0);
 
 			return;
 		}
 
-		// Apply the current monitor volume so a freshly-built player (view
-		// switch, mix rebuild) starts at the level the `VolumeSlider` shows
-		// rather than the player's own `0.8` construction default.
-		player.setVolume(volumeRef.current);
+		const player = new PlaybackEngine();
 
-		const restoreSec = restorePositionRef.current;
+		playerRef.current = player;
+
+		// Apply the current monitor volume so a freshly-built engine starts at
+		// the level the `VolumeSlider` shows rather than the engine's own `0.8`
+		// construction default.
+		player.setVolume(volumeRef.current);
 
 		const unsubscribePosition = player.onPositionChange((next) => {
 			livePositionRef.current = next;
@@ -189,73 +108,56 @@ export function usePlayer(
 				onPositionCommitRef.current(livePositionRef.current);
 			}
 		});
-
-		if (player instanceof MixPlayer) {
-			setDurationSec(player.durationSec);
-			player.seek(restoreSec);
-			setPositionSec(player.positionSec);
-
-			// Resume after a mid-playback `MixPlayer` rebuild. The build effect
-			// reruns when `mixIdentity` changes — a source muted / soloed / moved
-			// while the live mix is playing disposes the old `MixPlayer` and
-			// constructs a fresh one seek-restored to the playhead. Without this
-			// the mix would silently pause; the design requires the live mix to
-			// "reflect mute/solo edits instantly", i.e. keep playing. Only resume
-			// when the prior player was also a playing mix (`kind` unchanged) — a
-			// view switch *into* a mix view must not auto-start playback.
-			if (prior !== null && prior.kind === "mix" && prior.wasPlaying) {
-				void player.play();
-			}
-		}
+		// The stream's exact duration is fed in via `durationSec`; the element's
+		// own `durationchange` refines it whenever it reports a finite value (a
+		// chunked stream body without Content-Length reports `0`, which the
+		// engine's getter clamps — skip those so the exact value survives).
+		const unsubscribeDuration = player.onDurationChange((next) => {
+			if (next > 0) setReportedDurationSec(next);
+		});
 
 		return () => {
-			// Persist wherever the player left off so the next player resumes there.
-			restorePositionRef.current = livePositionRef.current;
+			// Persist wherever the player left off so a re-built player resumes there.
 			onPositionCommitRef.current(livePositionRef.current);
-			// Record what this player was so the next build can resume a
-			// mid-playback mix rebuild (see the resume branch above).
-			priorPlayerRef.current = { kind, wasPlaying: player.playing };
 			unsubscribePosition();
 			unsubscribePlaying();
+			unsubscribeDuration();
 			player.dispose();
 			playerRef.current = null;
 		};
-		// `mixIdentity` (not `mixSources`) gates the mix rebuild — a stable
-		// audible set keeps the player even as `mixSources` is a fresh array.
-		 
-	}, [kind, mixIdentity]);
+	}, [hasUrl]);
 
-	// Point the `PlaybackEngine` at the derived render's temp file. `setSource`
-	// is a no-op when the path is unchanged, so this does not reload the
-	// `<audio>` element on an unrelated re-render.
-	//
-	// `<audio>` reports its duration asynchronously once metadata loads. The
-	// duration is read by *subscribing* to the engine's `onDurationChange` (the
-	// element's `durationchange` / `loadedmetadata` events) — not by polling on
-	// a fixed window, which gave up after ~4s and left the Transport stuck at
-	// `00:00.000` total whenever metadata took longer.
+	// Point the engine at the active view's stream URL. A URL swap (an edit to
+	// the audible set / offsets / A-B, or a switch between the sum and diff
+	// streams) re-points the live engine, restores the playhead, and resumes if
+	// it was playing — mirroring the old live-mix rebuild-resume behaviour.
 	useEffect(() => {
 		const player = playerRef.current;
 
-		if (kind !== "file" || !(player instanceof PlaybackEngine)) return;
+		if (!(player instanceof PlaybackEngine) || streamUrl === null) return;
 
-		if (derivedFilePath === undefined) return;
+		// Capture before `setSourceUrl`, which emits position `0` synchronously.
+		const resumeSec = livePositionRef.current;
+		const wasPlaying = player.playing;
 
-		const changed = player.setSource(derivedFilePath);
+		const changed = player.setSourceUrl(streamUrl);
 
-		if (changed) {
-			player.seek(0);
-			setPositionSec(0);
-		}
+		if (!changed) return;
 
-		// Seed with the current value (already known for an unchanged source)
-		// then track every subsequent duration update for the life of the source.
-		setDurationSec(player.durationSec);
+		player.seek(resumeSec);
+		livePositionRef.current = resumeSec;
+		setPositionSec(resumeSec);
 
-		return player.onDurationChange((next) => {
-			setDurationSec(next);
-		});
-	}, [kind, derivedFilePath]);
+		if (wasPlaying) void player.play();
+	}, [streamUrl]);
+
+	// Seed the transport duration from the registered stream's exact value on
+	// every URL / duration change.
+	useEffect(() => {
+		if (streamUrl === null) return;
+
+		setReportedDurationSec(durationSec);
+	}, [streamUrl, durationSec]);
 
 	const onPlayToggle = useCallback(() => {
 		const player = playerRef.current;
@@ -276,7 +178,6 @@ export function usePlayer(
 
 		player.seek(sec);
 		livePositionRef.current = sec;
-		restorePositionRef.current = sec;
 		setPositionSec(sec);
 		onPositionCommitRef.current(sec);
 	}, []);
@@ -285,5 +186,5 @@ export function usePlayer(
 		playerRef.current?.setVolume(volume);
 	}, []);
 
-	return { playing, positionSec, durationSec, onPlayToggle, onSeek, onVolumeChange };
+	return { playing, positionSec, durationSec: reportedDurationSec, onPlayToggle, onSeek, onVolumeChange };
 }

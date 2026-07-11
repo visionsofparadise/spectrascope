@@ -1,10 +1,11 @@
 // DifferenceView renders a single `SourceStrip` against the `derivedAudio`
-// prop — the difference signal. Phase 3 routes a placeholder `derivedAudio`
-// (the first source's buffer); Phase 5 populates it with the ffmpeg-rendered
-// Difference temp file (reference minus the polarity-inverted rest).
+// prop — the A−B difference signal (B polarity-inverted), streamed on demand
+// from the registered diff `media://` endpoint. The A and B sources are chosen
+// in the selector row above the display.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChannelInput } from "spectral-display";
+import { Select } from "../../components/Select";
 import { SourceStrip } from "../SourceStrip";
 import type { SourceStripCursorReadout } from "../SourceStrip";
 import type { Source } from "../source";
@@ -17,6 +18,7 @@ import { FrequencyAxis, DbAxis, TimeRuler } from "../spectral/Axes";
 import { FrequencyMinimap } from "../spectral/FrequencyMinimap";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
 import { Selection } from "../spectral/Selection";
+import { useTimeViewport } from "../useTimeViewport";
 import { eventToTime, timeToFraction } from "./viewCursor";
 
 /** Local `#RRGGBB` → `[r,g,b]` helper. Duplicates OverlayView's hexToRgb255. */
@@ -41,30 +43,31 @@ function hexToRgb255(hex: string): [number, number, number] {
 interface DifferenceViewProps {
   readonly sources: ReadonlyArray<Source>;
   /**
-   * The derived (difference) signal as a single PCM reader. Phase 5 populates
-   * this with the ffmpeg-rendered Difference temp file; Phase 3 routes a
-   * placeholder.
+   * The A−B difference signal as a single PCM reader, backed by the registered
+   * diff stream (`EMPTY_DERIVED_AUDIO` until A and B both resolve).
    */
   readonly derivedAudio: AudioData;
   /** The global Mono/Mid/Side channel-input mode — passed to the strip. */
   readonly channelInput: ChannelInput;
   /** Shared display-control settings, owned by the comparison host. */
   readonly settings: ViewControlSettings;
+  /**
+   * The A/B source selection (source ids), or `null` until the sticky default
+   * is written. `A − B`: A is the reference, B is polarity-inverted. A `null`
+   * or dangling (removed-source) field falls back to the default first-two in
+   * the selector display.
+   */
+  readonly differenceA: string | null;
+  readonly differenceB: string | null;
+  /** Emitted on an A/B selector change — `(differenceA, differenceB)` source ids. */
+  readonly onDifferenceChange: (differenceA: string, differenceB: string) => void;
   readonly onTransportControlChange?: (control: TransportControl) => void;
 }
-
-/**
- * Per-cell view window — initial fractions mirror OverlayView / TimelineView /
- * SliderView. Interactive zoom/scroll is a future-phase wiring step.
- */
-const INITIAL_VIEW_START_FRAC = 0.3;
-const INITIAL_VIEW_END_FRAC = 0.5;
 
 /** Empty sync state — no cursor / selection until the user interacts. */
 const EMPTY_VIEW_SYNC = {
   cursor: null,
   selection: null,
-  timeRange: { start: 0, end: 0 },
 } as const;
 
 const DEFAULT_CURSOR: SourceStripCursorReadout = {
@@ -157,10 +160,9 @@ function GridOverlay({
 
 /**
  * DifferenceView — single full-pane `<SourceStrip>` rendering a "difference"
- * pseudo-source against the `derivedAudio` prop. The pseudo-source borrows the
- * first visible source's `layerColor` (or a neutral chrome fallback when no
- * sources are visible). Phase 5 feeds `derivedAudio` the ffmpeg-rendered
- * Difference temp file; this phase routes a placeholder.
+ * pseudo-source against the `derivedAudio` prop (the streamed A−B signal). The
+ * pseudo-source borrows the first visible source's `layerColor` (or a neutral
+ * chrome fallback when no sources are visible).
  *
  * Page-level chrome (grid template + TimeRuler + FrequencyAxis + DbAxis +
  * FrequencyMinimap + GridOverlay + Selection + playhead + cursor readout chip)
@@ -177,27 +179,41 @@ export function DifferenceView({
   derivedAudio,
   channelInput,
   settings,
+  differenceA,
+  differenceB,
+  onDifferenceChange,
   onTransportControlChange,
 }: DifferenceViewProps) {
   const [cursorReadout, setCursorReadout] =
     useState<SourceStripCursorReadout>(DEFAULT_CURSOR);
-  const [viewStartFrac, setViewStartFrac] = useState(INITIAL_VIEW_START_FRAC);
-  const [viewEndFrac, setViewEndFrac] = useState(INITIAL_VIEW_END_FRAC);
-
-  // Reserved for future zoom/scroll wiring.
-  void setViewStartFrac;
-  void setViewEndFrac;
 
   // Cross-view sync — the inspection cursor / selection (shared when the
   // global Sync toggle is on, local otherwise).
   const viewSync = useViewSync("difference", EMPTY_VIEW_SYNC);
 
+  // Transient time viewport — extent is the derived (difference) signal's duration.
+  const viewport = useTimeViewport(0, derivedAudio.durationMs);
+  const startMs = viewport.committedStartMs;
+  const endMs = viewport.committedEndMs;
+
+  const setViewportToFraction = useCallback(
+    (fraction: number) => {
+      const centerMs = fraction * derivedAudio.durationMs;
+      const span = viewport.endMs - viewport.startMs;
+
+      viewport.setViewport({ startMs: centerMs - span / 2, endMs: centerMs + span / 2 });
+    },
+    [derivedAudio.durationMs, viewport],
+  );
+
+  const viewStartFrac =
+    derivedAudio.durationMs > 0 ? viewport.startMs / derivedAudio.durationMs : 0;
+  const viewEndFrac =
+    derivedAudio.durationMs > 0 ? viewport.endMs / derivedAudio.durationMs : 1;
+
   const [playing, setPlaying] = useState(false);
   const [positionSec, setPositionSec] = useState(0);
   const durationSec = derivedAudio.durationMs / 1000;
-
-  const startMs = derivedAudio.durationMs * viewStartFrac;
-  const endMs = derivedAudio.durationMs * viewEndFrac;
 
   const visibleSources = useMemo(
     () => sources.filter((source) => source.visible),
@@ -300,8 +316,61 @@ export function DifferenceView({
   // Frequency minimap mirrors the strip's color anchor.
   const minimapLayerColor = differenceSource.layerColor;
 
+  // --- A/B selector row ----------------------------------------------------
+
+  // Every source is selectable by name; option values are source ids.
+  const sourceOptions = useMemo(
+    () => sources.map((source) => ({ value: source.id, label: source.name })),
+    [sources],
+  );
+
+  // The displayed A/B ids. A `null` (never chosen) or dangling (points at a
+  // removed source) field falls back to the default first-two, matching
+  // `useDerivedStreams`' effective `?? sources[index].id` fallback and keeping
+  // the Selects from showing a stale id.
+  const sourceIds = useMemo(() => new Set(sources.map((source) => source.id)), [sources]);
+  const selectedA =
+    differenceA !== null && sourceIds.has(differenceA) ? differenceA : sources[0]?.id ?? "";
+  const selectedB =
+    differenceB !== null && sourceIds.has(differenceB) ? differenceB : sources[1]?.id ?? "";
+
+  const handleSelectA = useCallback(
+    (next: string) => {
+      onDifferenceChange(next, selectedB);
+    },
+    [onDifferenceChange, selectedB],
+  );
+
+  const handleSelectB = useCallback(
+    (next: string) => {
+      onDifferenceChange(selectedA, next);
+    },
+    [onDifferenceChange, selectedA],
+  );
+
   return (
-    <div className="flex h-full min-h-0 w-full overflow-hidden bg-void">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-void">
+      {/* A/B selector row — `A − B`, B polarity-inverted. Compact chip Selects
+          matching the transport-control chrome; a change re-registers the diff
+          stream (via `useDerivedStreams`) and lands as one `"difference"` undo
+          step. */}
+      <div className="flex shrink-0 items-center gap-4 border-b border-chrome-border-subtle bg-void px-3 py-1.5">
+        <div className="flex items-center gap-1.5">
+          <span className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.08em] text-chrome-text-secondary">
+            A
+          </span>
+          <Select variant="chip" value={selectedA} options={sourceOptions} onChange={handleSelectA} />
+        </div>
+        <span aria-hidden className="font-technical text-[length:var(--text-sm)] text-chrome-text-dim">
+          −
+        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.08em] text-chrome-text-secondary">
+            B − inverted
+          </span>
+          <Select variant="chip" value={selectedB} options={sourceOptions} onChange={handleSelectB} />
+        </div>
+      </div>
       <div
         className="min-h-0 min-w-0 flex-1 overflow-hidden"
         style={{
@@ -322,21 +391,29 @@ export function DifferenceView({
         {/* Content cell — one full-pane SourceStrip of the difference
             pseudo-source. Clicking places the inspection cursor (sync-aware). */}
         <div
+          ref={viewport.wheelHandlers.ref}
           className="relative cursor-crosshair overflow-hidden bg-void"
           onClick={handleCursorClick}
         >
-          <SourceStrip
-            source={differenceSource}
-            audioData={derivedAudio}
-            startMs={startMs}
-            endMs={endMs}
-            fftSize={settings.fftSize}
-            hopOverlap={settings.hopOverlap}
-            channelInput={channelInput}
-            waveformOpacity={settings.waveformOpacity}
-            spectrogramOpacity={settings.spectrogramOpacity}
-            onCursorMove={setCursorReadout}
-          />
+          {/* Strip — the gesture `transform` maps the committed render onto the
+              live window during a scroll/zoom. */}
+          <div
+            className="absolute inset-0"
+            style={{ transform: viewport.transform, transformOrigin: "left" }}
+          >
+            <SourceStrip
+              source={differenceSource}
+              audioData={derivedAudio}
+              startMs={startMs}
+              endMs={endMs}
+              fftSize={settings.fftSize}
+              hopOverlap={settings.hopOverlap}
+              channelInput={channelInput}
+              waveformOpacity={settings.waveformOpacity}
+              spectrogramOpacity={settings.spectrogramOpacity}
+              onCursorMove={setCursorReadout}
+            />
+          </div>
           <GridOverlay
             startMs={startMs}
             endMs={endMs}
@@ -375,6 +452,7 @@ export function DifferenceView({
           viewStartFrac={viewStartFrac}
           viewEndFrac={viewEndFrac}
           waveformColor={hexToRgb255(minimapLayerColor.primary)}
+          onScrubToFraction={setViewportToFraction}
         />
         <div className="bg-void" />
         <div className="bg-void" />

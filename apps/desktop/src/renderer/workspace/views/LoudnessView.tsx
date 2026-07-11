@@ -4,6 +4,7 @@ import type { LoudnessData, SpectralOptions } from "spectral-display";
 import type { Source } from "../source";
 import { LinearDbAxis, TimeRuler } from "../spectral/Axes";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
+import { useTimeViewport } from "../useTimeViewport";
 import type {
 	TransportControl,
 	TransportCursorReadout,
@@ -151,6 +152,8 @@ function scalarMetricValue(
 interface SourceLoudnessTraceProps {
 	readonly source: Source;
 	readonly audioData: AudioData;
+	readonly startMs: number;
+	readonly endMs: number;
 	readonly metric: MetricSpec;
 	readonly onLoudnessData: (sourceId: string, data: LoudnessData | null) => void;
 }
@@ -158,6 +161,8 @@ interface SourceLoudnessTraceProps {
 function SourceLoudnessTrace({
 	source,
 	audioData,
+	startMs,
+	endMs,
 	metric,
 	onLoudnessData,
 }: SourceLoudnessTraceProps) {
@@ -170,7 +175,9 @@ function SourceLoudnessTrace({
 			},
 			// Width/height are required but the loudness pipeline doesn't draw a
 			// canvas — keep them minimal but non-zero so the engine still runs.
-			query: { startMs: 0, endMs: audioData.durationMs, width: 64, height: 64 },
+			// The query is windowed to the committed viewport so the metric follows
+			// the zoom; loudness pins density at 500 pts/sec regardless.
+			query: { startMs, endMs, width: 64, height: 64 },
 			readSamples: audioData.readSamples,
 			config: {
 				spectrogram: false,
@@ -182,8 +189,9 @@ function SourceLoudnessTrace({
 			audioData.sampleRate,
 			audioData.totalSamples,
 			audioData.channels,
-			audioData.durationMs,
 			audioData.readSamples,
+			startMs,
+			endMs,
 		],
 	);
 
@@ -327,9 +335,12 @@ function ScalarLabels({ visibleSources, loudnessMap, metric }: ScalarLabelsProps
 interface ChartCanvasProps {
 	readonly renderableSources: ReadonlyArray<SourceWithAudio>;
 	readonly metric: MetricSpec;
+	readonly startMs: number;
+	readonly endMs: number;
+	readonly transform: string;
 }
 
-function ChartCanvas({ renderableSources, metric }: ChartCanvasProps) {
+function ChartCanvas({ renderableSources, metric, startMs, endMs, transform }: ChartCanvasProps) {
 	const [loudnessMap, setLoudnessMap] = useState<Map<string, LoudnessData | null>>(
 		() => new Map(),
 	);
@@ -366,21 +377,30 @@ function ChartCanvas({ renderableSources, metric }: ChartCanvasProps) {
 					/>
 				);
 			})}
-			<svg
-				className="absolute inset-0 h-full w-full"
-				viewBox="0 0 1 1"
-				preserveAspectRatio="none"
+			{/* Trace layer — the gesture `transform` maps the committed render onto
+			    the live window during a scroll/zoom (non-scaling strokes stay 1.5px). */}
+			<div
+				className="absolute inset-0"
+				style={{ transform, transformOrigin: "left" }}
 			>
-				{renderableSources.map(({ source, audioData }) => (
-					<SourceLoudnessTrace
-						key={source.id}
-						source={source}
-						audioData={audioData}
-						metric={metric}
-						onLoudnessData={handleLoudnessData}
-					/>
-				))}
-			</svg>
+				<svg
+					className="absolute inset-0 h-full w-full"
+					viewBox="0 0 1 1"
+					preserveAspectRatio="none"
+				>
+					{renderableSources.map(({ source, audioData }) => (
+						<SourceLoudnessTrace
+							key={source.id}
+							source={source}
+							audioData={audioData}
+							startMs={startMs}
+							endMs={endMs}
+							metric={metric}
+							onLoudnessData={handleLoudnessData}
+						/>
+					))}
+				</svg>
+			</div>
 			{isScalarMetric(metric.id) && (
 				<ScalarLabels
 					visibleSources={renderableSources.map((entry) => entry.source)}
@@ -407,6 +427,25 @@ export function LoudnessView({
 	// Shared chrome (time ruler, minimap, duration) sizes against the first
 	// renderable source's audio; a zero-duration fallback when none.
 	const chromeAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
+
+	// Transient time viewport — the traces window their computes to the committed
+	// window, so the metric follows the zoom.
+	const viewport = useTimeViewport(0, chromeAudio.durationMs);
+
+	const setViewportToFraction = useCallback(
+		(fraction: number) => {
+			const centerMs = fraction * chromeAudio.durationMs;
+			const span = viewport.endMs - viewport.startMs;
+
+			viewport.setViewport({ startMs: centerMs - span / 2, endMs: centerMs + span / 2 });
+		},
+		[chromeAudio.durationMs, viewport],
+	);
+
+	const viewStartFrac =
+		chromeAudio.durationMs > 0 ? viewport.startMs / chromeAudio.durationMs : 0;
+	const viewEndFrac =
+		chromeAudio.durationMs > 0 ? viewport.endMs / chromeAudio.durationMs : 1;
 
 	const metricSpec = useMemo(
 		() =>
@@ -447,7 +486,8 @@ export function LoudnessView({
 			const xFrac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
 			const yFrac = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
 
-			const totalSec = (xFrac * chromeAudio.durationMs) / 1000;
+			const windowMs = viewport.committedEndMs - viewport.committedStartMs;
+			const totalSec = (viewport.committedStartMs + xFrac * windowMs) / 1000;
 			const mins = Math.floor(totalSec / 60);
 			const secs = Math.floor(totalSec % 60);
 			const ms = Math.floor((totalSec % 1) * 1000);
@@ -459,7 +499,7 @@ export function LoudnessView({
 
 			setCursorReadout({ time, amp: `${db.toFixed(1)} dB` });
 		},
-		[chromeAudio.durationMs, metricSpec.axisMin],
+		[viewport.committedStartMs, viewport.committedEndMs, metricSpec.axisMin],
 	);
 
 	const control = useMemo<TransportControl>(
@@ -510,12 +550,13 @@ export function LoudnessView({
 				<div className="flex shrink-0">
 					<div className="w-10 shrink-0 bg-void" />
 					<div className="min-w-0 flex-1">
-						<TimeRuler startMs={0} endMs={chromeAudio.durationMs} />
+						<TimeRuler startMs={viewport.committedStartMs} endMs={viewport.committedEndMs} />
 					</div>
 				</div>
 				<div className="flex min-h-0 flex-1">
 					<LinearDbAxis ticks={dbTicks} />
 					<div
+						ref={viewport.wheelHandlers.ref}
 						className="relative min-w-0 flex-1"
 						onMouseMove={handleChartMouseMove}
 					>
@@ -529,6 +570,9 @@ export function LoudnessView({
 							<ChartCanvas
 								renderableSources={renderableSources}
 								metric={metricSpec}
+								startMs={viewport.committedStartMs}
+								endMs={viewport.committedEndMs}
+								transform={viewport.transform}
 							/>
 						)}
 					</div>
@@ -542,9 +586,10 @@ export function LoudnessView({
 					<div className="min-w-0 flex-1">
 						<MinimapDisplay
 							audioData={chromeAudio}
-							viewStartFrac={0}
-							viewEndFrac={1}
+							viewStartFrac={viewStartFrac}
+							viewEndFrac={viewEndFrac}
 							waveformColor={hexToRgb255(minimapColor.primary)}
+							onScrubToFraction={setViewportToFraction}
 						/>
 					</div>
 				</div>

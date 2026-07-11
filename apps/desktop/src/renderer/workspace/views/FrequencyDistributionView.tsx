@@ -1,9 +1,14 @@
 import { useEffect, useMemo } from "react";
+import { getBandFrequencies, useSpectralCompute } from "spectral-display";
+import type { ChannelInput, SpectralOptions } from "spectral-display";
 import type { Source } from "../source";
 import { LinearDbAxis } from "../spectral/Axes";
 import type { TransportControl } from "../Transport";
 import type { AudioData } from "../spectral/types";
+import type { ViewControlSettings } from "../viewSettings";
+import { buildPolylineSegments } from "./chartTrace";
 import { resolveVisibleSourceAudio } from "./viewAudio";
+import type { SourceWithAudio } from "./viewAudio";
 
 /**
  * FrequencyDistributionView — per-source long-term-average-spectrum (LTAS) lines
@@ -11,38 +16,34 @@ import { resolveVisibleSourceAudio } from "./viewAudio";
  * -90 → 0). One polyline per visible source, drawn in `source.layerColor.primary`
  * at full opacity.
  *
- * **Placeholder synthetic LTAS curves.** Real magnitude-spectrum extraction from
- * `audioData` is out of first-pass scope — wiring against the existing
- * `useSpectralCompute` to derive a time-averaged spectrum (sum across all time
- * frames, normalize by frame count, convert to dB) is a follow-up plan. The
- * synthetic shape is a pink-ish slope `-10 * log10(freq / 1000) - 30` with
- * deterministic ±6 dB jitter seeded from `source.id` so the per-source curves
- * differ visibly without overlapping by coincidence.
+ * Each renderable source runs `useSpectralCompute` with `ltas: true` (the whole
+ * clip — this view has no time axis) via the `<SourceLtasTrace>` sub-component
+ * (a hook must be called from a render function — one per source). The package
+ * returns linear mean magnitudes per band; this view converts them to dB and
+ * places each band on the log-frequency axis by its center frequency
+ * (`getBandFrequencies`).
  *
- * **View-level chrome scope** (Phase 8 judgment call, recorded in plan Notes):
- * - Kept: a single chart pane filling the workspace area, a minimal "FREQUENCY
- *   DISTRIBUTION" title strip at the top, and a small legend at the top-right
- *   listing the visible sources colored by `layerColor.primary`.
+ * **View-level chrome scope**:
+ * - Kept: a single chart pane filling the workspace area, the dB axis on the
+ *   left and a horizontal log-frequency axis underneath.
  * - Dropped: TimeRuler (no time dimension), the right-column display controls
- *   block (FFT/hop/grid mode are meaningless on a single static LTAS chart in
- *   first pass), FrequencyMinimap (no time scope to navigate), and the cursor
- *   readout chip (frequency-readout-on-hover is a follow-up).
+ *   block, FrequencyMinimap (no time scope to navigate), and the cursor readout
+ *   chip.
  *
- * **Axis composition**: the existing `FrequencyAxis` and `DbAxis` from
- * `components/spectral/Axes.tsx` are oriented for a spectrogram (frequency on
- * the vertical edge, dB symmetric around zero). This view needs horizontal log
- * frequency along the bottom and a single-direction dB axis from -90 to 0 on
- * the left. Phase 9 promoted the linear dB axis to a shared helper
- * (`LinearDbAxis` in `components/spectral/Axes.tsx`) since LoudnessView is the
- * second consumer; this file imports it and passes its own `DB_TICKS` (0 →
- * -90). The horizontal log-frequency axis is unique to this view and stays
- * inlined as `HorizontalFrequencyAxis`.
+ * **Axis composition**: the linear dB axis is the shared `LinearDbAxis`
+ * (`components/spectral/Axes.tsx`), fed this view's `DB_TICKS` (0 → -90). The
+ * horizontal log-frequency axis is unique to this view and stays inlined as
+ * `HorizontalFrequencyAxis`.
  */
 
 interface FrequencyDistributionViewProps {
 	readonly sources: ReadonlyArray<Source>;
 	/** Per-source PCM readers, keyed by `Source.id`. */
 	readonly sourceAudio: ReadonlyMap<string, AudioData>;
+	/** Shared display-control settings — supplies the FFT size and hop overlap. */
+	readonly settings: ViewControlSettings;
+	/** The global Mono/Mid/Side channel-input mode, folded into each source's compute. */
+	readonly channelInput: ChannelInput;
 	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
@@ -50,8 +51,6 @@ const FREQ_MIN_HZ = 20;
 const FREQ_MAX_HZ = 20000;
 const DB_MIN = -90;
 const DB_MAX = 0;
-const CURVE_POINTS = 256;
-const JITTER_AMPLITUDE_DB = 6;
 
 const FREQ_TICKS: ReadonlyArray<{ hz: number; label: string }> = [
 	{ hz: 20, label: "20" },
@@ -70,7 +69,7 @@ const DB_TICKS: ReadonlyArray<number> = [0, -10, -20, -30, -40, -50, -60, -70, -
 
 /**
  * Disabled `TransportControl` published by this view. Frequency Distribution
- * has no playback in first pass — the LTAS is a static whole-clip aggregate.
+ * has no playback — the LTAS is a static whole-clip aggregate.
  */
 const DISABLED_CONTROL: TransportControl = {
 	disabled: true,
@@ -82,45 +81,16 @@ const DISABLED_CONTROL: TransportControl = {
 };
 
 /**
- * Deterministic per-source seed derived from `source.id`. Cheap string hash
- * (djb2 variant) — collisions are tolerable; we just need different curves per
- * source across the seeded demo set.
+ * Convert a linear mean magnitude to dB. `getBandFrequencies`-aligned LTAS
+ * magnitudes are non-negative linear values; the `1e-10` floor keeps a
+ * zero-energy band at a finite -200 dB instead of -Infinity.
  */
-function seedFromId(id: string): number {
-	let hash = 5381;
-
-	for (let index = 0; index < id.length; index++) {
-		hash = ((hash << 5) + hash + id.charCodeAt(index)) >>> 0;
-	}
-
-	return hash;
-}
-
-/**
- * Deterministic pseudo-random number generator (mulberry32). Returns a function
- * that yields a new value in [0, 1) on each call.
- */
-function makeRng(seed: number): () => number {
-	let state = seed >>> 0;
-
-	return () => {
-		state = (state + 0x6d2b79f5) >>> 0;
-		let value = state;
-
-		value = Math.imul(value ^ (value >>> 15), value | 1);
-		value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-
-		return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-	};
-}
-
-/** Pink-ish baseline magnitude in dB at a given frequency. */
-function baselineDb(freqHz: number): number {
-	return -10 * Math.log10(freqHz / 1000) - 30;
+export function magnitudeToDb(magnitude: number): number {
+	return 20 * Math.log10(Math.max(magnitude, 1e-10));
 }
 
 /** Map a frequency (Hz) to a [0, 1] X fraction along the log axis. */
-function freqToX(freqHz: number): number {
+export function freqToX(freqHz: number): number {
 	const logMin = Math.log10(FREQ_MIN_HZ);
 	const logMax = Math.log10(FREQ_MAX_HZ);
 
@@ -134,56 +104,101 @@ function dbToY(db: number): number {
 	return (DB_MAX - clamped) / (DB_MAX - DB_MIN);
 }
 
+interface SourceLtasTraceProps {
+	readonly source: Source;
+	readonly audioData: AudioData;
+	readonly fftSize: number;
+	readonly hopOverlap: number;
+	readonly channelInput: ChannelInput;
+}
+
 /**
- * Generate a deterministic synthetic LTAS curve for one source. CURVE_POINTS
- * samples spaced uniformly across the log-frequency range; each sample is the
- * pink-ish baseline plus seeded ±6 dB jitter, clamped to [-90, 0].
+ * Sub-component that runs `useSpectralCompute` for one source with the LTAS
+ * reduction enabled over the whole clip, then renders one polyline per finite
+ * run of the resulting spectrum. Bands are placed on the log-frequency axis by
+ * their center frequency; magnitudes convert to dB. A source still preparing
+ * (or one whose clip is too short for the FFT — the engine throws, leaving
+ * `ltas` null) renders nothing.
  */
-function buildCurve(sourceId: string): ReadonlyArray<{ x: number; y: number }> {
-	const rng = makeRng(seedFromId(sourceId));
-	const logMin = Math.log10(FREQ_MIN_HZ);
-	const logMax = Math.log10(FREQ_MAX_HZ);
-	const points: Array<{ x: number; y: number }> = [];
-
-	for (let pointIndex = 0; pointIndex < CURVE_POINTS; pointIndex++) {
-		const fraction = pointIndex / (CURVE_POINTS - 1);
-		const logHz = logMin + (logMax - logMin) * fraction;
-		const freqHz = Math.pow(10, logHz);
-		const jitter = (rng() - 0.5) * 2 * JITTER_AMPLITUDE_DB;
-		const db = Math.max(DB_MIN, Math.min(DB_MAX, baselineDb(freqHz) + jitter));
-
-		points.push({ x: freqToX(freqHz), y: dbToY(db) });
-	}
-
-	return points;
-}
-
-interface ChartCurveProps {
-	readonly points: ReadonlyArray<{ x: number; y: number }>;
-	readonly color: string;
-}
-
-function ChartCurve({ points, color }: ChartCurveProps) {
-	const polylinePoints = useMemo(
-		() => points.map((point) => `${point.x},${point.y}`).join(" "),
-		[points],
+function SourceLtasTrace({ source, audioData, fftSize, hopOverlap, channelInput }: SourceLtasTraceProps) {
+	const spectralOptions = useMemo<SpectralOptions>(
+		() => ({
+			metadata: {
+				sampleRate: audioData.sampleRate,
+				sampleCount: audioData.totalSamples,
+				channelCount: audioData.channels,
+			},
+			// The view has no time axis — the query spans the whole clip. Width and
+			// height are required but nothing draws a canvas for an LTAS-only run.
+			query: { startMs: 0, endMs: audioData.durationMs, width: 64, height: 64 },
+			readSamples: audioData.readSamples,
+			config: {
+				ltas: true,
+				spectrogram: false,
+				loudness: false,
+				truePeak: false,
+				fftSize,
+				hopOverlap,
+				frequencyScale: "log",
+				channelInput,
+			},
+		}),
+		[
+			audioData.sampleRate,
+			audioData.totalSamples,
+			audioData.channels,
+			audioData.durationMs,
+			audioData.readSamples,
+			fftSize,
+			hopOverlap,
+			channelInput,
+		],
 	);
 
+	const computeResult = useSpectralCompute(spectralOptions);
+	const ltas = computeResult.status === "ready" ? computeResult.ltas : null;
+	const sampleRate = audioData.sampleRate;
+
+	const segments = useMemo(() => {
+		if (!ltas || ltas.length === 0) return [];
+
+		const bandFrequencies = getBandFrequencies("log", ltas.length, sampleRate, fftSize);
+
+		return buildPolylineSegments(
+			ltas,
+			(magnitude) => dbToY(magnitudeToDb(magnitude)),
+			(index) => freqToX(bandFrequencies[index] ?? FREQ_MIN_HZ),
+		);
+	}, [ltas, sampleRate, fftSize]);
+
+	if (segments.length === 0) return null;
+
+	const color = source.layerColor.primary;
+
 	return (
-		<polyline points={polylinePoints} fill="none" stroke={color} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+		<g>
+			{segments.map((points, index) => (
+				<polyline
+					key={index}
+					points={points}
+					fill="none"
+					stroke={color}
+					strokeWidth={1.5}
+					vectorEffect="non-scaling-stroke"
+				/>
+			))}
+		</g>
 	);
 }
 
 interface ChartCanvasProps {
-	readonly visibleSources: ReadonlyArray<Source>;
+	readonly renderableSources: ReadonlyArray<SourceWithAudio>;
+	readonly fftSize: number;
+	readonly hopOverlap: number;
+	readonly channelInput: ChannelInput;
 }
 
-function ChartCanvas({ visibleSources }: ChartCanvasProps) {
-	const curves = useMemo(
-		() => visibleSources.map((source) => ({ id: source.id, color: source.layerColor.primary, points: buildCurve(source.id) })),
-		[visibleSources],
-	);
-
+function ChartCanvas({ renderableSources, fftSize, hopOverlap, channelInput }: ChartCanvasProps) {
 	return (
 		<div className="relative h-full w-full overflow-hidden bg-void">
 			{/* Gridlines — log frequency verticals + dB horizontals. Painted as
@@ -221,8 +236,15 @@ function ChartCanvas({ visibleSources }: ChartCanvasProps) {
 				viewBox="0 0 1 1"
 				preserveAspectRatio="none"
 			>
-				{curves.map((curve) => (
-					<ChartCurve key={curve.id} points={curve.points} color={curve.color} />
+				{renderableSources.map(({ source, audioData }) => (
+					<SourceLtasTrace
+						key={source.id}
+						source={source}
+						audioData={audioData}
+						fftSize={fftSize}
+						hopOverlap={hopOverlap}
+						channelInput={channelInput}
+					/>
 				))}
 			</svg>
 		</div>
@@ -256,13 +278,9 @@ function HorizontalFrequencyAxis() {
 	);
 }
 
-export function FrequencyDistributionView({ sources, sourceAudio, onTransportControlChange }: FrequencyDistributionViewProps) {
-	// `sourceAudio` is part of the prop contract for view containers; the LTAS
-	// curves are still synthetic placeholders, so only the *set* of sources
-	// with decoded audio is consumed here. Real magnitude-spectrum extraction
-	// against each source's PCM is a follow-up.
-	const visibleSources = useMemo(
-		() => resolveVisibleSourceAudio(sources, sourceAudio).map((entry) => entry.source),
+export function FrequencyDistributionView({ sources, sourceAudio, settings, channelInput, onTransportControlChange }: FrequencyDistributionViewProps) {
+	const renderableSources = useMemo(
+		() => resolveVisibleSourceAudio(sources, sourceAudio),
 		[sources, sourceAudio],
 	);
 
@@ -282,12 +300,17 @@ export function FrequencyDistributionView({ sources, sourceAudio, onTransportCon
 				<div className="flex min-h-0 flex-1">
 					<LinearDbAxis ticks={DB_TICKS} />
 					<div className="relative min-w-0 flex-1">
-						{visibleSources.length === 0 ? (
+						{renderableSources.length === 0 ? (
 							<div className="flex h-full items-center justify-center bg-void">
 								<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
 							</div>
 						) : (
-							<ChartCanvas visibleSources={visibleSources} />
+							<ChartCanvas
+								renderableSources={renderableSources}
+								fftSize={settings.fftSize}
+								hopOverlap={settings.hopOverlap}
+								channelInput={channelInput}
+							/>
 						)}
 					</div>
 				</div>

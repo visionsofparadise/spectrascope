@@ -3,7 +3,6 @@ import path from "path";
 import { ASYNC_MAIN_IPCS } from "../shared/ipc/asyncMainIpcs";
 import type { Logger } from "../shared/models/Logger";
 import { FileWatcherManager } from "./FileWatcherManager";
-import { RenderManager } from "./RenderManager";
 import { SourceCacheManager } from "./SourceCacheManager";
 import type { StreamManager } from "./StreamManager";
 
@@ -37,11 +36,10 @@ export const createWindow = (logger: Logger, streamManager: StreamManager): Brow
 
 	const windowId = crypto.randomUUID();
 	const fileWatcherManager = new FileWatcherManager(browserWindow);
-	const renderManager = new RenderManager(app.getPath("userData"));
 	const sourceCacheManager = new SourceCacheManager(app.getPath("userData"));
 
 	for (const AsyncMainIpc of ASYNC_MAIN_IPCS) {
-		new AsyncMainIpc().register({ browserWindow, fileWatcherManager, renderManager, sourceCacheManager, streamManager, logger, windowId });
+		new AsyncMainIpc().register({ browserWindow, fileWatcherManager, sourceCacheManager, streamManager, logger, windowId });
 	}
 
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -68,7 +66,6 @@ export const createWindow = (logger: Logger, streamManager: StreamManager): Brow
 
 	browserWindow.on("closed", () => {
 		fileWatcherManager.dispose();
-		renderManager.dispose();
 		sourceCacheManager.dispose();
 	});
 

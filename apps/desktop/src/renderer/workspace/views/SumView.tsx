@@ -1,8 +1,7 @@
 // SumView renders a single `SourceStrip` against the `derivedAudio` prop — the
-// summed signal. Phase 3 routes a placeholder `derivedAudio` (the first
-// source's buffer); Phase 5 populates it with the ffmpeg-rendered Sum temp
-// file. The summed strip carries a fixed neutral `layerColor` so it reads as
-// belonging to no individual source.
+// summed signal, streamed on demand from the registered sum `media://`
+// endpoint. The summed strip carries a fixed neutral `layerColor` so it reads
+// as belonging to no individual source.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChannelInput } from "spectral-display";
@@ -18,6 +17,7 @@ import { FrequencyAxis, DbAxis, TimeRuler } from "../spectral/Axes";
 import { FrequencyMinimap } from "../spectral/FrequencyMinimap";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
 import { Selection } from "../spectral/Selection";
+import { useTimeViewport } from "../useTimeViewport";
 import { eventToTime, timeToFraction } from "./viewCursor";
 
 /** Local `#RRGGBB` → `[r,g,b]` helper. Duplicates OverlayView's hexToRgb255. */
@@ -42,8 +42,8 @@ function hexToRgb255(hex: string): [number, number, number] {
 interface SumViewProps {
   readonly sources: ReadonlyArray<Source>;
   /**
-   * The derived (summed) signal as a single PCM reader. Phase 5 populates this
-   * with the ffmpeg-rendered Sum temp file; Phase 3 routes a placeholder.
+   * The derived (summed) signal as a single PCM reader, backed by the
+   * registered sum `media://` stream (`EMPTY_DERIVED_AUDIO` until audible).
    */
   readonly derivedAudio: AudioData;
   /** The global Mono/Mid/Side channel-input mode — passed to the strip. */
@@ -53,14 +53,10 @@ interface SumViewProps {
   readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
-const INITIAL_VIEW_START_FRAC = 0.3;
-const INITIAL_VIEW_END_FRAC = 0.5;
-
 /** Empty sync state — no cursor / selection until the user interacts. */
 const EMPTY_VIEW_SYNC = {
   cursor: null,
   selection: null,
-  timeRange: { start: 0, end: 0 },
 } as const;
 
 const DEFAULT_CURSOR: SourceStripCursorReadout = {
@@ -163,10 +159,9 @@ function GridOverlay({
 
 /**
  * SumView — one full-pane `<SourceStrip>` rendering a "sum" pseudo-source
- * against the `derivedAudio` prop. Phase 5 feeds `derivedAudio` the
- * ffmpeg-rendered Sum temp file; this phase routes a placeholder. The strip
- * carries a neutral `layerColor` (lime + viridis-dark) so it reads as distinct
- * from any individual source.
+ * against the `derivedAudio` prop (the streamed sum-of-audible signal). The
+ * strip carries a neutral `layerColor` (lime + viridis-dark) so it reads as
+ * distinct from any individual source.
  *
  * Page-level chrome (grid template + TimeRuler + FrequencyAxis + DbAxis +
  * FrequencyMinimap + GridOverlay + Selection + playhead + cursor readout chip)
@@ -201,23 +196,34 @@ export function SumView({
 }: SumViewProps) {
   const [cursorReadout, setCursorReadout] =
     useState<SourceStripCursorReadout>(DEFAULT_CURSOR);
-  const [viewStartFrac, setViewStartFrac] = useState(INITIAL_VIEW_START_FRAC);
-  const [viewEndFrac, setViewEndFrac] = useState(INITIAL_VIEW_END_FRAC);
-
-  // Reserved for future zoom/scroll wiring.
-  void setViewStartFrac;
-  void setViewEndFrac;
 
   // Cross-view sync — the inspection cursor / selection (shared when the
   // global Sync toggle is on, local otherwise).
   const viewSync = useViewSync("sum", EMPTY_VIEW_SYNC);
 
+  // Transient time viewport — extent is the derived (summed) signal's duration.
+  const viewport = useTimeViewport(0, derivedAudio.durationMs);
+  const startMs = viewport.committedStartMs;
+  const endMs = viewport.committedEndMs;
+
+  const setViewportToFraction = useCallback(
+    (fraction: number) => {
+      const centerMs = fraction * derivedAudio.durationMs;
+      const span = viewport.endMs - viewport.startMs;
+
+      viewport.setViewport({ startMs: centerMs - span / 2, endMs: centerMs + span / 2 });
+    },
+    [derivedAudio.durationMs, viewport],
+  );
+
+  const viewStartFrac =
+    derivedAudio.durationMs > 0 ? viewport.startMs / derivedAudio.durationMs : 0;
+  const viewEndFrac =
+    derivedAudio.durationMs > 0 ? viewport.endMs / derivedAudio.durationMs : 1;
+
   const [playing, setPlaying] = useState(false);
   const [positionSec, setPositionSec] = useState(0);
   const durationSec = derivedAudio.durationMs / 1000;
-
-  const startMs = derivedAudio.durationMs * viewStartFrac;
-  const endMs = derivedAudio.durationMs * viewEndFrac;
 
   const visibleSources = useMemo(
     () => sources.filter((source) => source.visible),
@@ -347,6 +353,7 @@ export function SumView({
             positioning fills the cell. Clicking places the inspection cursor
             (sync-aware). */}
         <div
+          ref={viewport.wheelHandlers.ref}
           className="relative cursor-crosshair overflow-hidden bg-void"
           onClick={handleCursorClick}
         >
@@ -358,18 +365,25 @@ export function SumView({
             </div>
           ) : (
             <>
-              <SourceStrip
-                source={sumSource}
-                audioData={derivedAudio}
-                startMs={startMs}
-                endMs={endMs}
-                fftSize={settings.fftSize}
-                hopOverlap={settings.hopOverlap}
-                channelInput={channelInput}
-                waveformOpacity={settings.waveformOpacity}
-                spectrogramOpacity={settings.spectrogramOpacity}
-                onCursorMove={setCursorReadout}
-              />
+              {/* Strip — the gesture `transform` maps the committed render onto
+                  the live window during a scroll/zoom. */}
+              <div
+                className="absolute inset-0"
+                style={{ transform: viewport.transform, transformOrigin: "left" }}
+              >
+                <SourceStrip
+                  source={sumSource}
+                  audioData={derivedAudio}
+                  startMs={startMs}
+                  endMs={endMs}
+                  fftSize={settings.fftSize}
+                  hopOverlap={settings.hopOverlap}
+                  channelInput={channelInput}
+                  waveformOpacity={settings.waveformOpacity}
+                  spectrogramOpacity={settings.spectrogramOpacity}
+                  onCursorMove={setCursorReadout}
+                />
+              </div>
               <GridOverlay
                 startMs={startMs}
                 endMs={endMs}
@@ -410,6 +424,7 @@ export function SumView({
           viewStartFrac={viewStartFrac}
           viewEndFrac={viewEndFrac}
           waveformColor={hexToRgb255(minimapLayerColor.primary)}
+          onScrubToFraction={setViewportToFraction}
         />
         <div className="bg-void" />
         <div className="bg-void" />

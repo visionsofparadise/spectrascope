@@ -4,6 +4,7 @@ import type { SpectralOptions } from "spectral-display";
 import type { Source } from "../source";
 import { LinearDbAxis, TimeRuler } from "../spectral/Axes";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
+import { useTimeViewport } from "../useTimeViewport";
 import type {
 	TransportControl,
 	TransportCursorReadout,
@@ -78,11 +79,15 @@ function corrToY(corr: number): number {
 interface SourceCorrelationTraceProps {
 	readonly source: Source;
 	readonly audioData: AudioData;
+	readonly startMs: number;
+	readonly endMs: number;
 }
 
 function SourceCorrelationTrace({
 	source,
 	audioData,
+	startMs,
+	endMs,
 }: SourceCorrelationTraceProps) {
 	const spectralOptions = useMemo<SpectralOptions>(
 		() => ({
@@ -93,7 +98,9 @@ function SourceCorrelationTrace({
 			},
 			// Width/height are required but the correlation scan doesn't draw a
 			// canvas — keep them minimal but non-zero so the engine still runs.
-			query: { startMs: 0, endMs: audioData.durationMs, width: 64, height: 64 },
+			// The query is windowed to the committed viewport so the envelope
+			// follows the zoom.
+			query: { startMs, endMs, width: 64, height: 64 },
 			readSamples: audioData.readSamples,
 			config: {
 				spectrogram: false,
@@ -106,8 +113,9 @@ function SourceCorrelationTrace({
 			audioData.sampleRate,
 			audioData.totalSamples,
 			audioData.channels,
-			audioData.durationMs,
 			audioData.readSamples,
+			startMs,
+			endMs,
 		],
 	);
 
@@ -144,9 +152,12 @@ function SourceCorrelationTrace({
 
 interface ChartCanvasProps {
 	readonly renderableSources: ReadonlyArray<SourceWithAudio>;
+	readonly startMs: number;
+	readonly endMs: number;
+	readonly transform: string;
 }
 
-function ChartCanvas({ renderableSources }: ChartCanvasProps) {
+function ChartCanvas({ renderableSources, startMs, endMs, transform }: ChartCanvasProps) {
 	return (
 		<div className="relative h-full w-full overflow-hidden bg-void">
 			{/* Correlation gridlines — one horizontal rule per tick, all
@@ -163,19 +174,28 @@ function ChartCanvas({ renderableSources }: ChartCanvasProps) {
 					/>
 				);
 			})}
-			<svg
-				className="absolute inset-0 h-full w-full"
-				viewBox="0 0 1 1"
-				preserveAspectRatio="none"
+			{/* Trace layer — the gesture `transform` maps the committed render onto
+			    the live window during a scroll/zoom (non-scaling strokes stay 1.5px). */}
+			<div
+				className="absolute inset-0"
+				style={{ transform, transformOrigin: "left" }}
 			>
-				{renderableSources.map(({ source, audioData }) => (
-					<SourceCorrelationTrace
-						key={source.id}
-						source={source}
-						audioData={audioData}
-					/>
-				))}
-			</svg>
+				<svg
+					className="absolute inset-0 h-full w-full"
+					viewBox="0 0 1 1"
+					preserveAspectRatio="none"
+				>
+					{renderableSources.map(({ source, audioData }) => (
+						<SourceCorrelationTrace
+							key={source.id}
+							source={source}
+							audioData={audioData}
+							startMs={startMs}
+							endMs={endMs}
+						/>
+					))}
+				</svg>
+			</div>
 		</div>
 	);
 }
@@ -194,6 +214,25 @@ export function CorrelationView({
 	// Shared chrome (time ruler, minimap, duration) sizes against the first
 	// renderable source's audio; a zero-duration fallback when none.
 	const chromeAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
+
+	// Transient time viewport — the traces window their computes to the committed
+	// window, so the envelope follows the zoom.
+	const viewport = useTimeViewport(0, chromeAudio.durationMs);
+
+	const setViewportToFraction = useCallback(
+		(fraction: number) => {
+			const centerMs = fraction * chromeAudio.durationMs;
+			const span = viewport.endMs - viewport.startMs;
+
+			viewport.setViewport({ startMs: centerMs - span / 2, endMs: centerMs + span / 2 });
+		},
+		[chromeAudio.durationMs, viewport],
+	);
+
+	const viewStartFrac =
+		chromeAudio.durationMs > 0 ? viewport.startMs / chromeAudio.durationMs : 0;
+	const viewEndFrac =
+		chromeAudio.durationMs > 0 ? viewport.endMs / chromeAudio.durationMs : 1;
 
 	const [playing, setPlaying] = useState(false);
 	const [positionSec, setPositionSec] = useState(0);
@@ -227,7 +266,8 @@ export function CorrelationView({
 			const xFrac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
 			const yFrac = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
 
-			const totalSec = (xFrac * chromeAudio.durationMs) / 1000;
+			const windowMs = viewport.committedEndMs - viewport.committedStartMs;
+			const totalSec = (viewport.committedStartMs + xFrac * windowMs) / 1000;
 			const mins = Math.floor(totalSec / 60);
 			const secs = Math.floor(totalSec % 60);
 			const ms = Math.floor((totalSec % 1) * 1000);
@@ -239,7 +279,7 @@ export function CorrelationView({
 
 			setCursorReadout({ time, amp: `${corr.toFixed(2)} r` });
 		},
-		[chromeAudio.durationMs],
+		[viewport.committedStartMs, viewport.committedEndMs],
 	);
 
 	const control = useMemo<TransportControl>(
@@ -281,12 +321,13 @@ export function CorrelationView({
 				<div className="flex shrink-0">
 					<div className="w-10 shrink-0 bg-void" />
 					<div className="min-w-0 flex-1">
-						<TimeRuler startMs={0} endMs={chromeAudio.durationMs} />
+						<TimeRuler startMs={viewport.committedStartMs} endMs={viewport.committedEndMs} />
 					</div>
 				</div>
 				<div className="flex min-h-0 flex-1">
 					<LinearDbAxis ticks={CORR_TICKS} />
 					<div
+						ref={viewport.wheelHandlers.ref}
 						className="relative min-w-0 flex-1"
 						onMouseMove={handleChartMouseMove}
 					>
@@ -297,7 +338,12 @@ export function CorrelationView({
 								</p>
 							</div>
 						) : (
-							<ChartCanvas renderableSources={renderableSources} />
+							<ChartCanvas
+								renderableSources={renderableSources}
+								startMs={viewport.committedStartMs}
+								endMs={viewport.committedEndMs}
+								transform={viewport.transform}
+							/>
 						)}
 					</div>
 				</div>
@@ -309,9 +355,10 @@ export function CorrelationView({
 					<div className="min-w-0 flex-1">
 						<MinimapDisplay
 							audioData={chromeAudio}
-							viewStartFrac={0}
-							viewEndFrac={1}
+							viewStartFrac={viewStartFrac}
+							viewEndFrac={viewEndFrac}
 							waveformColor={hexToRgb255(minimapColor.primary)}
+							onScrubToFraction={setViewportToFraction}
 						/>
 					</div>
 				</div>

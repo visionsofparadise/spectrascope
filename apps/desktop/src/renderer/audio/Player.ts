@@ -1,16 +1,12 @@
 /**
- * The uniform playback interface shared by `PlaybackEngine` (the single-file
- * audition for the Sum / Difference views) and `MixPlayer` (the live multi-
- * source mix for the per-source / chart views).
+ * The playback interface `PlaybackEngine` implements. `Comparison.tsx` binds
+ * the engine to the Transport through this interface, so the transport wiring
+ * is independent of the engine's internals.
  *
- * `Comparison.tsx` binds whichever player the active view needs to the
- * Transport through this one interface, so the transport wiring is identical
- * regardless of which playback path is active.
- *
- * Position is push, not pull: a player drives a `requestAnimationFrame` /
- * scheduling loop internally and emits the current position (seconds) and the
- * play/pause transitions through `onPositionChange` / `onPlayingChange`. The
- * host subscribes once and re-renders the Transport from those callbacks.
+ * Position is push, not pull: the player drives a `requestAnimationFrame` loop
+ * internally and emits the current position (seconds) and the play/pause
+ * transitions through `onPositionChange` / `onPlayingChange`. The host
+ * subscribes once and re-renders the Transport from those callbacks.
  */
 export interface Player {
 	/** Begin (or resume) playback from the current position. */

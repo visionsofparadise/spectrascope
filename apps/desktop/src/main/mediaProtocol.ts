@@ -6,18 +6,15 @@ import { buildWavHeader } from "./audio/wavHeader";
 import type { StreamManager } from "./StreamManager";
 
 /**
- * Custom `media://` protocol — serves any local file to the renderer with
- * HTTP Range support. Recovered from the buffered-audio-graph desktop app
- * (commit `7ce455a`, `apps/desktop/src/main/mediaProtocol.ts`) and adapted:
- * the original always reported `audio/wav`; this version resolves a content
- * type from the file extension so non-WAV imports (mp3/flac/m4a/ogg) decode
- * correctly through `fetch`/`decodeAudioData`.
+ * Custom `media://` protocol with HTTP Range support. It serves two things:
+ * real local files (`media:///` + `encodeURIComponent`-encoded absolute path)
+ * with a content type resolved from the file extension, and registered stream
+ * endpoints (`media://stream/<key>/…`) computed on demand by the `StreamManager`.
  *
- * A `media://` URL is `media:///` (triple slash — empty host) + the
- * `encodeURIComponent`-encoded absolute file path (see
- * `renderer/audio/decodeAudio.ts`). The path MUST be percent-encoded and the
- * host empty — a raw Windows path after `media://` parses with the drive
- * letter as the host (`:` lost), and an encoded path after `media://` (no
+ * The file form is `media:///` (triple slash — empty host) + the
+ * `encodeURIComponent`-encoded absolute path. The path MUST be percent-encoded
+ * and the host empty — a raw Windows path after `media://` parses with the
+ * drive letter as the host (`:` lost), and an encoded path after `media://` (no
  * slashes) becomes the host wholesale. The triple slash keeps the host empty
  * so the encoded path lands in `pathname`; the handler strips the leading `/`
  * and `decodeURIComponent`s it back to the original absolute path.

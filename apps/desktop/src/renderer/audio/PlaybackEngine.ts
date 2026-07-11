@@ -1,33 +1,21 @@
 import type { Player } from "./Player";
-import { toMediaUrl } from "./mediaUrl";
 
 /**
- * PlaybackEngine — plays a single audio file via the `media://` protocol.
+ * PlaybackEngine — the single player for every audible view, pointed at a
+ * registered `media://stream/<key>/audio.wav` playback body.
  *
- * Recovered from the buffered-audio-graph desktop app
- * (`apps/desktop/src/renderer/models/PlaybackEngine.ts` at commit `7ce455a`)
- * and adapted for spectrascope. The recovered engine wrote its position /
- * play state straight into a valtio `ProxyStore` (a `PlaybackState` /
- * `SelectionState` coupling) and built its `<audio>` `src` as the raw
- * `` `media://${path}` ``. Both are dropped here:
+ * The engine owns its own state (`playing`, `positionSec`, the loop region) and
+ * emits changes through listener callbacks; the desktop host subscribes and
+ * feeds the Transport (the `Player` interface). It is pointed at a stream via
+ * `setSourceUrl` with a full `media://` URL — the caller (the derived-stream
+ * hook) builds the URL from the registered stream key, so the engine no longer
+ * constructs it.
  *
- * - **No store coupling** — the engine owns its own state (`playing`,
- *   `positionSec`, the loop region) and emits changes through listener
- *   callbacks. The desktop host subscribes and feeds the Transport. This is
- *   the `Player` interface, shared with `MixPlayer` so the transport wiring is
- *   uniform across the single-file and live-mix playback paths.
- * - **`media://` URL form** — the `<audio>` `src` is built by `toMediaUrl`
- *   (triple-slash, `encodeURIComponent`-encoded path). BAG's raw
- *   `` `media://${path}` `` breaks on Windows: the drive letter parses as the
- *   URL host. See `mediaUrl.ts` / `main/mediaProtocol.ts`.
- *
- * The audio graph is the recovered one — `HTMLAudioElement` →
- * `MediaElementAudioSourceNode` → `GainNode` → `destination` — and the
- * `requestAnimationFrame` position loop with selection-region looping is kept
- * from the recovered code.
- *
- * Used by the Sum and Difference views, which audition the single
- * ffmpeg-rendered temp file (the same artifact they display).
+ * The audio graph is `HTMLAudioElement` → `MediaElementAudioSourceNode` →
+ * `GainNode` → `destination`; the `AudioContext` runs at the browser default
+ * rate and the media-element graph resamples the canonical-rate stream body
+ * transparently. The `requestAnimationFrame` position loop with
+ * selection-region looping is kept.
  */
 export class PlaybackEngine implements Player {
 	private readonly audio: HTMLAudioElement;
@@ -72,14 +60,12 @@ export class PlaybackEngine implements Player {
 	}
 
 	/**
-	 * Point the engine at a file. A change of path resets the `<audio>` `src`
-	 * to the new `media://` URL; the same path is a no-op so a re-render with
-	 * an unchanged source does not reload the element (which would drop the
-	 * playhead). Returns whether the source actually changed.
+	 * Point the engine at a stream. A change of URL resets the `<audio>` `src`;
+	 * the same URL is a no-op so a re-render with an unchanged source does not
+	 * reload the element (which would drop the playhead). Returns whether the
+	 * source actually changed.
 	 */
-	setSource(filePath: string): boolean {
-		const url = toMediaUrl(filePath);
-
+	setSourceUrl(url: string): boolean {
 		if (this.audio.src === url) return false;
 
 		const wasPlaying = !this.audio.paused;

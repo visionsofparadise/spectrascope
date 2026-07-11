@@ -8,8 +8,9 @@ import type { ReactNode } from "react";
  *   cursor is set.
  * - `selection`: a `{ start, end }` time range in milliseconds, or `null` when
  *   nothing is selected.
- * - `timeRange`: the currently-visible time range in milliseconds. Every view
- *   that participates in sync uses this as its horizontal viewport.
+ *
+ * The horizontal viewport is per-view transient state (`useTimeViewport`), not
+ * shared here — each view keeps its own zoom/scroll window.
  *
  * Frequency-axis sync (Hz min/max) is intentionally NOT part of this state in
  * the first pass — see plan-design-system-refresh-first-pass.md, Phase 5.
@@ -17,14 +18,13 @@ import type { ReactNode } from "react";
 export interface SyncState {
   readonly cursor: number | null;
   readonly selection: { readonly start: number; readonly end: number } | null;
-  readonly timeRange: { readonly start: number; readonly end: number };
 }
 
 export interface SyncContextValue {
   /**
    * Whether cross-view sync is currently on. When `false` the shared state is
    * still present but views are expected to ignore it and keep their own
-   * local cursor / selection / time-range. The on/off bit is owned by the
+   * local cursor / selection. The on/off bit is owned by the
    * host (controlled — see `SyncProvider`'s `enabled` prop), not by this
    * context, so a view can publish nothing while sync is off.
    */
@@ -32,7 +32,6 @@ export interface SyncContextValue {
   readonly state: SyncState;
   readonly setCursor: (next: number | null) => void;
   readonly setSelection: (next: { start: number; end: number } | null) => void;
-  readonly setTimeRange: (next: { start: number; end: number }) => void;
 }
 
 const SyncContext = createContext<SyncContextValue | null>(null);
@@ -47,9 +46,8 @@ interface SyncProviderProps {
    */
   readonly enabled: boolean;
   /**
-   * Initial sync state. The caller must provide `timeRange` — the design
-   * system has no way to guess audio duration. `cursor` and `selection`
-   * default to `null` if omitted.
+   * Initial sync state — `cursor` and `selection`, both `null` until the user
+   * interacts.
    */
   readonly initial: SyncState;
   readonly children: ReactNode;
@@ -59,14 +57,14 @@ interface SyncProviderProps {
  * Wrapper that owns the shared inspection state for everything beneath it.
  * Consumers read and update via `useSync(viewId)`.
  *
- * The shared cursor / selection / time-range live here as React state — they
+ * The shared cursor / selection live here as React state — they
  * are view-coordination state, not persisted application state. The on/off
  * `enabled` flag is *not* owned here; it is a controlled prop, so the host
  * (the desktop comparison) keeps the single source of truth for whether sync
  * is engaged.
  *
  * Per-view detach is NOT owned by this context. A view that wants to opt out
- * of sync keeps its own local state for cursor / selection / time-range and
+ * of sync keeps its own local state for cursor / selection and
  * simply ignores the value returned from `useSync`. Views consume sync via the
  * `useViewSync` helper, which falls back to local state when `enabled` is
  * `false`.
@@ -85,13 +83,9 @@ export function SyncProvider({ enabled, initial, children }: SyncProviderProps) 
     [],
   );
 
-  const setTimeRange = useCallback((next: { start: number; end: number }) => {
-    setState((prev) => ({ ...prev, timeRange: next }));
-  }, []);
-
   const value = useMemo<SyncContextValue>(
-    () => ({ enabled, state, setCursor, setSelection, setTimeRange }),
-    [enabled, state, setCursor, setSelection, setTimeRange],
+    () => ({ enabled, state, setCursor, setSelection }),
+    [enabled, state, setCursor, setSelection],
   );
 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;
@@ -119,7 +113,7 @@ export function useSync(viewId: string): SyncContextValue {
 }
 
 /**
- * What a view sees for cursor / selection / time-range, regardless of whether
+ * What a view sees for cursor / selection, regardless of whether
  * it is currently synced. A view renders from these values and writes through
  * these setters; when sync is on they are the shared `SyncProvider` state, when
  * off they are the view's own local state.
@@ -129,18 +123,16 @@ export interface ViewSync {
   readonly synced: boolean;
   readonly cursor: number | null;
   readonly selection: { readonly start: number; readonly end: number } | null;
-  readonly timeRange: { readonly start: number; readonly end: number };
   readonly setCursor: (next: number | null) => void;
   readonly setSelection: (next: { start: number; end: number } | null) => void;
-  readonly setTimeRange: (next: { start: number; end: number }) => void;
 }
 
 /**
- * The cursor / selection / time-range a view should render and write.
+ * The cursor / selection a view should render and write.
  *
  * - When the host has sync **on** (`SyncProvider`'s `enabled`), this returns
  *   the shared state and its setters — every synced view reads and writes the
- *   same cursor / selection / time-range, so moving the cursor in one view
+ *   same cursor / selection, so moving the cursor in one view
  *   moves it in all of them.
  * - When sync is **off**, this returns the view's own local state — each view
  *   is independent, exactly as before sync was wired.
@@ -168,22 +160,13 @@ export function useViewSync(viewId: string, localInitial: SyncState): ViewSync {
     [],
   );
 
-  const setLocalTimeRange = useCallback(
-    (next: { start: number; end: number }) => {
-      setLocal((prev) => ({ ...prev, timeRange: next }));
-    },
-    [],
-  );
-
   if (shared.enabled) {
     return {
       synced: true,
       cursor: shared.state.cursor,
       selection: shared.state.selection,
-      timeRange: shared.state.timeRange,
       setCursor: shared.setCursor,
       setSelection: shared.setSelection,
-      setTimeRange: shared.setTimeRange,
     };
   }
 
@@ -191,9 +174,7 @@ export function useViewSync(viewId: string, localInitial: SyncState): ViewSync {
     synced: false,
     cursor: local.cursor,
     selection: local.selection,
-    timeRange: local.timeRange,
     setCursor: setLocalCursor,
     setSelection: setLocalSelection,
-    setTimeRange: setLocalTimeRange,
   };
 }

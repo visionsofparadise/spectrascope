@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WaveformCanvas, useSpectralCompute } from "spectral-display";
 import type { SpectralOptions } from "spectral-display";
 import type { AudioData } from "./types";
@@ -11,6 +11,12 @@ interface MinimapDisplayProps {
   readonly viewEndFrac: number;
   /** Waveform RGB color (0..255 per channel) — see SourceStrip.hexToRgb255. */
   readonly waveformColor: readonly [number, number, number];
+  /**
+   * Click / drag on the strip reports the pointer's `[0, 1]` fraction of the
+   * full duration. The view recentres its viewport window on that fraction.
+   * Omitted by the trace views that render a whole-clip minimap.
+   */
+  readonly onScrubToFraction?: (fraction: number) => void;
 }
 
 function useContainerSize(ref: React.RefObject<HTMLDivElement | null>): {
@@ -60,9 +66,44 @@ export function MinimapDisplay({
   viewStartFrac,
   viewEndFrac,
   waveformColor,
+  onScrubToFraction,
 }: MinimapDisplayProps) {
   const minimapRef = useRef<HTMLDivElement>(null);
   const { width, height } = useContainerSize(minimapRef);
+
+  // Pointer scrub — reports the pointer's fraction of the full duration on
+  // press and while dragging (pointer capture keeps the drag alive off-strip).
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!onScrubToFraction) return;
+
+      const rect = event.currentTarget.getBoundingClientRect();
+
+      if (rect.width <= 0) return;
+
+      event.currentTarget.setPointerCapture(event.pointerId);
+
+      const fraction = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+
+      onScrubToFraction(fraction);
+    },
+    [onScrubToFraction],
+  );
+
+  const handlePointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!onScrubToFraction || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+
+      const rect = event.currentTarget.getBoundingClientRect();
+
+      if (rect.width <= 0) return;
+
+      const fraction = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+
+      onScrubToFraction(fraction);
+    },
+    [onScrubToFraction],
+  );
 
   const color = useMemo<[number, number, number]>(
     () => [waveformColor[0], waveformColor[1], waveformColor[2]],
@@ -92,7 +133,12 @@ export function MinimapDisplay({
   const vpWidthPct = (viewEndFrac - viewStartFrac) * 100;
 
   return (
-    <div ref={minimapRef} className="relative h-8 bg-void">
+    <div
+      ref={minimapRef}
+      className={`relative h-8 bg-void${onScrubToFraction ? " cursor-ew-resize" : ""}`}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+    >
       {computeResult.status === "ready" && (
         <div className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full">
           <WaveformCanvas computeResult={computeResult} color={color} />

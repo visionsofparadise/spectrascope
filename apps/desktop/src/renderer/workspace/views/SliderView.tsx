@@ -12,8 +12,10 @@ import { FrequencyAxis, DbAxis, TimeRuler } from "../spectral/Axes";
 import { FrequencyMinimap } from "../spectral/FrequencyMinimap";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
 import { Selection } from "../spectral/Selection";
+import { useTimeViewport } from "../useTimeViewport";
 import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
 import { eventToTime, timeToFraction } from "./viewCursor";
+import { curtainBounds, defaultCurtainPositions, stripClipPath } from "./sliderClip";
 
 /**
  * Local `#RRGGBB` → `[r, g, b]` helper. Duplicates the one in OverlayView /
@@ -48,18 +50,10 @@ interface SliderViewProps {
   readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
-/**
- * Per-cell view window — initial fractions mirror OverlayView / TimelineView.
- * Interactive zoom/scroll is a future-phase wiring step.
- */
-const INITIAL_VIEW_START_FRAC = 0.3;
-const INITIAL_VIEW_END_FRAC = 0.5;
-
 /** Empty sync state — no cursor / selection until the user interacts. */
 const EMPTY_VIEW_SYNC = {
   cursor: null,
   selection: null,
-  timeRange: { start: 0, end: 0 },
 } as const;
 
 const DEFAULT_CURSOR: SourceStripCursorReadout = {
@@ -152,32 +146,30 @@ function GridOverlay({
 }
 
 /**
- * SliderView — wipe-compare. Two `<SourceStrip>` instances z-stacked at full
- * opacity. The top strip's `clipPath` is `inset(0 ${(1-x)*100}% 0 0)`, masking
- * everything to the right of the handle so only its left portion is visible.
- * The bottom strip (no clip) is revealed wherever the top strip is masked
- * away. A `<Curtain>` renders the draggable vertical handle at the same X.
+ * SliderView — wipe-compare across N sources. Each renderable source's
+ * `<SourceStrip>` is z-stacked at full opacity and clipped two-sided to the
+ * band between its neighbouring curtains (`sliderClip.stripClipPath`), so strip
+ * `k` shows only in `[positions[k−1], positions[k]]`. `N−1` `<Curtain>` handles
+ * sit between adjacent sources; each clamps between its neighbours
+ * (`sliderClip.curtainBounds`) so handles cannot cross, and earlier handles
+ * stack above later ones. Positions start all at the right edge (source 1 fills
+ * the view) and reset when the renderable-source id list changes.
  *
  * Page-level chrome (grid template + TimeRuler + FrequencyAxis + DbAxis +
  * FrequencyMinimap + GridOverlay + Selection + playhead + cursor readout chip)
  * is identical to OverlayView and TimelineView. Display controls live in the
  * transport's left region and arrive via the shared `settings` prop.
  *
- * First-pass judgment calls (recorded in the plan):
- *   - **>2 renderable sources**: takes the first two renderable
- *     (`renderableSources[0]` and `renderableSources[1]`). Picking which two to
- *     wipe between is a future follow-up; default behaviour is documented
- *     rather than silently clamped without a record.
+ * Judgment calls (recorded in the plan):
  *   - **<2 renderable sources**: content cell shows a "Need at least two
  *     visible sources" message in `font-technical text-sm text-chrome-text-dim`.
  *     The rest of the page chrome stays mounted so the view remains navigable.
  *     A source is renderable when it is visible *and* has decoded audio.
  *   - **Audio-playback switching at the handle is out of scope.** The published
  *     `TransportControl` mirrors OverlayView/TimelineView — visual-only.
- *   - **Curtain reuse**: the existing `Curtain` primitive is used unchanged.
- *     Its prop shape is `{ position, onPositionChange, min?, max? }`; the
- *     `position` fraction in [0,1] is the same value we use for `handleX` and
- *     for the top strip's `clipPath` inset.
+ *   - **Curtain positions are transient view-local state** — not persisted, not
+ *     in undo history (like layer opacity); `Curtain`'s continuous
+ *     `onPositionChange` is fine.
  */
 export function SliderView({
   sources,
@@ -188,14 +180,6 @@ export function SliderView({
 }: SliderViewProps) {
   const [cursorReadout, setCursorReadout] =
     useState<SourceStripCursorReadout>(DEFAULT_CURSOR);
-  const [viewStartFrac, setViewStartFrac] = useState(INITIAL_VIEW_START_FRAC);
-  const [viewEndFrac, setViewEndFrac] = useState(INITIAL_VIEW_END_FRAC);
-
-  // Reserved for future zoom/scroll wiring.
-  void setViewStartFrac;
-  void setViewEndFrac;
-
-  const [handleX, setHandleX] = useState(0.5);
 
   // Cross-view sync — the inspection cursor / selection (shared when the
   // global Sync toggle is on, local otherwise).
@@ -207,16 +191,64 @@ export function SliderView({
     [sources, sourceAudio],
   );
 
+  const sourceCount = renderableSources.length;
+
+  // Curtain positions — `N−1` fractions, one per adjacent-source boundary,
+  // transient view-local state. Reset to the right edge (source 1 full-width)
+  // whenever the renderable-source id list changes; keyed off the id list so an
+  // unrelated re-render (audio recompute, chrome resize) does not thrash them.
+  const idsKey = useMemo(
+    () => renderableSources.map((entry) => entry.source.id).join("|"),
+    [renderableSources],
+  );
+
+  const [positions, setPositions] = useState<Array<number>>(() =>
+    defaultCurtainPositions(sourceCount),
+  );
+  const [positionsKey, setPositionsKey] = useState(idsKey);
+
+  if (positionsKey !== idsKey) {
+    setPositionsKey(idsKey);
+    setPositions(defaultCurtainPositions(sourceCount));
+  }
+
+  const setCurtainAt = useCallback((index: number, next: number) => {
+    setPositions((previous) => {
+      const updated = previous.slice();
+
+      updated[index] = next;
+
+      return updated;
+    });
+  }, []);
+
   // Shared chrome (time ruler, minimaps, duration) sizes against the first
   // renderable source's audio; a zero-duration fallback when none.
   const chromeAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
 
+  // Transient time viewport — extent is the first renderable source's duration.
+  const viewport = useTimeViewport(0, chromeAudio.durationMs);
+  const startMs = viewport.committedStartMs;
+  const endMs = viewport.committedEndMs;
+
+  const setViewportToFraction = useCallback(
+    (fraction: number) => {
+      const centerMs = fraction * chromeAudio.durationMs;
+      const span = viewport.endMs - viewport.startMs;
+
+      viewport.setViewport({ startMs: centerMs - span / 2, endMs: centerMs + span / 2 });
+    },
+    [chromeAudio.durationMs, viewport],
+  );
+
+  const viewStartFrac =
+    chromeAudio.durationMs > 0 ? viewport.startMs / chromeAudio.durationMs : 0;
+  const viewEndFrac =
+    chromeAudio.durationMs > 0 ? viewport.endMs / chromeAudio.durationMs : 1;
+
   const [playing, setPlaying] = useState(false);
   const [positionSec, setPositionSec] = useState(0);
   const durationSec = chromeAudio.durationMs / 1000;
-
-  const startMs = chromeAudio.durationMs * viewStartFrac;
-  const endMs = chromeAudio.durationMs * viewEndFrac;
 
   // Audibility — solo overrides mute. Reserved for future audio-pipeline
   // wiring; the visual stack uses `visible === true` only.
@@ -293,15 +325,13 @@ export function SliderView({
     endMs,
   );
 
-  const top = renderableSources[0];
-  const bottom = renderableSources[1];
-  const hasPair = top !== undefined && bottom !== undefined;
+  const hasSources = sourceCount >= 2;
 
-  // Frequency minimap is a single-source overview. With a wipe between two
-  // sources the choice is arbitrary — pick the top (visually-foreground)
-  // source's color, falling back to a neutral chrome pair when no pair.
+  // Frequency minimap is a single-source overview. With a wipe across N sources
+  // the choice is arbitrary — pick the first (leftmost) source's color, falling
+  // back to a neutral chrome pair when none.
   const minimapLayerColor =
-    top?.source.layerColor ?? {
+    renderableSources[0]?.source.layerColor ?? {
       primary: "#B8B8C0",
       secondary: "#44444C",
     };
@@ -325,54 +355,70 @@ export function SliderView({
         {/* Row 2: freq axis | content cell | freq minimap | dB axis */}
         <FrequencyAxis />
 
-        {/* Content cell — wipe-compare. Two SourceStrips z-stacked; top is
-            clip-pathed to leave only its left portion (up to handleX) visible.
-            Curtain renders the draggable vertical handle. Clicking places the
-            inspection cursor (sync-aware). */}
+        {/* Content cell — wipe-compare. N SourceStrips z-stacked, each clipped
+            two-sided to its band; N−1 Curtains render the draggable boundaries.
+            Clicking places the inspection cursor (sync-aware). */}
         <div
+          ref={viewport.wheelHandlers.ref}
           className="relative cursor-crosshair overflow-hidden bg-void"
           onClick={handleCursorClick}
         >
-          {hasPair ? (
+          {hasSources ? (
             <>
-              {/* Bottom strip — full opacity, no clip. Revealed wherever the
-                  top strip is masked away. */}
-              <SourceStrip
-                source={bottom.source}
-                audioData={bottom.audioData}
-                startMs={startMs}
-                endMs={endMs}
-                fftSize={settings.fftSize}
-                hopOverlap={settings.hopOverlap}
-                channelInput={channelInput}
-                waveformOpacity={settings.waveformOpacity}
-                spectrogramOpacity={settings.spectrogramOpacity}
-                onCursorMove={setCursorReadout}
-              />
-              {/* Top strip — clip-pathed so only the left `handleX` fraction is
-                  visible. The bottom strip shows through everywhere else. */}
-              <SourceStrip
-                source={top.source}
-                audioData={top.audioData}
-                startMs={startMs}
-                endMs={endMs}
-                fftSize={settings.fftSize}
-                hopOverlap={settings.hopOverlap}
-                channelInput={channelInput}
-                clipPath={`inset(0 ${(1 - handleX) * 100}% 0 0)`}
-                waveformOpacity={settings.waveformOpacity}
-                spectrogramOpacity={settings.spectrogramOpacity}
-                onCursorMove={setCursorReadout}
-              />
-              {/* Draggable handle. Curtain reads its parent's rect for dragging,
-                  so it must sit as a direct child of this `position: relative`
-                  content cell. */}
-              <Curtain position={handleX} onPositionChange={setHandleX} />
+              {/* Strip stack — the gesture `transform` maps the committed render
+                  onto the live window during a scroll/zoom. The Curtain handles
+                  and shared chrome stay in container space (untransformed). Each
+                  strip is clipped two-sided to its band; visibility is geometric
+                  (the clip), not paint order. */}
+              <div
+                className="absolute inset-0"
+                style={{ transform: viewport.transform, transformOrigin: "left" }}
+              >
+                {renderableSources.map((entry, index) => (
+                  <SourceStrip
+                    key={entry.source.id}
+                    source={entry.source}
+                    audioData={entry.audioData}
+                    startMs={startMs}
+                    endMs={endMs}
+                    fftSize={settings.fftSize}
+                    hopOverlap={settings.hopOverlap}
+                    channelInput={channelInput}
+                    clipPath={stripClipPath(index, positions, sourceCount)}
+                    waveformOpacity={settings.waveformOpacity}
+                    spectrogramOpacity={settings.spectrogramOpacity}
+                    onCursorMove={setCursorReadout}
+                  />
+                ))}
+              </div>
+              {/* N−1 draggable handles, one per adjacent-source boundary. Each
+                  Curtain reads its parent rect for dragging, so it sits in a
+                  full-size wrapper that is a direct child of this
+                  `position: relative` content cell. Wrappers carry a descending
+                  z-index (earlier handles on top) so overlapping handles resolve
+                  to the earlier source. */}
+              {positions.map((position, index) => {
+                const bounds = curtainBounds(index, positions);
+
+                return (
+                  <div
+                    key={renderableSources[index]?.source.id ?? index}
+                    className="pointer-events-none absolute inset-0"
+                    style={{ zIndex: positions.length - index }}
+                  >
+                    <Curtain
+                      position={position}
+                      min={bounds.min}
+                      max={bounds.max}
+                      onPositionChange={(next) => {
+                        setCurtainAt(index, next);
+                      }}
+                    />
+                  </div>
+                );
+              })}
               {/* Shared chrome — overlays the entire content cell, above the
-                  clip-pathed strips but below the Curtain handle (the Curtain
-                  needs to be the last interactive element so its drag handle
-                  stays on top). Currently Curtain is appended after, so its
-                  pointer-events-auto handle remains clickable. */}
+                  clip-pathed strips. */}
               <GridOverlay
                 startMs={startMs}
                 endMs={endMs}
@@ -421,6 +467,7 @@ export function SliderView({
           viewStartFrac={viewStartFrac}
           viewEndFrac={viewEndFrac}
           waveformColor={hexToRgb255(minimapLayerColor.primary)}
+          onScrubToFraction={setViewportToFraction}
         />
         <div className="bg-void" />
         <div className="bg-void" />

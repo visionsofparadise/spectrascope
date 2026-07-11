@@ -11,7 +11,6 @@ import { createStreamAudioData } from "./streamAudioData";
  * Zero-duration `AudioData` routed into a derived (Sum / Difference) view whose
  * stream has nothing to render or has not registered yet. The view renders its
  * built-in empty state against this reader while the host paints its overlay.
- * Matches the shape of the retired `useDerivedAudio`'s `EMPTY_DERIVED_AUDIO`.
  */
 export const EMPTY_DERIVED_AUDIO: AudioData = {
 	sampleRate: 48000,
@@ -110,8 +109,13 @@ export function useDerivedStreams(
 	const sumKey = useMemo(() => (sumInputs.length === 0 ? null : specKey("sum", sumInputs)), [sumInputs]);
 
 	// --- Difference spec: [A gain +1, B gain −1], defaulting to first two ------
-	const effectiveA = differenceA ?? sources[0]?.id ?? null;
-	const effectiveB = differenceB ?? sources[1]?.id ?? null;
+	// A stored id that no longer resolves to a live source (its source was
+	// removed) falls back to the default the same as null, so the rendered diff
+	// tracks what the A/B selectors display rather than emptying until reselect.
+	const effectiveA =
+		differenceA !== null && sources.some((source) => source.id === differenceA) ? differenceA : sources[0]?.id ?? null;
+	const effectiveB =
+		differenceB !== null && sources.some((source) => source.id === differenceB) ? differenceB : sources[1]?.id ?? null;
 
 	const diffInputs = useMemo<ReadonlyArray<StreamInput> | null>(() => {
 		if (effectiveA === null || effectiveB === null) return null;

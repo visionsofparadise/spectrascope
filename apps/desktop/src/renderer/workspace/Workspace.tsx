@@ -40,32 +40,44 @@ interface WorkspaceProps {
    */
   readonly sourceAudio: ReadonlyMap<string, AudioData>;
   /**
-   * The derived (Sum / Difference) signal as a single PCM reader. Phase 5
-   * populates this with the ffmpeg-rendered temp file; Phase 3 routes a
-   * placeholder so the two derived views stay green.
+   * The active derived (Sum / Difference) signal as a single PCM reader, backed
+   * by the registered `media://` stream for whichever derived view is active.
    */
   readonly derivedAudio: AudioData;
   readonly sources: ReadonlyArray<Source>;
   /**
    * The active view. Controlled — the host owns which view is shown so it can
-   * resolve view-specific data (e.g. the desktop app renders the ffmpeg Sum vs
-   * Difference derived signal for whichever derived view is active). The
-   * selector lives in the `Sidebar`; `Workspace` only renders the active view.
+   * resolve view-specific data (e.g. the desktop app routes the Sum vs
+   * Difference stream for whichever derived view is active). The selector lives
+   * in the `Sidebar`; `Workspace` only renders the active view.
    */
   readonly activeView: ViewId;
   /**
    * The global Mono/Mid/Side channel-input mode. Controlled — persisted on the
-   * comparison and threaded into every per-source spectrogram view. Inert on the
-   * chart views (Frequency Distribution, Correlation, Vectorscope), which are
-   * not passed it.
+   * comparison and threaded into every per-source spectrogram view plus
+   * Frequency Distribution (whose LTAS folds the same channel input). Inert on
+   * Correlation and Vectorscope, which are not passed it.
    */
   readonly channelInput: ChannelInput;
   /**
    * The shared display-control settings, owned by the comparison host and
-   * consumed by the five SourceStrip views + Loudness. The four chart views
-   * (Correlation, Frequency Distribution, Vectorscope) take none.
+   * consumed by the five SourceStrip views + Loudness + Frequency Distribution
+   * (FFT size / hop overlap). Correlation and Vectorscope take none.
    */
   readonly settings: ViewControlSettings;
+  /**
+   * The Difference view's A/B source selection (source ids), or `null` until the
+   * sticky default is written. Threaded into `DifferenceView`'s selector row;
+   * the other views ignore it.
+   */
+  readonly differenceA: string | null;
+  readonly differenceB: string | null;
+  /**
+   * Emitted when the Difference A/B selection changes — `(differenceA,
+   * differenceB)` source ids. The host persists both fields as one
+   * history-participating `"difference"` edit, and the diff stream re-registers.
+   */
+  readonly onDifferenceChange: (differenceA: string, differenceB: string) => void;
   /**
    * Emitted when a source is dragged on the Timeline view — `(sourceId,
    * offsetMs)` with `offsetMs ≥ 0`. Forwarded straight to `TimelineView`; the
@@ -108,6 +120,9 @@ export function Workspace({
   activeView,
   channelInput,
   settings,
+  differenceA,
+  differenceB,
+  onDifferenceChange,
   onSourceOffsetChange,
   onTransportControlChange,
 }: WorkspaceProps) {
@@ -147,6 +162,9 @@ export function Workspace({
             derivedAudio={derivedAudio}
             channelInput={channelInput}
             settings={settings}
+            differenceA={differenceA}
+            differenceB={differenceB}
+            onDifferenceChange={onDifferenceChange}
             onTransportControlChange={onTransportControlChange}
           />
         )}
@@ -163,6 +181,8 @@ export function Workspace({
           <FrequencyDistributionView
             sources={sources}
             sourceAudio={sourceAudio}
+            settings={settings}
+            channelInput={channelInput}
             onTransportControlChange={onTransportControlChange}
           />
         )}

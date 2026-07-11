@@ -130,8 +130,15 @@ export function AppBar({ context, historyControl }: Props) {
 
 			<div className="h-6 w-px shrink-0 bg-chrome-border-subtle" />
 
-			{/* Session tabs + new-tab */}
-			<div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden" style={NO_DRAG}>
+			{/* Session tabs + new-tab. The row background is the OS drag region
+			    (inherited from the bar); each interactive child opts back out with
+			    no-drag. A faint wordmark sits behind the chips. */}
+			<div className="relative isolate flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+				<div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 flex items-center overflow-hidden">
+					<span className="select-none whitespace-nowrap pl-1 font-display text-sm tracking-[0.5em] text-chrome-text-dim opacity-[0.08]">
+						SPECTRASCOPE
+					</span>
+				</div>
 				{tabs.map((tab) => {
 					const isActive = tab.id === (app.activeTabId ?? "");
 					const isEditing = editingTabId === tab.id;
@@ -139,6 +146,7 @@ export function AppBar({ context, historyControl }: Props) {
 					return (
 						<div
 							key={tab.id}
+							style={NO_DRAG}
 							className={`flex shrink-0 cursor-pointer items-center gap-1.5 pl-2 pr-1 ${
 								isActive ? "bg-primary text-void" : "bg-chrome-raised text-chrome-text"
 							}`}
@@ -189,18 +197,20 @@ export function AppBar({ context, historyControl }: Props) {
 					);
 				})}
 
-				<IconButton
-					icon="lucide:plus"
-					label="Home"
-					size={20}
-					active={app.activeTabId === null}
-					activeVariant="primary"
-					onClick={() =>
-						appStore.mutate(app, (proxy) => {
-							proxy.activeTabId = null;
-						})
-					}
-				/>
+				<div className="shrink-0" style={NO_DRAG}>
+					<IconButton
+						icon="lucide:plus"
+						label="Home"
+						size={20}
+						active={app.activeTabId === null}
+						activeVariant="primary"
+						onClick={() =>
+							appStore.mutate(app, (proxy) => {
+								proxy.activeTabId = null;
+							})
+						}
+					/>
+				</div>
 			</div>
 
 			{/* Undo / redo */}

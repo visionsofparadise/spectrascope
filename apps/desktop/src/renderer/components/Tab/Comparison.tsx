@@ -16,8 +16,8 @@ import { main } from "../../models/Main";
 import { AUDIO_FILE_EXTENSIONS, createSourceFromFile, isBareAddSource } from "../../comparison/createComparison";
 import { useSourceStreams } from "../../audio/useSourceStreams";
 import { resolveAudibleSources, useDerivedStreams } from "../../audio/useDerivedStreams";
+import { streamUrl } from "../../audio/streamAudioData";
 import { usePlayer } from "../../audio/usePlayer";
-import type { PlaybackKind } from "../../audio/usePlayer";
 import { useComparisonHistory } from "../../state/useComparisonHistory";
 import type { HistoryControl } from "../../state/useComparisonHistory";
 import type { AppContext } from "../../models/Context";
@@ -40,33 +40,6 @@ interface Props {
 }
 
 /**
- * Empty source-buffer map handed to `usePlayer` this phase. Phase 4 stops
- * feeding whole-buffer audio into playback but does not rewire the player
- * (Phase 5.1 points it at stream URLs); until then the live mix has no buffers,
- * so playback is silent by design. A module constant keeps the reference stable
- * across renders.
- */
-const EMPTY_SOURCE_BUFFERS: ReadonlyMap<string, AudioBuffer> = new Map();
-
-/**
- * Map a view id to its playback path (the design's "playback splits" decision):
- *
- * - `file` — Sum / Difference audition the ffmpeg-rendered temp file via a
- *   `PlaybackEngine`.
- * - `none` — Frequency Distribution and Vectorscope are whole-clip aggregates
- *   with no time evolution, so they have no playback (each publishes a
- *   `disabled` transport and the shell omits the transport row).
- * - `mix` — every other view (Overlay, Timeline, Slider, Loudness,
- *   Correlation) auditions a live `MixPlayer` over the audible sources.
- */
-function playbackKindFor(view: ViewId): PlaybackKind {
-	if (view === "sum" || view === "difference") return "file";
-	if (view === "frequency-distribution" || view === "vectorscope") return "none";
-
-	return "mix";
-}
-
-/**
  * The initial monitor volume — `0.8`, byte-identical to the design-system
  * `VolumeSlider`'s historical default, so the audition starts at the level the
  * slider shows.
@@ -75,14 +48,13 @@ const INITIAL_VOLUME = 0.8;
 
 /**
  * Initial cross-view sync state for the `SyncProvider` mounted around the
- * workspace. The cursor / selection start empty (set by clicking a view); the
- * `timeRange` is a placeholder — the per-source views still derive their own
- * window, so `timeRange` is plumbed but not yet consumed (no zoom UI).
+ * workspace. The cursor / selection start empty (set by clicking a view). The
+ * horizontal viewport is per-view transient state (`useTimeViewport`), not part
+ * of the sync surface.
  */
 const INITIAL_SYNC_STATE: SyncState = {
 	cursor: null,
 	selection: null,
-	timeRange: { start: 0, end: 0 },
 };
 
 // The initial transport control, before the active view publishes its own. Not
@@ -184,10 +156,12 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 		[app, appStore, comparison.id],
 	);
 
-	// Persist the sticky Difference A/B default (first two sources) once both
-	// exist. A history-participating `"difference"` edit; undo to null is
-	// harmless (the hook re-writes the default).
-	const setDefaultDifference = useCallback(
+	// Write the Difference A/B source selection. Serves both the sticky default
+	// (first two sources, written once both exist by `useDerivedStreams`) and the
+	// explicit A/B selectors in `DifferenceView`. A history-participating
+	// `"difference"` edit; undo to null is harmless (the hook re-writes the
+	// default).
+	const setDifference = useCallback(
 		(differenceA: string, differenceB: string) => {
 			appStore.mutate(app, (proxy) => {
 				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
@@ -215,17 +189,32 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 	// The Sum and Difference derived streams (registered `media://` streams). The
 	// active view selects which one feeds `Workspace.derivedAudio`: Sum for the
 	// Sum view, Difference for the Difference view; the other views ignore it.
-	// The hook also exposes `sumInfo` / `diffInfo` (keys for the playback URLs) —
-	// unused this phase, consumed by Phase 5.1's URL-fed `usePlayer`.
-	const { sumAudio, diffAudio } = useDerivedStreams(
+	// `sumInfo` / `diffInfo` carry the registered stream keys the playback URL is
+	// built from.
+	const { sumAudio, diffAudio, sumInfo, diffInfo } = useDerivedStreams(
 		sources,
 		prepared,
 		comparison.differenceA,
 		comparison.differenceB,
-		setDefaultDifference,
+		setDifference,
 	);
 
 	const derivedAudio = activeView === "difference" ? diffAudio : sumAudio;
+
+	// The registered stream the active view plays. Per-source views (Overlay,
+	// Timeline, Slider, Loudness, Correlation) and Sum all audition the
+	// sum-of-audible stream — a live mix *is* a sum; Difference auditions the diff
+	// stream; Frequency Distribution / Vectorscope have no player (`null`). Until
+	// the stream registers, the info is `null` and there is nothing to play.
+	const activeStreamInfo =
+		activeView === "frequency-distribution" || activeView === "vectorscope"
+			? null
+			: activeView === "difference"
+				? diffInfo
+				: sumInfo;
+
+	const playbackStreamUrl = activeStreamInfo === null ? null : streamUrl(activeStreamInfo.key, "wav");
+	const playbackDurationSec = activeStreamInfo === null ? 0 : activeStreamInfo.durationMs / 1000;
 
 	// The overlay message for a derived view with an insufficient source set —
 	// derived from the sources alone (not the async registration state), so it
@@ -257,11 +246,6 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 
 	// --- Playback ------------------------------------------------------------
 
-	// The playback path the active view uses — `file` (Sum / Difference, the
-	// ffmpeg temp file), `mix` (per-source / chart, the live audible mix), or
-	// `none` (Frequency Distribution / Vectorscope have no playback).
-	const playbackKind = playbackKindFor(activeView);
-
 	// The comparison's persisted playhead. Read once into a ref as the player's
 	// initial / restore position — re-reading `comparison.positionSec` on every
 	// render (it is bumped by the persist below) would re-seek the player.
@@ -286,17 +270,12 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 		[app, appStore, comparison.id],
 	);
 
-	// The active view's player. Phase 4 stops feeding whole-buffer audio into
-	// playback but does NOT rewire the player (Phase 5.1 points `usePlayer` at
-	// stream URLs built from `sumInfo.key` / `diffInfo.key`). Until then the
-	// signature and call site are unchanged, but the live mix gets an empty
-	// buffer map and the file engine an undefined path — playback is silent by
-	// design this phase; the views still render from the stream-backed audio.
+	// The active view's player — one `PlaybackEngine` pointed at the active
+	// view's registered stream URL (`null` for the player-less views). A
+	// mute/solo/offset/A-B edit swaps the URL on the same engine.
 	const player = usePlayer(
-		playbackKind,
-		sources,
-		EMPTY_SOURCE_BUFFERS,
-		undefined,
+		playbackStreamUrl,
+		playbackDurationSec,
 		initialPositionRef.current,
 		persistPosition,
 		volume,
@@ -327,7 +306,7 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 	 * untouched — there is no player to bind.
 	 */
 	const boundTransportControl = useMemo<TransportControl>(() => {
-		if (transportControl.disabled || playbackKind === "none") {
+		if (transportControl.disabled || playbackStreamUrl === null) {
 			return transportControl;
 		}
 
@@ -339,7 +318,7 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 			onPlayToggle: player.onPlayToggle,
 			onSeek: player.onSeek,
 		};
-	}, [transportControl, playbackKind, player]);
+	}, [transportControl, playbackStreamUrl, player]);
 
 	/**
 	 * Append `SourceState`s to this comparison. Layer colors continue the
@@ -552,6 +531,9 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 							activeView={activeView}
 							channelInput={comparison.channelInput}
 							settings={viewSettings}
+							differenceA={comparison.differenceA}
+							differenceB={comparison.differenceB}
+							onDifferenceChange={setDifference}
 							onSourceOffsetChange={handleSourceOffsetChange}
 							onTransportControlChange={setTransportControl}
 						/>
