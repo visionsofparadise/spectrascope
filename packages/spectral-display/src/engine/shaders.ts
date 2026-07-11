@@ -256,6 +256,85 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `;
 
+export const SPECTROGRAM_FOLD_SHADER = /* wgsl */ `
+
+struct Uniforms {
+  total_frames: u32,
+  num_columns: u32,
+  num_bands: u32,
+  batch_base: u32,
+  batch_frames: u32,
+  col_first: u32,
+}
+
+@group(0) @binding(0) var<storage, read> tile_buffer: array<f32>;
+@group(0) @binding(1) var<storage, read_write> accumulator: array<f32>;
+@group(0) @binding(2) var<uniform> uniforms: Uniforms;
+
+@compute @workgroup_size(64, 1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  let column = uniforms.col_first + global_id.x;
+  let band = global_id.y;
+
+  if (column >= uniforms.num_columns || band >= uniforms.num_bands) {
+    return;
+  }
+
+  // Column partition — identical expressions to SPECTROGRAM_VISUALIZE_SHADER so a
+  // per-batch fold produces the same max as a full-buffer pass over the column window.
+  let stride = f32(uniforms.total_frames) / f32(uniforms.num_columns);
+  let frame_start = u32(f32(column) * stride);
+  let frame_end = min(u32(f32(column + 1u) * stride), uniforms.total_frames);
+
+  let batch_end = uniforms.batch_base + uniforms.batch_frames;
+  let loop_start = max(frame_start, uniforms.batch_base);
+  let loop_end = min(frame_end, batch_end);
+
+  var batch_max: f32 = 0.0;
+  for (var frame: u32 = loop_start; frame < loop_end; frame = frame + 1u) {
+    let tile_index = (frame - uniforms.batch_base) * uniforms.num_bands + band;
+    batch_max = max(batch_max, tile_buffer[tile_index]);
+  }
+
+  let acc_index = column * uniforms.num_bands + band;
+  accumulator[acc_index] = max(accumulator[acc_index], batch_max);
+}
+`;
+
+export const LTAS_FOLD_SHADER = /* wgsl */ `
+
+struct Uniforms {
+  total_frames: u32,
+  num_columns: u32,
+  num_bands: u32,
+  batch_base: u32,
+  batch_frames: u32,
+  col_first: u32,
+}
+
+@group(0) @binding(0) var<storage, read> tile_buffer: array<f32>;
+@group(0) @binding(1) var<storage, read_write> accumulator: array<f32>;
+@group(0) @binding(2) var<uniform> uniforms: Uniforms;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  let band = global_id.x;
+
+  if (band >= uniforms.num_bands) {
+    return;
+  }
+
+  // Per-batch partial sum for this band. The CPU divides by total_frames after
+  // readback; summing per batch also shortens the f32 accumulation chain.
+  var sum: f32 = 0.0;
+  for (var frame: u32 = 0u; frame < uniforms.batch_frames; frame = frame + 1u) {
+    sum = sum + tile_buffer[frame * uniforms.num_bands + band];
+  }
+
+  accumulator[band] = accumulator[band] + sum;
+}
+`;
+
 export const VECTORSCOPE_VISUALIZE_SHADER = /* wgsl */ `
 
 struct Uniforms {

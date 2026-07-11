@@ -59,7 +59,7 @@ async function benchPipeline(
 
 	const scanContext = createScanContext({ sampleRate, sampleCount: totalSamples, channelCount: channels }, pointCount, samplesPerPoint, DEFAULT_CHUNK_SIZE);
 
-	const spectralCtx = await engine.prepare(sampleCount, sampleRate, options);
+	const spectralCtx = await engine.prepare(sampleCount, sampleRate, { width: WIDTH, height: HEIGHT }, options);
 
 	let readTime = 0;
 	let gpuSubmitTime = 0;
@@ -125,7 +125,7 @@ async function benchPipeline(
 	const lufsTime = performance.now() - lufsStart;
 
 	const vizStart = performance.now();
-	const result = await engine.finalize({ width: WIDTH, height: HEIGHT }, spectralCtx, options);
+	const result = await engine.finalize(spectralCtx, options);
 
 	if (!result.spectrogramTexture) throw new Error("bench requires spectrogram output");
 

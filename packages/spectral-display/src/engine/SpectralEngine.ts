@@ -2,7 +2,7 @@ import type { RequiredProperties } from "../utils/RequiredProperties";
 import { computeBandMappings, type FrequencyScale } from "./band-mapping";
 import { generateColormapBuffer, resolveColormap, resolveWaveformColor, type ColormapDefinition } from "./colormap";
 import { getMaxFftSize } from "./device";
-import { FFT_PIPELINE_SHADER, LTAS_REDUCE_SHADER, SPECTROGRAM_VISUALIZE_SHADER } from "./shaders";
+import { FFT_PIPELINE_SHADER, LTAS_FOLD_SHADER, LTAS_REDUCE_SHADER, SPECTROGRAM_FOLD_SHADER, SPECTROGRAM_VISUALIZE_SHADER } from "./shaders";
 
 export interface Dimensions {
 	width: number;
@@ -50,19 +50,57 @@ export interface SpectralProcessContext {
 	overlapBuffer: Float32Array;
 	overlapCount: number;
 	hopOffset: number;
-	magnitudeBuffer: GPUBuffer;
+	foldMode: boolean;
+	magnitudeBuffer: GPUBuffer | null;
+	tileBuffer: GPUBuffer | null;
+	spectrogramAccumulator: GPUBuffer | null;
+	ltasAccumulator: GPUBuffer | null;
+	foldUniformBuffer: GPUBuffer | null;
 	bandMappingBuffer: GPUBuffer;
 	colormapBuffer: GPUBuffer;
 	inputBuffer: GPUBuffer;
 	uniformBuffer: GPUBuffer;
 	pipelines: CachedPipelines;
+	spectrogramFoldPipeline: GPUComputePipeline | null;
+	ltasFoldPipeline: GPUComputePipeline | null;
 	numBands: number;
 	isLinear: boolean;
+	width: number;
+	height: number;
 }
 
-const DEFAULT_NON_LINEAR_BANDS = 512;
 const HOP_OVERLAP_FACTOR = 4;
 const MAX_INPUT_BUFFER_SAMPLES = 131072;
+
+export function computeHopSize(windowSamples: number, width: number, fftSize: number, hopOverlap: number): number {
+	const floorHop = Math.max(1, Math.floor(fftSize / hopOverlap));
+	const capHop = Math.max(Math.floor(fftSize / 2), floorHop);
+	const target = Math.floor(windowSamples / (width * 2));
+
+	return Math.min(Math.max(target, floorHop), capHop);
+}
+
+export function computeNumBands(height: number, fftSize: number, isLinear: boolean, spectrogram: boolean): number {
+	if (isLinear || !spectrogram) {
+		return fftSize / 2 + 1;
+	}
+
+	return Math.min(Math.max(2 * height, 64), fftSize / 2 + 1);
+}
+
+/**
+ * Conservative superset of the display columns whose frame partition intersects a batch's frame
+ * window [batchBase, batchBase + batchFrames). The ±1 slack absorbs f32/f64 rounding differences
+ * between this range and the visualize/fold shaders' f32 partition; folding empty intersections is
+ * a no-op, so a superset is safe.
+ */
+export function computeColumnRange(batchBase: number, batchFrames: number, totalFrames: number, width: number): { colFirst: number; colLast: number } {
+	const stride = totalFrames / width;
+	const colFirst = Math.max(0, Math.floor(batchBase / stride) - 1);
+	const colLast = Math.min(width - 1, Math.floor((batchBase + batchFrames) / stride) + 1);
+
+	return { colFirst, colLast };
+}
 
 async function checkShaderCompilation(module: GPUShaderModule, label: string): Promise<void> {
 	const info = await module.getCompilationInfo();
@@ -105,12 +143,14 @@ export class SpectralEngine {
 	private readonly device: GPUDevice;
 	private readonly pipelineCache = new Map<string, CachedPipelines>();
 	private ltasReducePipeline: GPUComputePipeline | null = null;
+	private spectrogramFoldPipeline: GPUComputePipeline | null = null;
+	private ltasFoldPipeline: GPUComputePipeline | null = null;
 
 	constructor(device: GPUDevice) {
 		this.device = device;
 	}
 
-	async prepare(sampleCount: number, sampleRate: number, config: SpectralConfig): Promise<SpectralProcessContext> {
+	async prepare(sampleCount: number, sampleRate: number, dimensions: Dimensions, config: SpectralConfig): Promise<SpectralProcessContext> {
 		const { fftSize: requestedFftSize, frequencyScale } = config;
 
 		const maxFft = getMaxFftSize(this.device);
@@ -121,19 +161,57 @@ export class SpectralEngine {
 		}
 
 		const isLinear = frequencyScale === "linear";
-		const numBands = isLinear ? fftSize / 2 + 1 : DEFAULT_NON_LINEAR_BANDS;
-		const hopOverlap = config.hopOverlap;
-		const hopSize = Math.max(1, Math.floor(fftSize / hopOverlap));
+		const numBands = computeNumBands(dimensions.height, fftSize, isLinear, config.spectrogram);
+		const hopSize = computeHopSize(sampleCount, dimensions.width, fftSize, config.hopOverlap);
 		const totalFrames = Math.floor((sampleCount - fftSize) / hopSize) + 1;
+		const foldMode = totalFrames > dimensions.width;
 		const bandMappingData = computeBandMappings(frequencyScale, numBands, sampleRate, fftSize);
 		const resolvedColormap = typeof config.colormap === "string" ? resolveColormap(config.colormap) : config.colormap;
 		const colormapData = generateColormapBuffer(resolvedColormap);
 		const pipelines = await this.getOrCreatePipelines(fftSize, frequencyScale);
 
-		const magnitudeBuffer = this.device.createBuffer({
-			size: totalFrames * numBands * 4,
-			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-		});
+		let magnitudeBuffer: GPUBuffer | null = null;
+		let tileBuffer: GPUBuffer | null = null;
+		let spectrogramAccumulator: GPUBuffer | null = null;
+		let ltasAccumulator: GPUBuffer | null = null;
+		let foldUniformBuffer: GPUBuffer | null = null;
+		let spectrogramFoldPipeline: GPUComputePipeline | null = null;
+		let ltasFoldPipeline: GPUComputePipeline | null = null;
+
+		if (foldMode) {
+			const maxHopsPerBatch = Math.floor((MAX_INPUT_BUFFER_SAMPLES - fftSize) / hopSize) + 1;
+
+			tileBuffer = this.device.createBuffer({
+				size: maxHopsPerBatch * numBands * 4,
+				usage: GPUBufferUsage.STORAGE,
+			});
+
+			foldUniformBuffer = this.device.createBuffer({
+				size: 32,
+				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+			});
+
+			if (config.spectrogram) {
+				spectrogramAccumulator = this.device.createBuffer({
+					size: dimensions.width * numBands * 4,
+					usage: GPUBufferUsage.STORAGE,
+				});
+				spectrogramFoldPipeline = await this.getOrCreateSpectrogramFoldPipeline();
+			}
+
+			if (config.ltas) {
+				ltasAccumulator = this.device.createBuffer({
+					size: numBands * 4,
+					usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+				});
+				ltasFoldPipeline = await this.getOrCreateLtasFoldPipeline();
+			}
+		} else {
+			magnitudeBuffer = this.device.createBuffer({
+				size: totalFrames * numBands * 4,
+				usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+			});
+		}
 
 		const bandMappingBuffer = this.device.createBuffer({
 			size: Math.max(16, bandMappingData.byteLength),
@@ -182,19 +260,36 @@ export class SpectralEngine {
 			overlapBuffer: new Float32Array(fftSize),
 			overlapCount: 0,
 			hopOffset: 0,
+			foldMode,
 			magnitudeBuffer,
+			tileBuffer,
+			spectrogramAccumulator,
+			ltasAccumulator,
+			foldUniformBuffer,
 			bandMappingBuffer,
 			colormapBuffer,
 			inputBuffer,
 			uniformBuffer,
 			pipelines,
+			spectrogramFoldPipeline,
+			ltasFoldPipeline,
 			numBands,
 			isLinear,
+			width: dimensions.width,
+			height: dimensions.height,
 		};
 	}
 
 	submitChunk(monoSamples: Float32Array, chunkLength: number, context: SpectralProcessContext): void {
-		const { fftSize, hopSize, totalFrames, overlapBuffer } = context;
+		const { fftSize, hopSize, totalFrames, overlapBuffer, foldMode, numBands, width } = context;
+
+		const magnitudeTarget = foldMode ? context.tileBuffer : context.magnitudeBuffer;
+
+		if (!magnitudeTarget) {
+			throw new Error("Spectral context is missing its FFT magnitude output buffer");
+		}
+
+		const { foldUniformBuffer, spectrogramAccumulator, ltasAccumulator, spectrogramFoldPipeline, ltasFoldPipeline } = context;
 
 		// Prepend overlap from previous chunk
 		const totalSamples = context.overlapCount + chunkLength;
@@ -224,8 +319,9 @@ export class SpectralEngine {
 			const uniformData = new Uint32Array(8);
 
 			uniformData[0] = fftSize;
-			uniformData[1] = context.hopOffset;
-			uniformData[2] = context.numBands;
+			// Fold mode writes tile-local frames (chunk_offset 0); direct mode writes at the global cursor.
+			uniformData[1] = foldMode ? 0 : context.hopOffset;
+			uniformData[2] = numBands;
 			uniformData[3] = context.isLinear ? 0 : 1;
 			uniformData[4] = hopSize;
 
@@ -235,19 +331,60 @@ export class SpectralEngine {
 				layout: context.pipelines.fftPipeline.getBindGroupLayout(0),
 				entries: [
 					{ binding: 0, resource: { buffer: context.inputBuffer } },
-					{ binding: 1, resource: { buffer: context.magnitudeBuffer } },
+					{ binding: 1, resource: { buffer: magnitudeTarget } },
 					{ binding: 2, resource: { buffer: context.bandMappingBuffer } },
 					{ binding: 3, resource: { buffer: context.uniformBuffer } },
 				],
 			});
 
 			const commandEncoder = this.device.createCommandEncoder();
-			const computePass = commandEncoder.beginComputePass();
+			const fftPass = commandEncoder.beginComputePass();
 
-			computePass.setPipeline(context.pipelines.fftPipeline);
-			computePass.setBindGroup(0, fftBindGroup);
-			computePass.dispatchWorkgroups(hopsInBatch);
-			computePass.end();
+			fftPass.setPipeline(context.pipelines.fftPipeline);
+			fftPass.setBindGroup(0, fftBindGroup);
+			fftPass.dispatchWorkgroups(hopsInBatch);
+			fftPass.end();
+
+			if (foldMode && foldUniformBuffer) {
+				const { colFirst, colLast } = computeColumnRange(context.hopOffset, hopsInBatch, totalFrames, width);
+				const touchedColumns = colLast - colFirst + 1;
+
+				this.device.queue.writeBuffer(foldUniformBuffer, 0, new Uint32Array([totalFrames, width, numBands, context.hopOffset, hopsInBatch, colFirst]));
+
+				const foldPass = commandEncoder.beginComputePass();
+
+				if (spectrogramAccumulator && spectrogramFoldPipeline) {
+					const spectrogramFoldBindGroup = this.device.createBindGroup({
+						layout: spectrogramFoldPipeline.getBindGroupLayout(0),
+						entries: [
+							{ binding: 0, resource: { buffer: magnitudeTarget } },
+							{ binding: 1, resource: { buffer: spectrogramAccumulator } },
+							{ binding: 2, resource: { buffer: foldUniformBuffer } },
+						],
+					});
+
+					foldPass.setPipeline(spectrogramFoldPipeline);
+					foldPass.setBindGroup(0, spectrogramFoldBindGroup);
+					foldPass.dispatchWorkgroups(Math.ceil(touchedColumns / 64), numBands);
+				}
+
+				if (ltasAccumulator && ltasFoldPipeline) {
+					const ltasFoldBindGroup = this.device.createBindGroup({
+						layout: ltasFoldPipeline.getBindGroupLayout(0),
+						entries: [
+							{ binding: 0, resource: { buffer: magnitudeTarget } },
+							{ binding: 1, resource: { buffer: ltasAccumulator } },
+							{ binding: 2, resource: { buffer: foldUniformBuffer } },
+						],
+					});
+
+					foldPass.setPipeline(ltasFoldPipeline);
+					foldPass.setBindGroup(0, ltasFoldBindGroup);
+					foldPass.dispatchWorkgroups(Math.ceil(numBands / 64));
+				}
+
+				foldPass.end();
+			}
 
 			this.device.queue.submit([commandEncoder.finish()]);
 
@@ -266,14 +403,24 @@ export class SpectralEngine {
 		context.overlapCount = remaining;
 	}
 
-	async finalize(dimensions: { width: number; height: number }, context: SpectralProcessContext, config: SpectralConfig): Promise<SpectralResult> {
-		const { width, height } = dimensions;
+	async finalize(context: SpectralProcessContext, config: SpectralConfig): Promise<SpectralResult> {
+		const { width, height } = context;
 
 		let spectrogramTexture: GPUTexture | null = null;
 
 		if (config.spectrogram) {
+			// Fold mode feeds the width × numBands accumulator to the visualize shader at stride 1.0
+			// (total_frames = width); direct mode feeds the full magnitude buffer at its own stride.
+			const magnitudeSource = context.foldMode ? context.spectrogramAccumulator : context.magnitudeBuffer;
+
+			if (!magnitudeSource) {
+				throw new Error("Spectral context is missing its spectrogram magnitude source");
+			}
+
+			const visualizeTotalFrames = context.foldMode ? width : context.totalFrames;
+
 			spectrogramTexture = this.device.createTexture({
-				size: dimensions,
+				size: { width, height },
 				format: "rgba8unorm",
 				usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
 			});
@@ -281,7 +428,7 @@ export class SpectralEngine {
 			const spectrogramUniformData = new ArrayBuffer(24);
 			const spectrogramUniforms = new DataView(spectrogramUniformData);
 
-			spectrogramUniforms.setUint32(0, context.totalFrames, true);
+			spectrogramUniforms.setUint32(0, visualizeTotalFrames, true);
 			spectrogramUniforms.setUint32(4, context.numBands, true);
 			spectrogramUniforms.setUint32(8, width, true);
 			spectrogramUniforms.setUint32(12, height, true);
@@ -300,7 +447,7 @@ export class SpectralEngine {
 			const spectrogramBindGroup = this.device.createBindGroup({
 				layout: context.pipelines.spectrogramPipeline.getBindGroupLayout(0),
 				entries: [
-					{ binding: 0, resource: { buffer: context.magnitudeBuffer } },
+					{ binding: 0, resource: { buffer: magnitudeSource } },
 					{ binding: 1, resource: { buffer: context.colormapBuffer } },
 					{ binding: 2, resource: spectrogramTexture.createView() },
 					{ binding: 3, resource: { buffer: spectrogramUniformBuffer } },
@@ -320,16 +467,57 @@ export class SpectralEngine {
 			spectrogramUniformBuffer.destroy();
 		}
 
-		const ltas = config.ltas ? await this.reduceLtas(context) : null;
+		let ltas: Float32Array | null = null;
+
+		if (config.ltas) {
+			ltas = context.foldMode ? await this.readbackLtasAccumulator(context) : await this.reduceLtas(context);
+		}
 
 		this.cleanupContext(context);
 
 		return { spectrogramTexture, width, height, ltas };
 	}
 
+	private async readbackLtasAccumulator(context: SpectralProcessContext): Promise<Float32Array> {
+		const { numBands, totalFrames, ltasAccumulator } = context;
+
+		if (!ltasAccumulator) {
+			throw new Error("Fold-mode context is missing its LTAS accumulator");
+		}
+
+		const stagingBuffer = this.device.createBuffer({
+			size: numBands * 4,
+			usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+		});
+
+		const commandEncoder = this.device.createCommandEncoder();
+
+		commandEncoder.copyBufferToBuffer(ltasAccumulator, 0, stagingBuffer, 0, numBands * 4);
+
+		this.device.queue.submit([commandEncoder.finish()]);
+
+		await stagingBuffer.mapAsync(GPUMapMode.READ);
+
+		const sums = new Float32Array(stagingBuffer.getMappedRange());
+		const ltas = new Float32Array(numBands);
+
+		for (let band = 0; band < numBands; band++) {
+			ltas[band] = (sums[band] ?? 0) / totalFrames;
+		}
+
+		stagingBuffer.unmap();
+		stagingBuffer.destroy();
+
+		return ltas;
+	}
+
 	private async reduceLtas(context: SpectralProcessContext): Promise<Float32Array> {
 		const pipeline = await this.getOrCreateLtasPipeline();
-		const { numBands, totalFrames } = context;
+		const { numBands, totalFrames, magnitudeBuffer } = context;
+
+		if (!magnitudeBuffer) {
+			throw new Error("Direct-mode context is missing its magnitude buffer");
+		}
 
 		const outputBuffer = this.device.createBuffer({
 			size: numBands * 4,
@@ -351,7 +539,7 @@ export class SpectralEngine {
 		const bindGroup = this.device.createBindGroup({
 			layout: pipeline.getBindGroupLayout(0),
 			entries: [
-				{ binding: 0, resource: { buffer: context.magnitudeBuffer } },
+				{ binding: 0, resource: { buffer: magnitudeBuffer } },
 				{ binding: 1, resource: { buffer: outputBuffer } },
 				{ binding: 2, resource: { buffer: uniformBuffer } },
 			],
@@ -401,8 +589,52 @@ export class SpectralEngine {
 		return this.ltasReducePipeline;
 	}
 
+	private async getOrCreateSpectrogramFoldPipeline(): Promise<GPUComputePipeline> {
+		if (this.spectrogramFoldPipeline) {
+			return this.spectrogramFoldPipeline;
+		}
+
+		const module = this.device.createShaderModule({ code: SPECTROGRAM_FOLD_SHADER });
+
+		await checkShaderCompilation(module, "spectrogram fold");
+
+		this.spectrogramFoldPipeline = this.device.createComputePipeline({
+			layout: "auto",
+			compute: {
+				module,
+				entryPoint: "main",
+			},
+		});
+
+		return this.spectrogramFoldPipeline;
+	}
+
+	private async getOrCreateLtasFoldPipeline(): Promise<GPUComputePipeline> {
+		if (this.ltasFoldPipeline) {
+			return this.ltasFoldPipeline;
+		}
+
+		const module = this.device.createShaderModule({ code: LTAS_FOLD_SHADER });
+
+		await checkShaderCompilation(module, "LTAS fold");
+
+		this.ltasFoldPipeline = this.device.createComputePipeline({
+			layout: "auto",
+			compute: {
+				module,
+				entryPoint: "main",
+			},
+		});
+
+		return this.ltasFoldPipeline;
+	}
+
 	cleanupContext(context: SpectralProcessContext): void {
-		context.magnitudeBuffer.destroy();
+		context.magnitudeBuffer?.destroy();
+		context.tileBuffer?.destroy();
+		context.spectrogramAccumulator?.destroy();
+		context.ltasAccumulator?.destroy();
+		context.foldUniformBuffer?.destroy();
 		context.bandMappingBuffer.destroy();
 		context.colormapBuffer.destroy();
 		context.inputBuffer.destroy();
@@ -412,6 +644,8 @@ export class SpectralEngine {
 	destroy(): void {
 		this.pipelineCache.clear();
 		this.ltasReducePipeline = null;
+		this.spectrogramFoldPipeline = null;
+		this.ltasFoldPipeline = null;
 	}
 
 	private async getOrCreatePipelines(fftSize: number, frequencyScale: FrequencyScale): Promise<CachedPipelines> {

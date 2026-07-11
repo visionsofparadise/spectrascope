@@ -34,13 +34,6 @@ async function createDevice(): Promise<GPUDevice> {
   const device = await adapter.requestDevice({
     requiredLimits: {
       maxComputeWorkgroupStorageSize: adapter.limits.maxComputeWorkgroupStorageSize,
-      // The spectrogram/LTAS magnitude buffer is sized to the whole compute
-      // window's FFT frames, which for a zoomed-out long clip runs to gigabytes
-      // — well past the 256 MB / 128 MB defaults. Request the adapter's real
-      // maxima so a whole-clip render fits; the buffer stays viewport-bounded
-      // (it shrinks as you zoom in).
-      maxBufferSize: adapter.limits.maxBufferSize,
-      maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
     },
   });
 

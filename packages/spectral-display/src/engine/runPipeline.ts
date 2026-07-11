@@ -81,7 +81,7 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 
 	const scanContext = createScanContext(metadata, pointCount, samplesPerPoint, DEFAULT_CHUNK_SIZE, loudness, computeTruePeak, stereo, channelInput);
 
-	const spectralContext = spectrogram || ltas ? await engine.prepare(sampleCount, sampleRate, resolvedConfig) : null;
+	const spectralContext = spectrogram || ltas ? await engine.prepare(sampleCount, sampleRate, { width: sampleQuery.width, height: sampleQuery.height }, resolvedConfig) : null;
 
 	let offset = 0;
 
@@ -125,7 +125,7 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 	let ltasResult: Float32Array | null = null;
 
 	if (spectralContext) {
-		const finalizeResult = await engine.finalize(sampleQuery, spectralContext, resolvedConfig);
+		const finalizeResult = await engine.finalize(spectralContext, resolvedConfig);
 
 		spectrogramTexture = finalizeResult.spectrogramTexture;
 		ltasResult = finalizeResult.ltas;
