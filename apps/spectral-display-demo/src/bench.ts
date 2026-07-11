@@ -125,7 +125,9 @@ async function benchPipeline(
 	const lufsTime = performance.now() - lufsStart;
 
 	const vizStart = performance.now();
-	const result = engine.finalize({ width: WIDTH, height: HEIGHT }, spectralCtx, options);
+	const result = await engine.finalize({ width: WIDTH, height: HEIGHT }, spectralCtx, options);
+
+	if (!result.spectrogramTexture) throw new Error("bench requires spectrogram output");
 
 	blit.resize(WIDTH, HEIGHT);
 	blit.render(result.spectrogramTexture);

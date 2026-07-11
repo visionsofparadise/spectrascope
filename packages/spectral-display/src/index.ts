@@ -1,4 +1,5 @@
 /* eslint-disable barrel-files/avoid-barrel-files */
+export { getBandFrequencies } from "./engine/band-mapping";
 export type { FrequencyScale } from "./engine/band-mapping";
 export { BlitRenderer } from "./engine/blit";
 export type { ColormapDefinition } from "./engine/colormap";

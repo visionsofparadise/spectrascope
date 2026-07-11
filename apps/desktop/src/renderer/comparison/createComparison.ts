@@ -68,6 +68,9 @@ export function createComparison(filePaths: ReadonlyArray<string>): Comparison {
 		channelInput: "mono",
 		positionSec: 0,
 		selection: null,
+		canonicalSampleRate: null,
+		differenceA: null,
+		differenceB: null,
 	};
 }
 

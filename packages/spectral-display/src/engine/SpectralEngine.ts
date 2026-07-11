@@ -2,7 +2,7 @@ import type { RequiredProperties } from "../utils/RequiredProperties";
 import { computeBandMappings, type FrequencyScale } from "./band-mapping";
 import { generateColormapBuffer, resolveColormap, resolveWaveformColor, type ColormapDefinition } from "./colormap";
 import { getMaxFftSize } from "./device";
-import { FFT_PIPELINE_SHADER, SPECTROGRAM_VISUALIZE_SHADER } from "./shaders";
+import { FFT_PIPELINE_SHADER, LTAS_REDUCE_SHADER, SPECTROGRAM_VISUALIZE_SHADER } from "./shaders";
 
 export interface Dimensions {
 	width: number;
@@ -21,6 +21,8 @@ export interface SpectralConfig {
 	device: GPUDevice;
 	signal: AbortSignal;
 	spectrogram: boolean;
+	/** Opt-in flag gating the long-term average spectrum reduction. Default false. */
+	ltas: boolean;
 	loudness: boolean;
 	truePeak: boolean;
 	/** Opt-in flag gating the stereo scan products (correlation envelope, vectorscope histogram). Default false. */
@@ -32,7 +34,8 @@ export interface SpectralConfig {
 }
 
 export interface SpectralResult extends Dimensions {
-	spectrogramTexture: GPUTexture;
+	spectrogramTexture: GPUTexture | null;
+	ltas: Float32Array | null;
 }
 
 interface CachedPipelines {
@@ -85,6 +88,7 @@ export function resolveConfig(config: RequiredProperties<SpectralConfig, "device
 		colormap: resolvedColormap,
 		waveformColor,
 		spectrogram: config.spectrogram ?? true,
+		ltas: config.ltas ?? false,
 		loudness: config.loudness ?? true,
 		truePeak: config.truePeak ?? true,
 		stereo: config.stereo ?? false,
@@ -100,6 +104,7 @@ function makeCacheKey(fftSize: number, frequencyScale: FrequencyScale): string {
 export class SpectralEngine {
 	private readonly device: GPUDevice;
 	private readonly pipelineCache = new Map<string, CachedPipelines>();
+	private ltasReducePipeline: GPUComputePipeline | null = null;
 
 	constructor(device: GPUDevice) {
 		this.device = device;
@@ -261,58 +266,139 @@ export class SpectralEngine {
 		context.overlapCount = remaining;
 	}
 
-	finalize(dimensions: { width: number; height: number }, context: SpectralProcessContext, config: SpectralConfig): SpectralResult {
+	async finalize(dimensions: { width: number; height: number }, context: SpectralProcessContext, config: SpectralConfig): Promise<SpectralResult> {
 		const { width, height } = dimensions;
 
-		const spectrogramTexture = this.device.createTexture({
-			size: dimensions,
-			format: "rgba8unorm",
-			usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
+		let spectrogramTexture: GPUTexture | null = null;
+
+		if (config.spectrogram) {
+			spectrogramTexture = this.device.createTexture({
+				size: dimensions,
+				format: "rgba8unorm",
+				usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
+			});
+
+			const spectrogramUniformData = new ArrayBuffer(24);
+			const spectrogramUniforms = new DataView(spectrogramUniformData);
+
+			spectrogramUniforms.setUint32(0, context.totalFrames, true);
+			spectrogramUniforms.setUint32(4, context.numBands, true);
+			spectrogramUniforms.setUint32(8, width, true);
+			spectrogramUniforms.setUint32(12, height, true);
+			spectrogramUniforms.setFloat32(16, config.dbRange[0], true);
+			spectrogramUniforms.setFloat32(20, config.dbRange[1], true);
+
+			const spectrogramUniformBuffer = this.device.createBuffer({
+				size: 24,
+				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+				mappedAtCreation: true,
+			});
+
+			new Uint8Array(spectrogramUniformBuffer.getMappedRange()).set(new Uint8Array(spectrogramUniformData));
+			spectrogramUniformBuffer.unmap();
+
+			const spectrogramBindGroup = this.device.createBindGroup({
+				layout: context.pipelines.spectrogramPipeline.getBindGroupLayout(0),
+				entries: [
+					{ binding: 0, resource: { buffer: context.magnitudeBuffer } },
+					{ binding: 1, resource: { buffer: context.colormapBuffer } },
+					{ binding: 2, resource: spectrogramTexture.createView() },
+					{ binding: 3, resource: { buffer: spectrogramUniformBuffer } },
+				],
+			});
+
+			const commandEncoder = this.device.createCommandEncoder();
+			const computePass = commandEncoder.beginComputePass();
+
+			computePass.setPipeline(context.pipelines.spectrogramPipeline);
+			computePass.setBindGroup(0, spectrogramBindGroup);
+			computePass.dispatchWorkgroups(Math.ceil(width / 64), height);
+			computePass.end();
+
+			this.device.queue.submit([commandEncoder.finish()]);
+
+			spectrogramUniformBuffer.destroy();
+		}
+
+		const ltas = config.ltas ? await this.reduceLtas(context) : null;
+
+		this.cleanupContext(context);
+
+		return { spectrogramTexture, width, height, ltas };
+	}
+
+	private async reduceLtas(context: SpectralProcessContext): Promise<Float32Array> {
+		const pipeline = await this.getOrCreateLtasPipeline();
+		const { numBands, totalFrames } = context;
+
+		const outputBuffer = this.device.createBuffer({
+			size: numBands * 4,
+			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
 		});
 
-		const spectrogramUniformData = new ArrayBuffer(24);
-		const spectrogramUniforms = new DataView(spectrogramUniformData);
+		const stagingBuffer = this.device.createBuffer({
+			size: numBands * 4,
+			usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+		});
 
-		spectrogramUniforms.setUint32(0, context.totalFrames, true);
-		spectrogramUniforms.setUint32(4, context.numBands, true);
-		spectrogramUniforms.setUint32(8, width, true);
-		spectrogramUniforms.setUint32(12, height, true);
-		spectrogramUniforms.setFloat32(16, config.dbRange[0], true);
-		spectrogramUniforms.setFloat32(20, config.dbRange[1], true);
-
-		const spectrogramUniformBuffer = this.device.createBuffer({
-			size: 24,
+		const uniformBuffer = this.device.createBuffer({
+			size: 16,
 			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-			mappedAtCreation: true,
 		});
 
-		new Uint8Array(spectrogramUniformBuffer.getMappedRange()).set(new Uint8Array(spectrogramUniformData));
-		spectrogramUniformBuffer.unmap();
+		this.device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([totalFrames, numBands]));
 
-		const spectrogramBindGroup = this.device.createBindGroup({
-			layout: context.pipelines.spectrogramPipeline.getBindGroupLayout(0),
+		const bindGroup = this.device.createBindGroup({
+			layout: pipeline.getBindGroupLayout(0),
 			entries: [
 				{ binding: 0, resource: { buffer: context.magnitudeBuffer } },
-				{ binding: 1, resource: { buffer: context.colormapBuffer } },
-				{ binding: 2, resource: spectrogramTexture.createView() },
-				{ binding: 3, resource: { buffer: spectrogramUniformBuffer } },
+				{ binding: 1, resource: { buffer: outputBuffer } },
+				{ binding: 2, resource: { buffer: uniformBuffer } },
 			],
 		});
 
 		const commandEncoder = this.device.createCommandEncoder();
 		const computePass = commandEncoder.beginComputePass();
 
-		computePass.setPipeline(context.pipelines.spectrogramPipeline);
-		computePass.setBindGroup(0, spectrogramBindGroup);
-		computePass.dispatchWorkgroups(Math.ceil(width / 64), height);
+		computePass.setPipeline(pipeline);
+		computePass.setBindGroup(0, bindGroup);
+		computePass.dispatchWorkgroups(Math.ceil(numBands / 64));
 		computePass.end();
+
+		commandEncoder.copyBufferToBuffer(outputBuffer, 0, stagingBuffer, 0, numBands * 4);
 
 		this.device.queue.submit([commandEncoder.finish()]);
 
-		spectrogramUniformBuffer.destroy();
-		this.cleanupContext(context);
+		await stagingBuffer.mapAsync(GPUMapMode.READ);
 
-		return { spectrogramTexture, width, height };
+		const ltas = new Float32Array(stagingBuffer.getMappedRange()).slice();
+
+		stagingBuffer.unmap();
+		outputBuffer.destroy();
+		stagingBuffer.destroy();
+		uniformBuffer.destroy();
+
+		return ltas;
+	}
+
+	private async getOrCreateLtasPipeline(): Promise<GPUComputePipeline> {
+		if (this.ltasReducePipeline) {
+			return this.ltasReducePipeline;
+		}
+
+		const module = this.device.createShaderModule({ code: LTAS_REDUCE_SHADER });
+
+		await checkShaderCompilation(module, "LTAS reduction");
+
+		this.ltasReducePipeline = this.device.createComputePipeline({
+			layout: "auto",
+			compute: {
+				module,
+				entryPoint: "main",
+			},
+		});
+
+		return this.ltasReducePipeline;
 	}
 
 	cleanupContext(context: SpectralProcessContext): void {
@@ -325,6 +411,7 @@ export class SpectralEngine {
 
 	destroy(): void {
 		this.pipelineCache.clear();
+		this.ltasReducePipeline = null;
 	}
 
 	private async getOrCreatePipelines(fftSize: number, frequencyScale: FrequencyScale): Promise<CachedPipelines> {

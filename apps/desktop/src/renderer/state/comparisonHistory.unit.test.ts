@@ -25,6 +25,9 @@ function makeState(overrides: Partial<ComparisonHistoryState> = {}): ComparisonH
 		activeView: "overlay",
 		channelInput: "mono",
 		selection: null,
+		canonicalSampleRate: null,
+		differenceA: null,
+		differenceB: null,
 		...overrides,
 	};
 }
@@ -57,6 +60,9 @@ function makeComparison(overrides: Partial<Comparison> = {}): Snapshot<Compariso
 		channelInput: "mono",
 		positionSec: 0,
 		selection: null,
+		canonicalSampleRate: null,
+		differenceA: null,
+		differenceB: null,
 		...overrides,
 	};
 }
@@ -231,6 +237,16 @@ describe("classifyEdit", () => {
 
 	it("classifies a lone channel-input change as a channelInput edit", () => {
 		expect(classifyEdit(base, makeState({ channelInput: "side" }))).toBe("channelInput");
+	});
+
+	it("classifies a lone canonical-sample-rate change as a sampleRate edit", () => {
+		expect(classifyEdit(base, makeState({ canonicalSampleRate: 48000 }))).toBe("sampleRate");
+	});
+
+	it("classifies a Difference A/B change (both fields at once) as one difference edit", () => {
+		// The default-difference write sets differenceA and differenceB together;
+		// counted as a single dimension so it stays one undo step.
+		expect(classifyEdit(base, makeState({ differenceA: "source-1", differenceB: "source-2" }))).toBe("difference");
 	});
 
 	it("classifies multiple simultaneous field changes as unknown", () => {

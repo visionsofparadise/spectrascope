@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeBandMappings } from "./band-mapping";
+import { computeBandMappings, getBandFrequencies } from "./band-mapping";
 
 describe("computeBandMappings", () => {
   it("returns empty array for linear scale", () => {
@@ -161,5 +161,42 @@ describe("computeBandMappings", () => {
   it("returns empty array for linear scale regardless of parameters", () => {
     expect(computeBandMappings("linear", 1, 96000, 256).length).toBe(0);
     expect(computeBandMappings("linear", 4096, 44100, 4096).length).toBe(0);
+  });
+});
+
+describe("getBandFrequencies", () => {
+  it("brackets 20 Hz and Nyquist for the log scale", () => {
+    const sampleRate = 48000;
+    const numBands = 512;
+    const nyquist = sampleRate / 2;
+    const freqs = getBandFrequencies("log", numBands, sampleRate, 4096);
+
+    expect(freqs.length).toBe(numBands);
+
+    const first = freqs[0]!;
+    const last = freqs[numBands - 1]!;
+
+    expect(first).toBeGreaterThan(20);
+    expect(first).toBeLessThan(25);
+    expect(last).toBeLessThan(nyquist);
+    expect(last).toBeGreaterThan(nyquist * 0.98);
+  });
+
+  it("produces monotonically increasing centers for the mel scale", () => {
+    const freqs = getBandFrequencies("mel", 128, 44100, 2048);
+
+    for (let band = 1; band < freqs.length; band++) {
+      expect(freqs[band]!).toBeGreaterThan(freqs[band - 1]!);
+    }
+  });
+
+  it("returns the fftSize/2 + 1 linear bin centers for the linear scale", () => {
+    const sampleRate = 48000;
+    const fftSize = 16;
+    const freqs = getBandFrequencies("linear", 0, sampleRate, fftSize);
+
+    expect(freqs.length).toBe(fftSize / 2 + 1);
+    expect(freqs[0]).toBe(0);
+    expect(freqs[1]).toBeCloseTo(sampleRate / fftSize);
   });
 });

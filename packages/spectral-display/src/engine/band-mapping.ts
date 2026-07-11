@@ -60,6 +60,52 @@ function computeScaledBandMappings(
   return mappings;
 }
 
+export function getBandFrequencies(
+  scale: FrequencyScale,
+  numBands: number,
+  sampleRate: number,
+  fftSize: number,
+): Float32Array {
+  if (scale === "linear") {
+    const numBins = fftSize / 2 + 1;
+    const result = new Float32Array(numBins);
+
+    for (let bin = 0; bin < numBins; bin++) {
+      result[bin] = (bin * sampleRate) / fftSize;
+    }
+
+    return result;
+  }
+
+  const minFreq = 20;
+  const maxFreq = sampleRate / 2;
+
+  let toScale: (frequency: number) => number;
+  let fromScale: (scaled: number) => number;
+
+  if (scale === "log") {
+    toScale = Math.log;
+    fromScale = Math.exp;
+  } else if (scale === "mel") {
+    toScale = freqToMel;
+    fromScale = melToFreq;
+  } else {
+    toScale = freqToErb;
+    fromScale = erbToFreq;
+  }
+
+  const scaleMin = toScale(minFreq);
+  const scaleMax = toScale(maxFreq);
+  const scaleStep = (scaleMax - scaleMin) / numBands;
+  const result = new Float32Array(numBands);
+
+  for (let band = 0; band < numBands; band++) {
+    result[band] = fromScale(scaleMin + (band + 0.5) * scaleStep);
+  }
+
+  return result;
+}
+
 export function computeBandMappings(
   scale: FrequencyScale,
   numBands: number,

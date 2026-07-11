@@ -75,6 +75,16 @@ const ComparisonSchema = z.object({
 	channelInput: ChannelInputSchema.default("mono"),
 	positionSec: z.number().default(0),
 	selection: SelectionSchema.default(null),
+	/**
+	 * The comparison's canonical sample rate — every source is streamed at this
+	 * rate. `null` until the first imported source captures its native rate;
+	 * sticky thereafter and user-settable from the sidebar Rate dropdown.
+	 */
+	canonicalSampleRate: z.number().nullable().default(null),
+	/** Source id of the Difference view's A input, or `null` (defaults to the first source). */
+	differenceA: z.string().nullable().default(null),
+	/** Source id of the Difference view's B input, or `null` (defaults to the second source). */
+	differenceB: z.string().nullable().default(null),
 });
 
 export const AppStateSchema = z.object({

@@ -119,6 +119,9 @@ export function useComparisonHistory(
 				target.activeView = state.activeView;
 				target.channelInput = state.channelInput;
 				target.selection = state.selection === null ? null : { start: state.selection.start, end: state.selection.end };
+				target.canonicalSampleRate = state.canonicalSampleRate;
+				target.differenceA = state.differenceA;
+				target.differenceB = state.differenceB;
 			});
 		},
 		[app, appStore, comparison.id],

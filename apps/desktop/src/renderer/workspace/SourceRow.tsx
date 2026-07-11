@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@iconify/react";
 import type { Source } from "./source";
+import type { SourceStreamStatus } from "../audio/useSourceStreams";
 import type { LayerColor } from "./layers";
 import { IconButton } from "../components/IconButton";
 import { LayerColorPicker } from "./LayerColorPicker";
@@ -14,6 +15,12 @@ import { cn } from "../cn";
 
 interface SourceRowProps {
 	readonly source: Source;
+	/**
+	 * The source's stream-preparation status. `preparing` dims the row and shows
+	 * a spinner; `error` tints the filename in the error tone with the failure
+	 * reason on hover. `ready` / undefined render normally.
+	 */
+	readonly status?: SourceStreamStatus;
 	readonly onChange: (next: Source) => void;
 	readonly onRemove: () => void;
 	readonly active?: boolean;
@@ -55,6 +62,7 @@ function fileNameOf(source: Source): string {
  */
 export function SourceRow({
 	source,
+	status,
 	onChange,
 	onRemove,
 	active,
@@ -92,6 +100,7 @@ export function SourceRow({
 			className={cn(
 				"group relative flex flex-row items-start gap-3 p-3",
 				"hover:bg-interactive-hover",
+				status === "preparing" && "opacity-60",
 				active === true && "bg-interactive-hover",
 				active === true &&
 					"before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:bg-data-cursor",
@@ -140,13 +149,38 @@ export function SourceRow({
 
 			{/* Right column — filename / path / controls. */}
 			<div className="flex min-w-0 flex-1 flex-col gap-1">
-				{/* Filename — the source's identity. Not editable. */}
-				<span
-					className="min-w-0 truncate font-body text-base font-medium leading-tight text-chrome-text"
-					title={source.audioFilePath || label}
-				>
-					{label}
-				</span>
+				{/* Filename — the source's identity. Not editable. A trailing
+				    spinner marks a preparing source; an error icon + error tone
+				    marks a failed one, with the reason on the filename's `title`. */}
+				<div className="flex min-w-0 items-center gap-1.5">
+					<span
+						className={cn(
+							"min-w-0 truncate font-body text-base font-medium leading-tight",
+							status === "error" ? "text-state-error" : "text-chrome-text",
+						)}
+						title={status === "error" ? "Failed to prepare audio" : source.audioFilePath || label}
+					>
+						{label}
+					</span>
+					{status === "preparing" && (
+						<Icon
+							icon="lucide:loader-2"
+							width={14}
+							height={14}
+							className="shrink-0 animate-spin text-chrome-text-dim"
+							aria-label="Preparing"
+						/>
+					)}
+					{status === "error" && (
+						<Icon
+							icon="lucide:alert-triangle"
+							width={14}
+							height={14}
+							className="shrink-0 text-state-error"
+							aria-label="Preparation failed"
+						/>
+					)}
+				</div>
 
 				{/* File path — RTL-truncated so the filename tail survives, even
 				    dimmer than chrome-text-secondary so it never competes. */}

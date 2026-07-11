@@ -12,14 +12,12 @@ import { TransportViewControls } from "../../workspace/TransportViewControls";
 import { INITIAL_VIEW_CONTROL_SETTINGS } from "../../workspace/viewSettings";
 import type { ViewId } from "../../workspace/Workspace";
 import type { Source } from "../../workspace/source";
-import type { AudioData } from "../../workspace/spectral/types";
 import { main } from "../../models/Main";
 import { AUDIO_FILE_EXTENSIONS, createSourceFromFile, isBareAddSource } from "../../comparison/createComparison";
-import { useSourceAudio } from "../../audio/useSourceAudio";
-import { useDerivedAudio } from "../../audio/useDerivedAudio";
+import { useSourceStreams } from "../../audio/useSourceStreams";
+import { resolveAudibleSources, useDerivedStreams } from "../../audio/useDerivedStreams";
 import { usePlayer } from "../../audio/usePlayer";
 import type { PlaybackKind } from "../../audio/usePlayer";
-import type { RenderOperation } from "../../../main/ffmpeg/renderSpec";
 import { useComparisonHistory } from "../../state/useComparisonHistory";
 import type { HistoryControl } from "../../state/useComparisonHistory";
 import type { AppContext } from "../../models/Context";
@@ -42,32 +40,13 @@ interface Props {
 }
 
 /**
- * Zero-duration `AudioData` routed into the derived (Sum / Difference) view
- * while its ffmpeg render is in flight or has nothing to render. The two
- * derived views always require a single `AudioData`; against this empty reader
- * they render their built-in empty / "no audio" state, and `Comparison.tsx`
- * paints a "Rendering…" / empty overlay on top (see `derivedOverlayMessage`).
- * When the render is `ready` the real decoded derived signal is routed instead.
+ * Empty source-buffer map handed to `usePlayer` this phase. Phase 4 stops
+ * feeding whole-buffer audio into playback but does not rewire the player
+ * (Phase 5.1 points it at stream URLs); until then the live mix has no buffers,
+ * so playback is silent by design. A module constant keeps the reference stable
+ * across renders.
  */
-const EMPTY_DERIVED_AUDIO: AudioData = {
-	sampleRate: 48000,
-	channels: 1,
-	totalSamples: 0,
-	durationMs: 0,
-	readSamples: () => Promise.resolve(new Float32Array(0)),
-};
-
-/**
- * Map a view id to the derived-render operation it consumes, or `null` for a
- * non-derived (per-source / chart) view. Only the Sum and Difference views show
- * an ffmpeg-rendered derived signal.
- */
-function derivedOperationFor(view: ViewId): RenderOperation | null {
-	if (view === "sum") return "sum";
-	if (view === "difference") return "difference";
-
-	return null;
-}
+const EMPTY_SOURCE_BUFFERS: ReadonlyMap<string, AudioBuffer> = new Map();
 
 /**
  * Map a view id to its playback path (the design's "playback splits" decision):
@@ -143,9 +122,9 @@ function toSourceState(source: Source): SourceState {
  *
  * The workspace components stay controlled — `sources` flows down from the
  * comparison state, `onChange` mutates it back through `appStore.mutate`. Each
- * source's audio file is decoded by `useSourceAudio` and supplied to the
- * `Workspace` as a `sourceId → AudioData` map; a still-decoding source is
- * simply absent from the map and skipped by the views.
+ * source's audio file is prepared and streamed by `useSourceStreams` and
+ * supplied to the `Workspace` as a `sourceId → AudioData` map; a still-preparing
+ * source is simply absent from the map and skipped by the views.
  */
 export function ComparisonTab({ context, comparison, onHistoryControlChange }: Props) {
 	const { app, appStore } = context;
@@ -187,42 +166,92 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 	// `Comparison` state already carries `activeView`, persisted by `useAutosave`.
 	const activeView = comparison.activeView;
 
-	// Per-source decoded audio. `useSourceAudio` decodes each source's file
-	// (cached by path) and reports per-source decode status. `sourceBuffers`
-	// holds the raw `AudioBuffer`s the live `MixPlayer` schedules.
-	const { sourceAudio, sourceBuffers, status } = useSourceAudio(sources);
+	// Write the comparison's canonical sample rate — used both by the sticky
+	// capture (`useSourceStreams` reports the first source's native rate) and the
+	// sidebar Rate dropdown. An ordinary `appStore.mutate`, so `useComparisonHistory`
+	// classifies it as a `"sampleRate"` edit; undo returns it to `null`, which the
+	// capture harmlessly re-fills.
+	const setCanonicalSampleRate = useCallback(
+		(rate: number) => {
+			appStore.mutate(app, (proxy) => {
+				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
 
-	// The ffmpeg-rendered derived signal for whichever derived view is active.
-	// `derivedOperationFor` returns `null` for a non-derived view, which makes
-	// `useDerivedAudio` a no-op (no render dispatched) — so this unconditional
-	// hook call never spawns ffmpeg for a view that shows no derived signal.
-	const derivedOperation = derivedOperationFor(activeView);
-	const derived = useDerivedAudio(sources, derivedOperation);
+				if (!target) return;
 
-	// The `AudioData` routed into the derived view: the decoded render once
-	// `ready`, an empty zero-duration reader while `rendering` / `empty` (the
-	// view shows its built-in empty state and an overlay is painted on top).
-	const derivedAudio = derived.status === "ready" && derived.audioData ? derived.audioData : EMPTY_DERIVED_AUDIO;
+				target.canonicalSampleRate = rate;
+			});
+		},
+		[app, appStore, comparison.id],
+	);
 
-	// The overlay message for a derived view that is not yet showing real audio:
-	// "Rendering…" while ffmpeg runs, an empty-state line when a Difference has
-	// fewer than two audible sources (or a Sum has none). `null` when no derived
-	// view is active or its render is `ready` — no overlay.
+	// Persist the sticky Difference A/B default (first two sources) once both
+	// exist. A history-participating `"difference"` edit; undo to null is
+	// harmless (the hook re-writes the default).
+	const setDefaultDifference = useCallback(
+		(differenceA: string, differenceB: string) => {
+			appStore.mutate(app, (proxy) => {
+				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
+
+				if (!target) return;
+
+				target.differenceA = differenceA;
+				target.differenceB = differenceB;
+			});
+		},
+		[app, appStore, comparison.id],
+	);
+
+	// Per-source stream-backed audio. `useSourceStreams` prepares each source's
+	// file (import-time canonicalization) and registers its display stream,
+	// reporting per-source preparation status; `prepared` carries the canonical
+	// `pcmPath`s the derived streams fold. When no canonical rate is set yet, the
+	// first source's native rate is captured via `setCanonicalSampleRate`.
+	const { sourceAudio, prepared, status } = useSourceStreams(
+		sources,
+		comparison.canonicalSampleRate,
+		setCanonicalSampleRate,
+	);
+
+	// The Sum and Difference derived streams (registered `media://` streams). The
+	// active view selects which one feeds `Workspace.derivedAudio`: Sum for the
+	// Sum view, Difference for the Difference view; the other views ignore it.
+	// The hook also exposes `sumInfo` / `diffInfo` (keys for the playback URLs) —
+	// unused this phase, consumed by Phase 5.1's URL-fed `usePlayer`.
+	const { sumAudio, diffAudio } = useDerivedStreams(
+		sources,
+		prepared,
+		comparison.differenceA,
+		comparison.differenceB,
+		setDefaultDifference,
+	);
+
+	const derivedAudio = activeView === "difference" ? diffAudio : sumAudio;
+
+	// The overlay message for a derived view with an insufficient source set —
+	// derived from the sources alone (not the async registration state), so it
+	// shows only when genuinely empty and never flashes while a stream registers.
+	// "Rendering…" is gone with the ffmpeg render (streams compute on demand).
 	const derivedOverlayMessage = useMemo(() => {
-		if (derivedOperation === null || derived.status === "ready") return null;
+		if (activeView === "sum") {
+			const audible = resolveAudibleSources(sources).filter((source) => source.audioFilePath.length > 0);
 
-		if (derived.status === "rendering") return "Rendering…";
+			return audible.length < 1 ? "No audible sources" : null;
+		}
 
-		return derivedOperation === "difference"
-			? "Difference needs at least two audible sources"
-			: "No audible sources";
-	}, [derivedOperation, derived.status]);
+		if (activeView === "difference") {
+			const withPath = sources.filter((source) => source.audioFilePath.length > 0);
 
-	// True while at least one source's file is still decoding — drives the
-	// "Decoding audio…" overlay. A file-less or failed source is `error`, not
-	// `loading`, so it does not keep the indicator up.
-	const decoding = useMemo(
-		() => sources.some((source) => status.get(source.id) === "loading"),
+			return withPath.length < 2 ? "Difference needs at least two audible sources" : null;
+		}
+
+		return null;
+	}, [activeView, sources]);
+
+	// True while at least one source is still preparing — drives the "Preparing
+	// audio…" overlay. A file-less or failed source is `error`, not `preparing`,
+	// so it does not keep the indicator up.
+	const preparing = useMemo(
+		() => sources.some((source) => status.get(source.id) === "preparing"),
 		[sources, status],
 	);
 
@@ -257,17 +286,17 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 		[app, appStore, comparison.id],
 	);
 
-	// The active view's player. `usePlayer` builds a `PlaybackEngine` for a
-	// `file` view (pointed at the derived render's temp path) or a `MixPlayer`
-	// for a `mix` view (over the audible source buffers), and exposes a uniform
-	// play / pause / seek / position API regardless of which is active. `volume`
-	// is applied to whichever player it builds so a freshly-constructed player
-	// (view switch, mix rebuild) starts at the current monitor level.
+	// The active view's player. Phase 4 stops feeding whole-buffer audio into
+	// playback but does NOT rewire the player (Phase 5.1 points `usePlayer` at
+	// stream URLs built from `sumInfo.key` / `diffInfo.key`). Until then the
+	// signature and call site are unchanged, but the live mix gets an empty
+	// buffer map and the file engine an undefined path — playback is silent by
+	// design this phase; the views still render from the stream-backed audio.
 	const player = usePlayer(
 		playbackKind,
 		sources,
-		sourceBuffers,
-		derived.filePath,
+		EMPTY_SOURCE_BUFFERS,
+		undefined,
 		initialPositionRef.current,
 		persistPosition,
 		volume,
@@ -402,7 +431,7 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 
 	// `Workspace`'s controlled active-view channel — writes the selected view
 	// into the comparison state, where `useAutosave` persists it. Switching to
-	// the Sum / Difference tab is what makes `useDerivedAudio` resolve a render.
+	// the Sum / Difference tab selects which derived stream feeds `derivedAudio`.
 	const handleActiveViewChange = useCallback(
 		(view: ViewId) => {
 			appStore.mutate(app, (proxy) => {
@@ -502,7 +531,10 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 						onActiveViewChange={handleActiveViewChange}
 						channelInput={comparison.channelInput}
 						onChannelInputChange={handleChannelInputChange}
+						canonicalSampleRate={comparison.canonicalSampleRate}
+						onSampleRateChange={setCanonicalSampleRate}
 						sources={sources}
+						sourceStatus={status}
 						onSourcesChange={handleSourcesChange}
 					/>
 				}
@@ -544,17 +576,17 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 					)
 				}
 			/>
-			{decoding && (
+			{preparing && (
 				<div className="pointer-events-none absolute right-3 top-3 z-50 flex items-center gap-2 bg-chrome-raised px-2 py-1">
 					<span className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-secondary">
-						Decoding audio…
+						Preparing audio…
 					</span>
 				</div>
 			)}
 			{derivedOverlayMessage !== null && (
-				// The derived (Sum / Difference) view shows no real signal yet — its
-				// ffmpeg render is in flight, or there is nothing to render. The view
-				// chrome stays mounted and navigable underneath (`pointer-events-none`);
+				// The derived (Sum / Difference) view has an insufficient source set —
+				// nothing audible to sum, or fewer than two sources to difference. The
+				// view chrome stays mounted and navigable underneath (`pointer-events-none`);
 				// the message is centred over the workspace pane.
 				<div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center">
 					<span className="bg-chrome-raised px-3 py-1.5 font-technical text-sm uppercase tracking-[0.06em] text-chrome-text-secondary">

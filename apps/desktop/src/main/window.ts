@@ -4,6 +4,8 @@ import { ASYNC_MAIN_IPCS } from "../shared/ipc/asyncMainIpcs";
 import type { Logger } from "../shared/models/Logger";
 import { FileWatcherManager } from "./FileWatcherManager";
 import { RenderManager } from "./RenderManager";
+import { SourceCacheManager } from "./SourceCacheManager";
+import type { StreamManager } from "./StreamManager";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -21,7 +23,7 @@ const WINDOW_CONFIG = {
 	},
 };
 
-export const createWindow = (logger: Logger): BrowserWindow => {
+export const createWindow = (logger: Logger, streamManager: StreamManager): BrowserWindow => {
 	const browserWindow = new BrowserWindow({
 		...WINDOW_CONFIG,
 		icon: path.join(__dirname, "../../assets/icon.png"),
@@ -36,9 +38,10 @@ export const createWindow = (logger: Logger): BrowserWindow => {
 	const windowId = crypto.randomUUID();
 	const fileWatcherManager = new FileWatcherManager(browserWindow);
 	const renderManager = new RenderManager(app.getPath("userData"));
+	const sourceCacheManager = new SourceCacheManager(app.getPath("userData"));
 
 	for (const AsyncMainIpc of ASYNC_MAIN_IPCS) {
-		new AsyncMainIpc().register({ browserWindow, fileWatcherManager, renderManager, logger, windowId });
+		new AsyncMainIpc().register({ browserWindow, fileWatcherManager, renderManager, sourceCacheManager, streamManager, logger, windowId });
 	}
 
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -66,6 +69,7 @@ export const createWindow = (logger: Logger): BrowserWindow => {
 	browserWindow.on("closed", () => {
 		fileWatcherManager.dispose();
 		renderManager.dispose();
+		sourceCacheManager.dispose();
 	});
 
 	if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {

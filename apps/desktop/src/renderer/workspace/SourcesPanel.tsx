@@ -1,12 +1,15 @@
 import { Icon } from "@iconify/react";
 import type { Source } from "./source";
 import { createDefaultSource } from "./source";
+import type { SourceStreamStatus } from "../audio/useSourceStreams";
 import { Button } from "../components/Button";
 import { SourceRow } from "./SourceRow";
 
 interface SourcesPanelProps {
 	readonly sources: ReadonlyArray<Source>;
 	readonly onChange: (next: ReadonlyArray<Source>) => void;
+	/** Per-source preparation status keyed by `Source.id` — drives each row's progress/error treatment. */
+	readonly sourceStatus?: ReadonlyMap<string, SourceStreamStatus>;
 	readonly activeSourceId?: string;
 	readonly onActiveSourceChange?: (id: string) => void;
 }
@@ -23,6 +26,7 @@ interface SourcesPanelProps {
 export function SourcesPanel({
 	sources,
 	onChange,
+	sourceStatus,
 	activeSourceId,
 	onActiveSourceChange,
 }: SourcesPanelProps) {
@@ -72,6 +76,7 @@ export function SourcesPanel({
 						<li key={source.id}>
 							<SourceRow
 								source={source}
+								status={sourceStatus?.get(source.id)}
 								onChange={replaceSource}
 								onRemove={() => removeSource(source.id)}
 								active={source.id === activeSourceId}

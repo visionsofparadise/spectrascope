@@ -225,6 +225,37 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `;
 
+export const LTAS_REDUCE_SHADER = /* wgsl */ `
+
+struct Uniforms {
+  total_frames: u32,
+  num_bands: u32,
+}
+
+@group(0) @binding(0) var<storage, read> magnitude_buffer: array<f32>;
+@group(0) @binding(1) var<storage, read_write> ltas_output: array<f32>;
+@group(0) @binding(2) var<uniform> uniforms: Uniforms;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  let band = global_id.x;
+
+  if (band >= uniforms.num_bands) {
+    return;
+  }
+
+  // Mean magnitude across every frame for this band. LTAS is a time-collapsed
+  // average by definition, so aggregate with a sum/count, not the spectrogram's
+  // max-over-stride (which exists to preserve transients in a time-resolved image).
+  var sum: f32 = 0.0;
+  for (var frame: u32 = 0u; frame < uniforms.total_frames; frame = frame + 1u) {
+    sum = sum + magnitude_buffer[frame * uniforms.num_bands + band];
+  }
+
+  ltas_output[band] = sum / f32(uniforms.total_frames);
+}
+`;
+
 export const VECTORSCOPE_VISUALIZE_SHADER = /* wgsl */ `
 
 struct Uniforms {

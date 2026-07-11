@@ -16,7 +16,7 @@ export type ComparisonHistoryState = Omit<Snapshot<Comparison>, "positionSec">;
  * (e.g. a run of arrow-key timeline nudges, or rapid mute toggles, become a
  * single undo step).
  */
-export type EditKind = "sources" | "view" | "channelInput" | "selection" | "unknown";
+export type EditKind = "sources" | "view" | "channelInput" | "selection" | "sampleRate" | "difference" | "unknown";
 
 /** A single committed edit: the comparison state after it, plus its edit kind. */
 interface HistoryEntry {
@@ -185,6 +185,10 @@ export class ComparisonHistory {
  * - `selection` — only `selection` changed.
  * - `sources` — the `sources` array changed (add/remove, offset, mute/solo/
  *   visibility, rename, recolor) — the dominant editing channel.
+ * - `sampleRate` — only `canonicalSampleRate` changed (capture or dropdown).
+ * - `difference` — only the Difference A/B selection changed (`differenceA`
+ *   and/or `differenceB`), counted as one dimension so writing both defaults
+ *   at once still classifies as a single `difference` edit.
  * - `unknown` — anything else, or several fields at once. `unknown` entries do
  *   not coalesce, so each lands as its own step.
  */
@@ -193,9 +197,16 @@ export function classifyEdit(previous: ComparisonHistoryState, next: ComparisonH
 	const viewChanged = previous.activeView !== next.activeView;
 	const channelChanged = previous.channelInput !== next.channelInput;
 	const selectionChanged = previous.selection !== next.selection;
+	const sampleRateChanged = previous.canonicalSampleRate !== next.canonicalSampleRate;
+	const differenceChanged = previous.differenceA !== next.differenceA || previous.differenceB !== next.differenceB;
 
 	const changedCount =
-		Number(sourcesChanged) + Number(viewChanged) + Number(channelChanged) + Number(selectionChanged);
+		Number(sourcesChanged) +
+		Number(viewChanged) +
+		Number(channelChanged) +
+		Number(selectionChanged) +
+		Number(sampleRateChanged) +
+		Number(differenceChanged);
 
 	if (changedCount !== 1) {
 		return "unknown";
@@ -204,6 +215,8 @@ export function classifyEdit(previous: ComparisonHistoryState, next: ComparisonH
 	if (sourcesChanged) return "sources";
 	if (viewChanged) return "view";
 	if (channelChanged) return "channelInput";
+	if (sampleRateChanged) return "sampleRate";
+	if (differenceChanged) return "difference";
 
 	return "selection";
 }
@@ -252,6 +265,9 @@ export function historyStatesEqual(left: ComparisonHistoryState, right: Comparis
 		left.id !== right.id ||
 		left.activeView !== right.activeView ||
 		left.channelInput !== right.channelInput ||
+		left.canonicalSampleRate !== right.canonicalSampleRate ||
+		left.differenceA !== right.differenceA ||
+		left.differenceB !== right.differenceB ||
 		!selectionsEqual(left.selection, right.selection) ||
 		left.sources.length !== right.sources.length
 	) {
