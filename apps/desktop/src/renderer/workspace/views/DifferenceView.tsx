@@ -1,4 +1,4 @@
-// DifferenceView renders a single `SourceStrip` against the `derivedAudio`
+// DifferenceView renders a single `SourceRender` against the `derivedAudio`
 // prop — the A−B difference signal (B polarity-inverted), streamed on demand
 // from the registered diff `media://` endpoint. The A and B sources are chosen
 // in the selector row above the display.
@@ -6,8 +6,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChannelInput } from "spectral-display";
 import { Select } from "../../components/Select";
-import { SourceStrip } from "../SourceStrip";
-import type { SourceStripCursorReadout } from "../SourceStrip";
+import { SourceRender } from "../SourceRender";
+import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { Source } from "../source";
 import type { LayerColor } from "../layers";
 import { useViewSync } from "../sync";
@@ -70,7 +70,7 @@ const EMPTY_VIEW_SYNC = {
   selection: null,
 } as const;
 
-const DEFAULT_CURSOR: SourceStripCursorReadout = {
+const DEFAULT_CURSOR: SourceRenderCursorReadout = {
   time: "00:00.000",
   freq: "— Hz",
   amp: "— dB",
@@ -159,7 +159,7 @@ function GridOverlay({
 }
 
 /**
- * DifferenceView — single full-pane `<SourceStrip>` rendering a "difference"
+ * DifferenceView — single full-pane `<SourceRender>` rendering a "difference"
  * pseudo-source against the `derivedAudio` prop (the streamed A−B signal). The
  * pseudo-source borrows the first visible source's `layerColor` (or a neutral
  * chrome fallback when no sources are visible).
@@ -185,7 +185,7 @@ export function DifferenceView({
   onTransportControlChange,
 }: DifferenceViewProps) {
   const [cursorReadout, setCursorReadout] =
-    useState<SourceStripCursorReadout>(DEFAULT_CURSOR);
+    useState<SourceRenderCursorReadout>(DEFAULT_CURSOR);
 
   // Cross-view sync — the inspection cursor / selection (shared when the
   // global Sync toggle is on, local otherwise).
@@ -388,24 +388,23 @@ export function DifferenceView({
         {/* Row 2: freq axis | content cell | freq minimap | dB axis */}
         <FrequencyAxis />
 
-        {/* Content cell — one full-pane SourceStrip of the difference
+        {/* Content cell — one full-pane SourceRender of the difference
             pseudo-source. Clicking places the inspection cursor (sync-aware). */}
         <div
           ref={viewport.wheelHandlers.ref}
           className="relative cursor-crosshair overflow-hidden bg-void"
           onClick={handleCursorClick}
         >
-          {/* Strip — the gesture `transform` maps the committed render onto the
-              live window during a scroll/zoom. */}
-          <div
-            className="absolute inset-0"
-            style={{ transform: viewport.transform, transformOrigin: "left" }}
-          >
-            <SourceStrip
+          {/* Render — `SourceRender` maps its own held render onto the live
+              window. */}
+          <div className="absolute inset-0">
+            <SourceRender
               source={differenceSource}
               audioData={derivedAudio}
               startMs={startMs}
               endMs={endMs}
+              liveStartMs={viewport.startMs}
+              liveEndMs={viewport.endMs}
               fftSize={settings.fftSize}
               hopOverlap={settings.hopOverlap}
               channelInput={channelInput}

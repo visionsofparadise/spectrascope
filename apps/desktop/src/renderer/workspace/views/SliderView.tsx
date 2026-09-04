@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChannelInput } from "spectral-display";
-import { SourceStrip } from "../SourceStrip";
-import type { SourceStripCursorReadout } from "../SourceStrip";
+import { SourceRender } from "../SourceRender";
+import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { Source } from "../source";
 import { useViewSync } from "../sync";
 import { Curtain } from "../spectral/Curtain";
@@ -19,7 +19,7 @@ import { curtainBounds, defaultCurtainPositions, stripClipPath } from "./sliderC
 
 /**
  * Local `#RRGGBB` → `[r, g, b]` helper. Duplicates the one in OverlayView /
- * SourceStrip; lift to a shared util when a fourth caller appears.
+ * SourceRender; lift to a shared util when a fourth caller appears.
  */
 function hexToRgb255(hex: string): [number, number, number] {
   const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
@@ -56,7 +56,7 @@ const EMPTY_VIEW_SYNC = {
   selection: null,
 } as const;
 
-const DEFAULT_CURSOR: SourceStripCursorReadout = {
+const DEFAULT_CURSOR: SourceRenderCursorReadout = {
   time: "00:00.000",
   freq: "— Hz",
   amp: "— dB",
@@ -147,7 +147,7 @@ function GridOverlay({
 
 /**
  * SliderView — wipe-compare across N sources. Each renderable source's
- * `<SourceStrip>` is z-stacked at full opacity and clipped two-sided to the
+ * `<SourceRender>` is z-stacked at full opacity and clipped two-sided to the
  * band between its neighbouring curtains (`sliderClip.stripClipPath`), so strip
  * `k` shows only in `[positions[k−1], positions[k]]`. `N−1` `<Curtain>` handles
  * sit between adjacent sources; each clamps between its neighbours
@@ -179,7 +179,7 @@ export function SliderView({
   onTransportControlChange,
 }: SliderViewProps) {
   const [cursorReadout, setCursorReadout] =
-    useState<SourceStripCursorReadout>(DEFAULT_CURSOR);
+    useState<SourceRenderCursorReadout>(DEFAULT_CURSOR);
 
   // Cross-view sync — the inspection cursor / selection (shared when the
   // global Sync toggle is on, local otherwise).
@@ -355,7 +355,7 @@ export function SliderView({
         {/* Row 2: freq axis | content cell | freq minimap | dB axis */}
         <FrequencyAxis />
 
-        {/* Content cell — wipe-compare. N SourceStrips z-stacked, each clipped
+        {/* Content cell — wipe-compare. N SourceRenders z-stacked, each clipped
             two-sided to its band; N−1 Curtains render the draggable boundaries.
             Clicking places the inspection cursor (sync-aware). */}
         <div
@@ -365,22 +365,20 @@ export function SliderView({
         >
           {hasSources ? (
             <>
-              {/* Strip stack — the gesture `transform` maps the committed render
-                  onto the live window during a scroll/zoom. The Curtain handles
-                  and shared chrome stay in container space (untransformed). Each
-                  strip is clipped two-sided to its band; visibility is geometric
-                  (the clip), not paint order. */}
-              <div
-                className="absolute inset-0"
-                style={{ transform: viewport.transform, transformOrigin: "left" }}
-              >
+              {/* Render stack — each `SourceRender` maps its own held render onto
+                  the live window. The Curtain handles and shared chrome stay in
+                  container space. Each render is clipped two-sided to its band;
+                  visibility is geometric (the clip), not paint order. */}
+              <div className="absolute inset-0">
                 {renderableSources.map((entry, index) => (
-                  <SourceStrip
+                  <SourceRender
                     key={entry.source.id}
                     source={entry.source}
                     audioData={entry.audioData}
                     startMs={startMs}
                     endMs={endMs}
+                    liveStartMs={viewport.startMs}
+                    liveEndMs={viewport.endMs}
                     fftSize={settings.fftSize}
                     hopOverlap={settings.hopOverlap}
                     channelInput={channelInput}

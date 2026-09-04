@@ -1,12 +1,12 @@
-// SumView renders a single `SourceStrip` against the `derivedAudio` prop — the
+// SumView renders a single `SourceRender` against the `derivedAudio` prop — the
 // summed signal, streamed on demand from the registered sum `media://`
 // endpoint. The summed strip carries a fixed neutral `layerColor` so it reads
 // as belonging to no individual source.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChannelInput } from "spectral-display";
-import { SourceStrip } from "../SourceStrip";
-import type { SourceStripCursorReadout } from "../SourceStrip";
+import { SourceRender } from "../SourceRender";
+import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { Source } from "../source";
 import type { LayerColor } from "../layers";
 import { useViewSync } from "../sync";
@@ -59,7 +59,7 @@ const EMPTY_VIEW_SYNC = {
   selection: null,
 } as const;
 
-const DEFAULT_CURSOR: SourceStripCursorReadout = {
+const DEFAULT_CURSOR: SourceRenderCursorReadout = {
   time: "00:00.000",
   freq: "— Hz",
   amp: "— dB",
@@ -158,7 +158,7 @@ function GridOverlay({
 }
 
 /**
- * SumView — one full-pane `<SourceStrip>` rendering a "sum" pseudo-source
+ * SumView — one full-pane `<SourceRender>` rendering a "sum" pseudo-source
  * against the `derivedAudio` prop (the streamed sum-of-audible signal). The
  * strip carries a neutral `layerColor` (lime + viridis-dark) so it reads as
  * distinct from any individual source.
@@ -168,7 +168,7 @@ function GridOverlay({
  * is identical to the other per-source views. Display controls (grid /
  * waveform / spectrogram opacity, FFT / hop) now live in the transport and
  * arrive via the shared `settings` prop. The **content cell** is one full-pane
- * `<SourceStrip>` (mirroring
+ * `<SourceRender>` (mirroring
  * OverlayView's single-source case, but with no blend-mode wrapper since
  * there is only one strip).
  *
@@ -195,7 +195,7 @@ export function SumView({
   onTransportControlChange,
 }: SumViewProps) {
   const [cursorReadout, setCursorReadout] =
-    useState<SourceStripCursorReadout>(DEFAULT_CURSOR);
+    useState<SourceRenderCursorReadout>(DEFAULT_CURSOR);
 
   // Cross-view sync — the inspection cursor / selection (shared when the
   // global Sync toggle is on, local otherwise).
@@ -348,7 +348,7 @@ export function SumView({
         {/* Row 2: freq axis | content cell | freq minimap | dB axis */}
         <FrequencyAxis />
 
-        {/* Content cell — one full-pane SourceStrip of the sum pseudo-source.
+        {/* Content cell — one full-pane SourceRender of the sum pseudo-source.
             No blend-mode wrapper (single strip); the strip's `absolute inset-0`
             positioning fills the cell. Clicking places the inspection cursor
             (sync-aware). */}
@@ -365,17 +365,16 @@ export function SumView({
             </div>
           ) : (
             <>
-              {/* Strip — the gesture `transform` maps the committed render onto
-                  the live window during a scroll/zoom. */}
-              <div
-                className="absolute inset-0"
-                style={{ transform: viewport.transform, transformOrigin: "left" }}
-              >
-                <SourceStrip
+              {/* Render — `SourceRender` maps its own held render onto the live
+                  window. */}
+              <div className="absolute inset-0">
+                <SourceRender
                   source={sumSource}
                   audioData={derivedAudio}
                   startMs={startMs}
                   endMs={endMs}
+                  liveStartMs={viewport.startMs}
+                  liveEndMs={viewport.endMs}
                   fftSize={settings.fftSize}
                   hopOverlap={settings.hopOverlap}
                   channelInput={channelInput}

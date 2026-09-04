@@ -86,3 +86,23 @@
   *::-webkit-scrollbar-thumb { background: var(--color-chrome-text-dim); }
   * { scrollbar-width: thin; scrollbar-color: var(--color-chrome-text-dim) var(--color-chrome-border); }
 }
+
+@keyframes compute-shimmer {
+  from { background-position: 150% 0; }
+  to { background-position: -50% 0; }
+}
+
+@layer components {
+  .compute-shimmer {
+    background-color: color-mix(in srgb, var(--color-chrome-raised) 35%, transparent);
+    background-image: linear-gradient(
+      115deg,
+      transparent 30%,
+      color-mix(in srgb, var(--color-chrome-raised) 90%, transparent) 50%,
+      transparent 70%
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    animation: compute-shimmer 1.4s linear infinite;
+  }
+}

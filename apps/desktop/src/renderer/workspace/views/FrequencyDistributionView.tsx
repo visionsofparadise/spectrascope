@@ -3,6 +3,12 @@ import { getBandFrequencies, useSpectralCompute } from "spectral-display";
 import type { ChannelInput, SpectralOptions } from "spectral-display";
 import type { Source } from "../source";
 import { LinearDbAxis } from "../spectral/Axes";
+import { ComputeProgress } from "../spectral/ComputeProgress";
+import {
+	useFirstComputeProgress,
+	useReportComputeState,
+} from "../spectral/firstComputeProgress";
+import type { ComputeState } from "../spectral/firstComputeProgress";
 import type { TransportControl } from "../Transport";
 import type { AudioData } from "../spectral/types";
 import type { ViewControlSettings } from "../viewSettings";
@@ -110,6 +116,7 @@ interface SourceLtasTraceProps {
 	readonly fftSize: number;
 	readonly hopOverlap: number;
 	readonly channelInput: ChannelInput;
+	readonly onComputeState?: (sourceId: string, state: ComputeState | null) => void;
 }
 
 /**
@@ -120,7 +127,7 @@ interface SourceLtasTraceProps {
  * (or one whose clip is too short for the FFT — the engine throws, leaving
  * `ltas` null) renders nothing.
  */
-function SourceLtasTrace({ source, audioData, fftSize, hopOverlap, channelInput }: SourceLtasTraceProps) {
+function SourceLtasTrace({ source, audioData, fftSize, hopOverlap, channelInput, onComputeState }: SourceLtasTraceProps) {
 	const spectralOptions = useMemo<SpectralOptions>(
 		() => ({
 			metadata: {
@@ -156,7 +163,17 @@ function SourceLtasTrace({ source, audioData, fftSize, hopOverlap, channelInput 
 	);
 
 	const computeResult = useSpectralCompute(spectralOptions);
-	const ltas = computeResult.status === "ready" ? computeResult.ltas : null;
+
+	// The result whose LTAS is drawn: the fresh `ready` result, else the last
+	// good one held through a recompute or error. Null only before any result.
+	const renderable =
+		computeResult.status === "ready"
+			? computeResult
+			: computeResult.status === "computing" || computeResult.status === "error"
+				? computeResult.previous
+				: null;
+
+	const ltas = renderable ? renderable.ltas : null;
 	const sampleRate = audioData.sampleRate;
 
 	const segments = useMemo(() => {
@@ -170,6 +187,8 @@ function SourceLtasTrace({ source, audioData, fftSize, hopOverlap, channelInput 
 			(index) => freqToX(bandFrequencies[index] ?? FREQ_MIN_HZ),
 		);
 	}, [ltas, sampleRate, fftSize]);
+
+	useReportComputeState(source.id, computeResult, onComputeState);
 
 	if (segments.length === 0) return null;
 
@@ -196,9 +215,10 @@ interface ChartCanvasProps {
 	readonly fftSize: number;
 	readonly hopOverlap: number;
 	readonly channelInput: ChannelInput;
+	readonly onComputeState: (sourceId: string, state: ComputeState | null) => void;
 }
 
-function ChartCanvas({ renderableSources, fftSize, hopOverlap, channelInput }: ChartCanvasProps) {
+function ChartCanvas({ renderableSources, fftSize, hopOverlap, channelInput, onComputeState }: ChartCanvasProps) {
 	return (
 		<div className="relative h-full w-full overflow-hidden bg-void">
 			{/* Gridlines — log frequency verticals + dB horizontals. Painted as
@@ -244,6 +264,7 @@ function ChartCanvas({ renderableSources, fftSize, hopOverlap, channelInput }: C
 						fftSize={fftSize}
 						hopOverlap={hopOverlap}
 						channelInput={channelInput}
+						onComputeState={onComputeState}
 					/>
 				))}
 			</svg>
@@ -284,6 +305,10 @@ export function FrequencyDistributionView({ sources, sourceAudio, settings, chan
 		[sources, sourceAudio],
 	);
 
+	// First-compute progress aggregated across the per-source LTAS traces — a
+	// shimmer + mean-fraction bar over the chart while any source first-computes.
+	const progress = useFirstComputeProgress();
+
 	useEffect(() => {
 		if (onTransportControlChange) {
 			onTransportControlChange(DISABLED_CONTROL);
@@ -305,12 +330,18 @@ export function FrequencyDistributionView({ sources, sourceAudio, settings, chan
 								<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
 							</div>
 						) : (
-							<ChartCanvas
-								renderableSources={renderableSources}
-								fftSize={settings.fftSize}
-								hopOverlap={settings.hopOverlap}
-								channelInput={channelInput}
-							/>
+							<>
+								<ChartCanvas
+									renderableSources={renderableSources}
+									fftSize={settings.fftSize}
+									hopOverlap={settings.hopOverlap}
+									channelInput={channelInput}
+									onComputeState={progress.handleComputeState}
+								/>
+								{progress.firstComputing && (
+									<ComputeProgress fraction={progress.fraction} />
+								)}
+							</>
 						)}
 					</div>
 				</div>

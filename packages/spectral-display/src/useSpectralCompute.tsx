@@ -16,20 +16,25 @@ export interface SpectralOptions {
 	config?: Partial<SpectralConfig>;
 }
 
+export interface ComputeResultReady {
+	status: "ready";
+	spectrogramTexture: GPUTexture | null;
+	waveformBuffer: Float32Array | null;
+	waveformPointCount: number;
+	loudnessData: LoudnessData | null;
+	ltas: Float32Array | null;
+	correlationEnvelope: Float32Array | null;
+	vectorscopeHistogram: Uint32Array | null;
+	options: ResolvedPipelineOptions;
+	/** The ms-domain query this result was computed for, echoed verbatim for held-result transforms. */
+	query: SpectralQuery;
+}
+
 export type ComputeResult =
 	| { status: "idle" }
-	| { status: "error"; error: Error }
-	| {
-			status: "ready";
-			spectrogramTexture: GPUTexture | null;
-			waveformBuffer: Float32Array | null;
-			waveformPointCount: number;
-			loudnessData: LoudnessData | null;
-			ltas: Float32Array | null;
-			correlationEnvelope: Float32Array | null;
-			vectorscopeHistogram: Uint32Array | null;
-			options: ResolvedPipelineOptions;
-	  };
+	| { status: "error"; error: Error; previous: ComputeResultReady | null }
+	| { status: "computing"; fraction: number; previous: ComputeResultReady | null }
+	| ComputeResultReady;
 
 const EMPTY_RESULT: ComputeResult = { status: "idle" };
 
@@ -46,6 +51,7 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 	const engineReference = useRef<SpectralEngine | null>(null);
 	const engineDeviceRef = useRef<GPUDevice | null>(null);
 	const previousTextureRef = useRef<GPUTexture | null>(null);
+	const lastReadyRef = useRef<ComputeResultReady | null>(null);
 	const abortControllerReference = useRef<AbortController | null>(null);
 	const readSamplesRef = useRef(readSamples);
 
@@ -59,11 +65,31 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 
 		if (metadata.sampleCount === 0) return;
 
+		setResult({ status: "computing", fraction: 0, previous: lastReadyRef.current });
+
 		const controller = new AbortController();
 
 		abortControllerReference.current = controller;
 
 		const signal = providedSignal ?? controller.signal;
+
+		let settled = false;
+		let pendingFraction = 0;
+		let progressFrame: number | null = null;
+
+		const flushProgress = () => {
+			progressFrame = null;
+
+			if (settled || signal.aborted) return;
+
+			setResult({ status: "computing", fraction: pendingFraction, previous: lastReadyRef.current });
+		};
+
+		const onProgress = (fraction: number) => {
+			pendingFraction = fraction;
+
+			progressFrame ??= requestAnimationFrame(flushProgress);
+		};
 
 		if (signal.aborted) {
 			controller.abort();
@@ -93,6 +119,7 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 						device,
 						signal,
 					},
+					onProgress,
 				};
 
 				if (engineReference.current && engineDeviceRef.current !== device) {
@@ -108,23 +135,37 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 				previousTextureRef.current?.destroy();
 				previousTextureRef.current = pipelineResult.spectrogramTexture;
 
-				setResult({
+				settled = true;
+
+				const readyResult: ComputeResultReady = {
 					status: "ready",
 					...pipelineResult,
-				});
+					query: { startMs, endMs, width, height },
+				};
+
+				lastReadyRef.current = readyResult;
+
+				setResult(readyResult);
 			} catch (error: unknown) {
 				if (error instanceof DOMException && error.name === "AbortError") {
 					return;
 				}
 
+				settled = true;
+
 				setResult({
 					status: "error",
 					error: error instanceof Error ? error : new Error(String(error)),
+					previous: lastReadyRef.current,
 				});
 			}
 		})();
 
 		return () => {
+			settled = true;
+
+			if (progressFrame !== null) cancelAnimationFrame(progressFrame);
+
 			controller.abort();
 		};
 	}, [sampleRate, channelCount, sampleCount, startMs, endMs, width, height, providedDevice, configKey]);

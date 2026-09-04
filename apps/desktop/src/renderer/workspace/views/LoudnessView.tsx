@@ -3,8 +3,14 @@ import { useSpectralCompute } from "spectral-display";
 import type { LoudnessData, SpectralOptions } from "spectral-display";
 import type { Source } from "../source";
 import { LinearDbAxis, TimeRuler } from "../spectral/Axes";
+import { ComputeProgress } from "../spectral/ComputeProgress";
+import {
+	useFirstComputeProgress,
+	useReportComputeState,
+} from "../spectral/firstComputeProgress";
+import type { ComputeState } from "../spectral/firstComputeProgress";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
-import { useTimeViewport } from "../useTimeViewport";
+import { computeWindowTransform, useTimeViewport } from "../useTimeViewport";
 import type {
 	TransportControl,
 	TransportCursorReadout,
@@ -21,7 +27,7 @@ import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
 import type { SourceWithAudio } from "./viewAudio";
 
 /** Local `#RRGGBB` → `[r, g, b]` helper. Duplicates the per-view copies in the
- *  SourceStrip-based views. */
+ *  SourceRender-based views. */
 function hexToRgb255(hex: string): [number, number, number] {
 	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
 	const expanded =
@@ -154,8 +160,12 @@ interface SourceLoudnessTraceProps {
 	readonly audioData: AudioData;
 	readonly startMs: number;
 	readonly endMs: number;
+	/** The view's live (gesture-following) window, mapped onto the held render. */
+	readonly liveStartMs: number;
+	readonly liveEndMs: number;
 	readonly metric: MetricSpec;
 	readonly onLoudnessData: (sourceId: string, data: LoudnessData | null) => void;
+	readonly onComputeState?: (sourceId: string, state: ComputeState | null) => void;
 }
 
 function SourceLoudnessTrace({
@@ -163,8 +173,11 @@ function SourceLoudnessTrace({
 	audioData,
 	startMs,
 	endMs,
+	liveStartMs,
+	liveEndMs,
 	metric,
 	onLoudnessData,
+	onComputeState,
 }: SourceLoudnessTraceProps) {
 	const spectralOptions = useMemo<SpectralOptions>(
 		() => ({
@@ -196,8 +209,17 @@ function SourceLoudnessTrace({
 	);
 
 	const computeResult = useSpectralCompute(spectralOptions);
-	const loudnessData =
-		computeResult.status === "ready" ? computeResult.loudnessData : null;
+
+	// The result whose data is drawn: the fresh `ready` result, else the last
+	// good one held through a recompute or error. Null only before any result.
+	const renderable =
+		computeResult.status === "ready"
+			? computeResult
+			: computeResult.status === "computing" || computeResult.status === "error"
+				? computeResult.previous
+				: null;
+
+	const loudnessData = renderable ? renderable.loudnessData : null;
 
 	useEffect(() => {
 		onLoudnessData(source.id, loudnessData);
@@ -207,9 +229,21 @@ function SourceLoudnessTrace({
 		};
 	}, [source.id, loudnessData, onLoudnessData]);
 
-	if (!loudnessData) return null;
+	useReportComputeState(source.id, computeResult, onComputeState);
+
+	if (!renderable || !loudnessData) return null;
 
 	const color = source.layerColor.primary;
+
+	// Map the held render's window onto the live one so the trace follows the
+	// gesture; SVG redraws synchronously with state, so no double-buffer needed.
+	const transformStyle = {
+		transform: computeWindowTransform(renderable.query, {
+			startMs: liveStartMs,
+			endMs: liveEndMs,
+		}),
+		transformOrigin: "left" as const,
+	};
 
 	if (isScalarMetric(metric.id)) {
 		// Scalar metric (TP / Integrated) — a flat horizontal line at the
@@ -223,13 +257,15 @@ function SourceLoudnessTrace({
 		if (!Number.isFinite(y)) return null;
 
 		return (
-			<polyline
-				points={`0,${y} 1,${y}`}
-				fill="none"
-				stroke={color}
-				strokeWidth={1.5}
-				vectorEffect="non-scaling-stroke"
-			/>
+			<g style={transformStyle}>
+				<polyline
+					points={`0,${y} 1,${y}`}
+					fill="none"
+					stroke={color}
+					strokeWidth={1.5}
+					vectorEffect="non-scaling-stroke"
+				/>
+			</g>
 		);
 	}
 
@@ -243,7 +279,7 @@ function SourceLoudnessTrace({
 	);
 
 	return (
-		<g>
+		<g style={transformStyle}>
 			{segments.map((points, index) => (
 				<polyline
 					key={index}
@@ -337,10 +373,20 @@ interface ChartCanvasProps {
 	readonly metric: MetricSpec;
 	readonly startMs: number;
 	readonly endMs: number;
-	readonly transform: string;
+	readonly liveStartMs: number;
+	readonly liveEndMs: number;
+	readonly onComputeState: (sourceId: string, state: ComputeState | null) => void;
 }
 
-function ChartCanvas({ renderableSources, metric, startMs, endMs, transform }: ChartCanvasProps) {
+function ChartCanvas({
+	renderableSources,
+	metric,
+	startMs,
+	endMs,
+	liveStartMs,
+	liveEndMs,
+	onComputeState,
+}: ChartCanvasProps) {
 	const [loudnessMap, setLoudnessMap] = useState<Map<string, LoudnessData | null>>(
 		() => new Map(),
 	);
@@ -377,30 +423,29 @@ function ChartCanvas({ renderableSources, metric, startMs, endMs, transform }: C
 					/>
 				);
 			})}
-			{/* Trace layer — the gesture `transform` maps the committed render onto
-			    the live window during a scroll/zoom (non-scaling strokes stay 1.5px). */}
-			<div
-				className="absolute inset-0"
-				style={{ transform, transformOrigin: "left" }}
+			{/* Each trace carries its own gesture transform on its `<g>` (held
+			    render's window → live window), so they swap independently as each
+			    source's recompute lands. */}
+			<svg
+				className="absolute inset-0 h-full w-full"
+				viewBox="0 0 1 1"
+				preserveAspectRatio="none"
 			>
-				<svg
-					className="absolute inset-0 h-full w-full"
-					viewBox="0 0 1 1"
-					preserveAspectRatio="none"
-				>
-					{renderableSources.map(({ source, audioData }) => (
-						<SourceLoudnessTrace
-							key={source.id}
-							source={source}
-							audioData={audioData}
-							startMs={startMs}
-							endMs={endMs}
-							metric={metric}
-							onLoudnessData={handleLoudnessData}
-						/>
-					))}
-				</svg>
-			</div>
+				{renderableSources.map(({ source, audioData }) => (
+					<SourceLoudnessTrace
+						key={source.id}
+						source={source}
+						audioData={audioData}
+						startMs={startMs}
+						endMs={endMs}
+						liveStartMs={liveStartMs}
+						liveEndMs={liveEndMs}
+						metric={metric}
+						onLoudnessData={handleLoudnessData}
+						onComputeState={onComputeState}
+					/>
+				))}
+			</svg>
 			{isScalarMetric(metric.id) && (
 				<ScalarLabels
 					visibleSources={renderableSources.map((entry) => entry.source)}
@@ -431,6 +476,10 @@ export function LoudnessView({
 	// Transient time viewport — the traces window their computes to the committed
 	// window, so the metric follows the zoom.
 	const viewport = useTimeViewport(0, chromeAudio.durationMs);
+
+	// First-compute progress aggregated across the traces — a shimmer + mean-
+	// fraction bar over the chart while any source is first-computing.
+	const progress = useFirstComputeProgress();
 
 	const setViewportToFraction = useCallback(
 		(fraction: number) => {
@@ -567,13 +616,20 @@ export function LoudnessView({
 								</p>
 							</div>
 						) : (
-							<ChartCanvas
-								renderableSources={renderableSources}
-								metric={metricSpec}
-								startMs={viewport.committedStartMs}
-								endMs={viewport.committedEndMs}
-								transform={viewport.transform}
-							/>
+							<>
+								<ChartCanvas
+									renderableSources={renderableSources}
+									metric={metricSpec}
+									startMs={viewport.committedStartMs}
+									endMs={viewport.committedEndMs}
+									liveStartMs={viewport.startMs}
+									liveEndMs={viewport.endMs}
+									onComputeState={progress.handleComputeState}
+								/>
+								{progress.firstComputing && (
+									<ComputeProgress fraction={progress.fraction} />
+								)}
+							</>
 						)}
 					</div>
 				</div>

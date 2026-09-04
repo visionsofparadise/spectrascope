@@ -3,6 +3,12 @@ import { useSpectralCompute, VectorscopeCanvas } from "spectral-display";
 import type { SpectralOptions } from "spectral-display";
 import type { Source } from "../source";
 import { hexToRgb255 } from "../spectral/colorUtil";
+import { ComputeProgress } from "../spectral/ComputeProgress";
+import {
+	useFirstComputeProgress,
+	useReportComputeState,
+} from "../spectral/firstComputeProgress";
+import type { ComputeState } from "../spectral/firstComputeProgress";
 import type { TransportControl } from "../Transport";
 import type { AudioData } from "../spectral/types";
 import { resolveVisibleSourceAudio } from "./viewAudio";
@@ -137,9 +143,10 @@ function ScopeDiagonals() {
 interface SourceCloudProps {
 	readonly source: Source;
 	readonly audioData: AudioData;
+	readonly onComputeState?: (sourceId: string, state: ComputeState | null) => void;
 }
 
-function SourceCloud({ source, audioData }: SourceCloudProps) {
+function SourceCloud({ source, audioData, onComputeState }: SourceCloudProps) {
 	const spectralOptions = useMemo<SpectralOptions>(
 		() => ({
 			metadata: {
@@ -170,6 +177,20 @@ function SourceCloud({ source, audioData }: SourceCloudProps) {
 
 	const computeResult = useSpectralCompute(spectralOptions);
 
+	// The result whose histogram is drawn: the fresh `ready` result, else the
+	// last good one held through a recompute or error. Passing `renderable ??
+	// computeResult` keeps the held cloud on screen while a recompute runs
+	// (`VectorscopeCanvas` only redraws on a `ready` result, so a `computing`
+	// pass-through leaves the last drawn cloud untouched).
+	const renderable =
+		computeResult.status === "ready"
+			? computeResult
+			: computeResult.status === "computing" || computeResult.status === "error"
+				? computeResult.previous
+				: null;
+
+	useReportComputeState(source.id, computeResult, onComputeState);
+
 	// The cloud's tint is this source's primary layer color. `VectorscopeCanvas`
 	// takes an `[r, g, b]` triple of 0–255 ints (matching `WaveformCanvas`'s
 	// `color` prop), so convert the hex through the shared `hexToRgb255` helper.
@@ -180,7 +201,7 @@ function SourceCloud({ source, audioData }: SourceCloudProps) {
 
 	return (
 		<div className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full">
-			<VectorscopeCanvas computeResult={computeResult} tint={tint} />
+			<VectorscopeCanvas computeResult={renderable ?? computeResult} tint={tint} />
 		</div>
 	);
 }
@@ -195,6 +216,10 @@ export function VectorscopeView({
 		() => resolveVisibleSourceAudio(sources, sourceAudio),
 		[sources, sourceAudio],
 	);
+
+	// First-compute progress aggregated across the per-source clouds — a shimmer
+	// + mean-fraction bar over the scope while any source first-computes.
+	const progress = useFirstComputeProgress();
 
 	useEffect(() => {
 		if (onTransportControlChange) {
@@ -241,11 +266,15 @@ export function VectorscopeView({
 									key={source.id}
 									source={source}
 									audioData={audioData}
+									onComputeState={progress.handleComputeState}
 								/>
 							))}
 						</div>
 						<ScopeDiagonals />
 					</div>
+					{progress.firstComputing && (
+						<ComputeProgress fraction={progress.fraction} />
+					)}
 				</div>
 			)}
 		</div>

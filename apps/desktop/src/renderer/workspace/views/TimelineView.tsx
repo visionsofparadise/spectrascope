@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChannelInput } from "spectral-display";
-import { SourceStrip } from "../SourceStrip";
-import type { SourceStripCursorReadout } from "../SourceStrip";
+import { SourceRender } from "../SourceRender";
+import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { Source } from "../source";
 import type { TransportControl } from "../Transport";
 import type { AudioData } from "../spectral/types";
@@ -13,7 +13,7 @@ import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
 import { computeTimelineExtent } from "./timelineExtent";
 import type { TimelineDrag } from "./timelineExtent";
 
-const DEFAULT_CURSOR: SourceStripCursorReadout = {
+const DEFAULT_CURSOR: SourceRenderCursorReadout = {
   time: "00:00.000",
   freq: "— Hz",
   amp: "— dB",
@@ -86,7 +86,7 @@ function GridOverlay({
 }
 
 /**
- * One DAW-style track row — a `SourceStrip` placed on the shared comparison
+ * One DAW-style track row — a `SourceRender` placed on the shared comparison
  * timeline at its `timelineOffsetMs`, draggable horizontally to re-place it.
  *
  * Purely presentational + interactive: the row reports a *new* offset out and
@@ -138,14 +138,14 @@ function TimelineTrack({
   readonly hopOverlap: number;
   readonly channelInput: ChannelInput;
   readonly gridOpacity: number;
-  /** Per-layer opacity for the clip's `SourceStrip` (from shared settings). */
+  /** Per-layer opacity for the clip's `SourceRender` (from shared settings). */
   readonly waveformOpacity: number;
   readonly spectrogramOpacity: number;
   /** Whether the clip can be dragged — false when no offset callback is wired. */
   readonly draggable: boolean;
   /** Whether this clip is the one currently being dragged (drives the accent). */
   readonly dragging: boolean;
-  readonly onCursorMove: (readout: SourceStripCursorReadout) => void;
+  readonly onCursorMove: (readout: SourceRenderCursorReadout) => void;
   /** Reports the live offset on every pointer tick during a drag (transient). */
   readonly onDragMove: (offsetMs: number) => void;
   /** Emits the final (floored ≥ 0) offset — once per drag (pointer-up) and once
@@ -260,14 +260,14 @@ function TimelineTrack({
 
   return (
     <div ref={trackRef} className="relative min-h-0 flex-1 overflow-hidden">
-      {/* The clip — a `SourceStrip` positioned on the shared timeline. The
-          strip itself still renders its source's full content (0 → duration);
+      {/* The clip — a `SourceRender` positioned on the shared timeline. The
+          render itself still shows its source's full content (0 → duration);
           placement is this wrapper's left/width. */}
       <div
         className="absolute inset-y-0"
         style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
       >
-        <SourceStrip
+        <SourceRender
           source={source}
           audioData={audioData}
           startMs={0}
@@ -348,7 +348,7 @@ interface TimelineViewProps {
 /**
  * TimelineView — DAW-style multi-track timeline. Layout:
  *   - A main grid: horizontal `TimeRuler` (top), N equal-flex track rows each
- *     carrying one `SourceStrip` *placed on the shared comparison timeline*,
+ *     carrying one `SourceRender` *placed on the shared comparison timeline*,
  *     and a horizontal overview `MinimapDisplay` (bottom).
  *
  * Display controls (grid opacity, layer opacities, FFT / hop) live in the
@@ -388,7 +388,7 @@ export function TimelineView({
   const [playing, setPlaying] = useState(false);
   const [positionSec, setPositionSec] = useState(0);
   const [cursorReadout, setCursorReadout] =
-    useState<SourceStripCursorReadout>(DEFAULT_CURSOR);
+    useState<SourceRenderCursorReadout>(DEFAULT_CURSOR);
   // Transient live drag lifted out of the dragged `TimelineTrack` so the extent
   // can follow the drag. Neither persisted nor in undo history; cleared on
   // pointer-up when the committed offset is emitted through `onSourceOffsetChange`.

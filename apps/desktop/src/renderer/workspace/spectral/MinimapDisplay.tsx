@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WaveformCanvas, useSpectralCompute } from "spectral-display";
 import type { SpectralOptions } from "spectral-display";
+import { ComputeProgress } from "./ComputeProgress";
 import type { AudioData } from "./types";
 
 interface MinimapDisplayProps {
@@ -9,7 +10,7 @@ interface MinimapDisplayProps {
   readonly viewStartFrac: number;
   /** Right edge of the viewport bracket as a fraction of the full duration (0..1). */
   readonly viewEndFrac: number;
-  /** Waveform RGB color (0..255 per channel) — see SourceStrip.hexToRgb255. */
+  /** Waveform RGB color (0..255 per channel) — see SourceRender.hexToRgb255. */
   readonly waveformColor: readonly [number, number, number];
   /**
    * Click / drag on the strip reports the pointer's `[0, 1]` fraction of the
@@ -129,6 +130,15 @@ export function MinimapDisplay({
 
   const computeResult = useSpectralCompute(spectralOptions);
 
+  // The result whose waveform is drawn: the fresh `ready` result, else the last
+  // good one held through a recompute or error. Null only before any result.
+  const renderable =
+    computeResult.status === "ready"
+      ? computeResult
+      : computeResult.status === "computing" || computeResult.status === "error"
+        ? computeResult.previous
+        : null;
+
   const vpStartPct = viewStartFrac * 100;
   const vpWidthPct = (viewEndFrac - viewStartFrac) * 100;
 
@@ -139,10 +149,15 @@ export function MinimapDisplay({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
     >
-      {computeResult.status === "ready" && (
+      {renderable !== null && (
         <div className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full">
-          <WaveformCanvas computeResult={computeResult} color={color} />
+          <WaveformCanvas computeResult={renderable} color={color} />
         </div>
+      )}
+      {/* Shimmer only (no bar) while first-computing — the minimaps carry no
+          progress bar per the v1 language. */}
+      {computeResult.status === "computing" && computeResult.previous === null && (
+        <ComputeProgress />
       )}
       <div
         className="absolute inset-y-0 left-0 bg-black/65"

@@ -8,12 +8,17 @@ interface WaveformCanvasProps {
 	computeResult: ComputeResult;
 	ref?: React.Ref<HTMLCanvasElement>;
 	color?: [number, number, number];
+	/** Fires after a successful draw submit — the swap signal for consumers double-buffering renders. */
+	onRendered?: () => void;
 }
 
 const DEFAULT_WAVEFORM_COLOR: [number, number, number] = [0, 255, 0];
 
-export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({ computeResult, ref, color = DEFAULT_WAVEFORM_COLOR }) => {
+export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({ computeResult, ref, color = DEFAULT_WAVEFORM_COLOR, onRendered }) => {
 	const [internalCanvasReference, canvasCallback] = useCanvasRef(ref);
+	const onRenderedRef = useRef(onRendered);
+
+	onRenderedRef.current = onRendered;
 	const blitReference = useRef<BlitRenderer | null>(null);
 	const blitDeviceRef = useRef<GPUDevice | null>(null);
 	const pipelineReference = useRef<GPUComputePipeline | null>(null);
@@ -135,6 +140,8 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({ computeResult, r
 
 		blitReference.current.resize(width, height);
 		blitReference.current.render(outputTextureRef.current!);
+
+		onRenderedRef.current?.();
 	}, [computeResult, color[0], color[1], color[2]]);
 
 	useEffect(

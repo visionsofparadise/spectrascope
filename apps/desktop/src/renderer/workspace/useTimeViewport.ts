@@ -105,6 +105,25 @@ function reconcileToExtent(
   return clampWindowToExtent(current, nextExtent);
 }
 
+/**
+ * CSS `translateX`/`scaleX` string mapping a `rendered` window onto the `live`
+ * one for a canvas-wrapping div with `transform-origin: left`: the rendered
+ * window's pixels are scaled and shifted so the time under each live-window
+ * position lands where it belongs. Identity when the windows match; identity
+ * fallback when the live span is degenerate.
+ */
+export function computeWindowTransform(rendered: TimeWindow, live: TimeWindow): string {
+  const liveSpan = live.endMs - live.startMs;
+
+  if (liveSpan <= 0) return "translateX(0%) scaleX(1)";
+
+  const renderedSpan = rendered.endMs - rendered.startMs;
+  const scaleX = renderedSpan / liveSpan;
+  const translateFrac = (rendered.startMs - live.startMs) / liveSpan;
+
+  return `translateX(${translateFrac * 100}%) scaleX(${scaleX})`;
+}
+
 export interface TimeViewport {
   /** Live window start — updates immediately on every gesture tick. */
   readonly startMs: number;
@@ -228,17 +247,7 @@ export function useTimeViewport(extentStartMs: number, extentEndMs: number): Tim
     [scheduleCommit],
   );
 
-  const transform = useMemo(() => {
-    const liveSpan = live.endMs - live.startMs;
-
-    if (liveSpan <= 0) return "translateX(0%) scaleX(1)";
-
-    const committedSpan = committed.endMs - committed.startMs;
-    const scaleX = committedSpan / liveSpan;
-    const translateFrac = (committed.startMs - live.startMs) / liveSpan;
-
-    return `translateX(${translateFrac * 100}%) scaleX(${scaleX})`;
-  }, [live, committed]);
+  const transform = useMemo(() => computeWindowTransform(committed, live), [live, committed]);
 
   const wheelHandlers = useMemo(() => ({ ref: wheelTargetRef }), []);
 

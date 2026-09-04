@@ -21,6 +21,7 @@ export interface PipelineOptions {
 	sampleQuery: SampleQuery;
 	readSamples: (channel: number, sampleOffset: number, sampleCount: number) => Promise<Float32Array>;
 	config: RequiredProperties<SpectralConfig, "device" | "signal">;
+	onProgress?: (fraction: number) => void;
 }
 
 export interface ResolvedPipelineOptions extends PipelineOptions {
@@ -108,6 +109,8 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 			}
 
 			offset += chunkFrames;
+
+			if (sampleCount > 0) options.onProgress?.(offset / sampleCount);
 
 			await yieldControl();
 		}

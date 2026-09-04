@@ -3,8 +3,14 @@ import { useSpectralCompute } from "spectral-display";
 import type { SpectralOptions } from "spectral-display";
 import type { Source } from "../source";
 import { LinearDbAxis, TimeRuler } from "../spectral/Axes";
+import { ComputeProgress } from "../spectral/ComputeProgress";
+import {
+	useFirstComputeProgress,
+	useReportComputeState,
+} from "../spectral/firstComputeProgress";
+import type { ComputeState } from "../spectral/firstComputeProgress";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
-import { useTimeViewport } from "../useTimeViewport";
+import { computeWindowTransform, useTimeViewport } from "../useTimeViewport";
 import type {
 	TransportControl,
 	TransportCursorReadout,
@@ -15,7 +21,7 @@ import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
 import type { SourceWithAudio } from "./viewAudio";
 
 /** Local `#RRGGBB` → `[r, g, b]` helper. Duplicates the per-view copies in the
- *  SourceStrip-based views and `LoudnessView`. */
+ *  SourceRender-based views and `LoudnessView`. */
 function hexToRgb255(hex: string): [number, number, number] {
 	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
 	const expanded =
@@ -81,6 +87,10 @@ interface SourceCorrelationTraceProps {
 	readonly audioData: AudioData;
 	readonly startMs: number;
 	readonly endMs: number;
+	/** The view's live (gesture-following) window, mapped onto the held render. */
+	readonly liveStartMs: number;
+	readonly liveEndMs: number;
+	readonly onComputeState?: (sourceId: string, state: ComputeState | null) => void;
 }
 
 function SourceCorrelationTrace({
@@ -88,6 +98,9 @@ function SourceCorrelationTrace({
 	audioData,
 	startMs,
 	endMs,
+	liveStartMs,
+	liveEndMs,
+	onComputeState,
 }: SourceCorrelationTraceProps) {
 	const spectralOptions = useMemo<SpectralOptions>(
 		() => ({
@@ -120,22 +133,43 @@ function SourceCorrelationTrace({
 	);
 
 	const computeResult = useSpectralCompute(spectralOptions);
-	const envelope =
+
+	// The result whose data is drawn: the fresh `ready` result, else the last
+	// good one held through a recompute or error. Null only before any result.
+	const renderable =
 		computeResult.status === "ready"
-			? computeResult.correlationEnvelope
-			: null;
+			? computeResult
+			: computeResult.status === "computing" || computeResult.status === "error"
+				? computeResult.previous
+				: null;
+
+	const envelope = renderable ? renderable.correlationEnvelope : null;
 
 	const segments = useMemo(
 		() => (envelope ? buildPolylineSegments(envelope, corrToY) : []),
 		[envelope],
 	);
 
-	if (!envelope) return null;
+	useReportComputeState(source.id, computeResult, onComputeState);
+
+	if (!renderable || segments.length === 0) return null;
 
 	const color = source.layerColor.primary;
 
+	// Map the held render's window onto the live one so the trace follows the
+	// gesture; SVG redraws synchronously with state, so no double-buffer is
+	// needed. `transform-origin: left` matches the `computeWindowTransform`
+	// scale/translate reference (viewBox left edge under `transform-box: view-box`).
 	return (
-		<g>
+		<g
+			style={{
+				transform: computeWindowTransform(renderable.query, {
+					startMs: liveStartMs,
+					endMs: liveEndMs,
+				}),
+				transformOrigin: "left",
+			}}
+		>
 			{segments.map((points, index) => (
 				<polyline
 					key={index}
@@ -154,10 +188,19 @@ interface ChartCanvasProps {
 	readonly renderableSources: ReadonlyArray<SourceWithAudio>;
 	readonly startMs: number;
 	readonly endMs: number;
-	readonly transform: string;
+	readonly liveStartMs: number;
+	readonly liveEndMs: number;
+	readonly onComputeState: (sourceId: string, state: ComputeState | null) => void;
 }
 
-function ChartCanvas({ renderableSources, startMs, endMs, transform }: ChartCanvasProps) {
+function ChartCanvas({
+	renderableSources,
+	startMs,
+	endMs,
+	liveStartMs,
+	liveEndMs,
+	onComputeState,
+}: ChartCanvasProps) {
 	return (
 		<div className="relative h-full w-full overflow-hidden bg-void">
 			{/* Correlation gridlines — one horizontal rule per tick, all
@@ -174,28 +217,27 @@ function ChartCanvas({ renderableSources, startMs, endMs, transform }: ChartCanv
 					/>
 				);
 			})}
-			{/* Trace layer — the gesture `transform` maps the committed render onto
-			    the live window during a scroll/zoom (non-scaling strokes stay 1.5px). */}
-			<div
-				className="absolute inset-0"
-				style={{ transform, transformOrigin: "left" }}
+			{/* Each trace carries its own gesture transform on its `<g>` (held
+			    render's window → live window), so they swap independently as each
+			    source's recompute lands. */}
+			<svg
+				className="absolute inset-0 h-full w-full"
+				viewBox="0 0 1 1"
+				preserveAspectRatio="none"
 			>
-				<svg
-					className="absolute inset-0 h-full w-full"
-					viewBox="0 0 1 1"
-					preserveAspectRatio="none"
-				>
-					{renderableSources.map(({ source, audioData }) => (
-						<SourceCorrelationTrace
-							key={source.id}
-							source={source}
-							audioData={audioData}
-							startMs={startMs}
-							endMs={endMs}
-						/>
-					))}
-				</svg>
-			</div>
+				{renderableSources.map(({ source, audioData }) => (
+					<SourceCorrelationTrace
+						key={source.id}
+						source={source}
+						audioData={audioData}
+						startMs={startMs}
+						endMs={endMs}
+						liveStartMs={liveStartMs}
+						liveEndMs={liveEndMs}
+						onComputeState={onComputeState}
+					/>
+				))}
+			</svg>
 		</div>
 	);
 }
@@ -218,6 +260,10 @@ export function CorrelationView({
 	// Transient time viewport — the traces window their computes to the committed
 	// window, so the envelope follows the zoom.
 	const viewport = useTimeViewport(0, chromeAudio.durationMs);
+
+	// First-compute progress aggregated across the traces — a shimmer + mean-
+	// fraction bar over the chart while any source is first-computing.
+	const progress = useFirstComputeProgress();
 
 	const setViewportToFraction = useCallback(
 		(fraction: number) => {
@@ -338,12 +384,19 @@ export function CorrelationView({
 								</p>
 							</div>
 						) : (
-							<ChartCanvas
-								renderableSources={renderableSources}
-								startMs={viewport.committedStartMs}
-								endMs={viewport.committedEndMs}
-								transform={viewport.transform}
-							/>
+							<>
+								<ChartCanvas
+									renderableSources={renderableSources}
+									startMs={viewport.committedStartMs}
+									endMs={viewport.committedEndMs}
+									liveStartMs={viewport.startMs}
+									liveEndMs={viewport.endMs}
+									onComputeState={progress.handleComputeState}
+								/>
+								{progress.firstComputing && (
+									<ComputeProgress fraction={progress.fraction} />
+								)}
+							</>
 						)}
 					</div>
 				</div>

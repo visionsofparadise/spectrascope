@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TimeWindow } from "./useTimeViewport";
-import { panWindow, zoomWindow } from "./useTimeViewport";
+import { computeWindowTransform, panWindow, zoomWindow } from "./useTimeViewport";
 
 const EXTENT: TimeWindow = { startMs: 0, endMs: 1000 };
 const MIN_WINDOW_MS = 10;
@@ -56,5 +56,40 @@ describe("zoomWindow", () => {
     const result = zoomWindow({ startMs: 200, endMs: 400 }, 100, 0.5, EXTENT, MIN_WINDOW_MS);
 
     expect(result).toEqual({ startMs: 0, endMs: 1000 });
+  });
+});
+
+describe("computeWindowTransform", () => {
+  it("is identity when the rendered and live windows match", () => {
+    expect(computeWindowTransform({ startMs: 0, endMs: 1000 }, { startMs: 0, endMs: 1000 })).toBe(
+      "translateX(0%) scaleX(1)",
+    );
+  });
+
+  it("scales up when the live window zoomed in past the rendered window", () => {
+    // rendered span 1000 over live span 500 → 2×.
+    expect(computeWindowTransform({ startMs: 0, endMs: 1000 }, { startMs: 0, endMs: 500 })).toBe(
+      "translateX(0%) scaleX(2)",
+    );
+  });
+
+  it("scales down when the live window zoomed out past the rendered window", () => {
+    // rendered span 500 over live span 1000 → 0.5×.
+    expect(computeWindowTransform({ startMs: 0, endMs: 500 }, { startMs: 0, endMs: 1000 })).toBe(
+      "translateX(0%) scaleX(0.5)",
+    );
+  });
+
+  it("translates by the start offset as a fraction of the live span", () => {
+    // rendered starts one full live-span to the right → 100%.
+    expect(computeWindowTransform({ startMs: 200, endMs: 400 }, { startMs: 0, endMs: 200 })).toBe(
+      "translateX(100%) scaleX(1)",
+    );
+  });
+
+  it("falls back to identity for a degenerate live span", () => {
+    expect(computeWindowTransform({ startMs: 200, endMs: 400 }, { startMs: 500, endMs: 500 })).toBe(
+      "translateX(0%) scaleX(1)",
+    );
   });
 });

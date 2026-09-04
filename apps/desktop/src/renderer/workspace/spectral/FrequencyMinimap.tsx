@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect, useMemo } from "react";
 import { SpectrogramCanvas, useSpectralCompute } from "spectral-display";
 import type { SpectralOptions } from "spectral-display";
+import { ComputeProgress } from "./ComputeProgress";
 import { buildLayerColormap } from "../layers";
 import type { LayerColor } from "../layers";
 import type { AudioData } from "./types";
@@ -65,6 +66,15 @@ export function FrequencyMinimap({ audioData, startMs, endMs, layerColor }: Freq
 
   const computeResult = useSpectralCompute(spectralOptions);
 
+  // The result whose spectrogram is drawn: the fresh `ready` result, else the
+  // last good one held through a recompute or error. Null only before any result.
+  const renderable =
+    computeResult.status === "ready"
+      ? computeResult
+      : computeResult.status === "computing" || computeResult.status === "error"
+        ? computeResult.previous
+        : null;
+
   const vpTopPct = VP_TOP_FRAC * 100;
   const vpHeightPct = (VP_BOTTOM_FRAC - VP_TOP_FRAC) * 100;
 
@@ -73,10 +83,15 @@ export function FrequencyMinimap({ audioData, startMs, endMs, layerColor }: Freq
       ref={containerRef}
       className="relative w-8 bg-void"
     >
-      {computeResult.status === "ready" && (
+      {renderable !== null && (
         <div className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full">
-          <SpectrogramCanvas computeResult={computeResult} />
+          <SpectrogramCanvas computeResult={renderable} />
         </div>
+      )}
+      {/* Shimmer only (no bar) while first-computing — the minimaps carry no
+          progress bar per the v1 language. */}
+      {computeResult.status === "computing" && computeResult.previous === null && (
+        <ComputeProgress />
       )}
       {/* Dimmed regions outside viewport */}
       <div

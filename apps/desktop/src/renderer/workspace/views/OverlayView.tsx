@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChannelInput } from "spectral-display";
-import { SourceStrip } from "../SourceStrip";
-import type { SourceStripCursorReadout } from "../SourceStrip";
+import { SourceRender } from "../SourceRender";
+import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { Source } from "../source";
 import { useViewSync } from "../sync";
 import type { TransportControl } from "../Transport";
@@ -16,7 +16,7 @@ import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
 import { eventToTime, timeToFraction } from "./viewCursor";
 
 /**
- * Local `#RRGGBB` → `[r, g, b]` helper. Duplicates SourceStrip's hexToRgb255
+ * Local `#RRGGBB` → `[r, g, b]` helper. Duplicates SourceRender's hexToRgb255
  * because the strip keeps it private. If a third caller appears, lift to a
  * shared util (`components/spectral/colorUtil.ts`).
  */
@@ -55,7 +55,7 @@ const EMPTY_VIEW_SYNC = {
   selection: null,
 } as const;
 
-const DEFAULT_CURSOR: SourceStripCursorReadout = {
+const DEFAULT_CURSOR: SourceRenderCursorReadout = {
   time: "00:00.000",
   freq: "— Hz",
   amp: "— dB",
@@ -149,7 +149,7 @@ function GridOverlay({
 }
 
 /**
- * OverlayView — every visible source's `SourceStrip` z-stacked in the same
+ * OverlayView — every visible source's `SourceRender` z-stacked in the same
  * viewport, blended via `mix-blend-mode: lighten`. The documented exception
  * to the no-opacity-for-data rule: for this view, the blend mode *is* the
  * data composition.
@@ -157,7 +157,7 @@ function GridOverlay({
  * Structural template: ported from the pre-deletion SpectralPage's
  * `SpectralPage` function (`archive/spectralpage-reference.tsx` lines ~327-575).
  * Keeps the SpectralPage grid layout and frequency minimap. The **content
- * cell** (row 2 col 2) is now N stacked `<SourceStrip>` instances inside a
+ * cell** (row 2 col 2) is now N stacked `<SourceRender>` instances inside a
  * `mix-blend-mode: lighten` wrapper, plus a single shared `<GridOverlay>` +
  * `<Selection>` + playhead cursor line owned by the view. Display controls
  * (grid / waveform / spectrogram opacity, FFT / hop) live in the transport's
@@ -187,8 +187,8 @@ function GridOverlay({
  * view's cursor line moves together.
  *
  * Layer opacity: `settings.waveformOpacity` / `settings.spectrogramOpacity`
- * route into the `SourceStrip` layer-opacity props. `settings.loudnessOpacity`
- * has no layer in `SourceStrip` (it has no loudness layer) and is unconsumed.
+ * route into the `SourceRender` layer-opacity props. `settings.loudnessOpacity`
+ * has no layer in `SourceRender` (it has no loudness layer) and is unconsumed.
  *
  * Audibility rule (solo overrides mute) is computed for downstream audio
  * pipeline consumption; the visual stack uses `visible === true` only.
@@ -201,7 +201,7 @@ export function OverlayView({
   onTransportControlChange,
 }: OverlayViewProps) {
   const [cursorReadout, setCursorReadout] =
-    useState<SourceStripCursorReadout>(DEFAULT_CURSOR);
+    useState<SourceRenderCursorReadout>(DEFAULT_CURSOR);
 
   // Cross-view sync — the inspection cursor / selection. Shared `SyncProvider`
   // state when the global Sync toggle is on, this view's own local state when
@@ -350,7 +350,7 @@ export function OverlayView({
         {/* Row 2: freq axis | content cell | freq minimap | dB axis */}
         <FrequencyAxis />
 
-        {/* Content cell — N stacked SourceStrips + shared view chrome.
+        {/* Content cell — N stacked SourceRenders + shared view chrome.
             Clicking places the inspection cursor (sync-aware); scroll pans,
             ctrl+scroll zooms (the viewport's non-passive wheel listener binds
             to this element's ref). */}
@@ -367,24 +367,21 @@ export function OverlayView({
             </div>
           ) : (
             <>
-              {/* Strip stack — the gesture `transform` maps the committed render
-                  onto the live window during a scroll/zoom, reset to identity on
-                  commit. */}
+              {/* Render stack — each `SourceRender` maps its own held render onto
+                  the live window; this wrapper only carries the blend mode. */}
               <div
                 className="absolute inset-0"
-                style={{
-                  mixBlendMode: "lighten",
-                  transform: viewport.transform,
-                  transformOrigin: "left",
-                }}
+                style={{ mixBlendMode: "lighten" }}
               >
                 {renderableSources.map(({ source, audioData }) => (
-                  <SourceStrip
+                  <SourceRender
                     key={source.id}
                     source={source}
                     audioData={audioData}
                     startMs={startMs}
                     endMs={endMs}
+                    liveStartMs={viewport.startMs}
+                    liveEndMs={viewport.endMs}
                     fftSize={settings.fftSize}
                     hopOverlap={settings.hopOverlap}
                     channelInput={channelInput}

@@ -67,18 +67,24 @@ export const App = () => {
 		return <div style={{ padding: 24, background: "#111", color: "#ccc", minHeight: "100vh" }}>Computing...</div>;
 	}
 
+	if (computeResult.status === "computing" && computeResult.previous === null) {
+		return <div style={{ padding: 24, background: "#111", color: "#ccc", minHeight: "100vh" }}>Computing… {Math.round(computeResult.fraction * 100)}%</div>;
+	}
+
+	const displayResult = computeResult.status === "computing" ? (computeResult.previous ?? computeResult) : computeResult;
+
 	const canvasStyle = { background: "#000", display: "inline-block" };
 
 	return (
 		<div style={{ padding: 24, fontFamily: "monospace", background: "#111", color: "#ccc", minHeight: "100vh" }}>
 			<h2 style={{ color: "#888", marginBottom: 8 }}>Spectrogram</h2>
 			<div style={canvasStyle}>
-				<SpectrogramCanvas computeResult={computeResult} />
+				<SpectrogramCanvas computeResult={displayResult} />
 			</div>
 
 			<h2 style={{ color: "#888", marginTop: 24, marginBottom: 8 }}>Waveform</h2>
 			<div style={canvasStyle}>
-				<WaveformCanvas computeResult={computeResult} color={waveformColor} />
+				<WaveformCanvas computeResult={displayResult} color={waveformColor} />
 			</div>
 
 			<h2 style={{ color: "#888", marginTop: 24, marginBottom: 8 }}>Loudness</h2>
@@ -86,7 +92,7 @@ export const App = () => {
 				<canvas width={width} height={height} style={{ background: "#000" }} />
 				<div style={{ position: "absolute", top: 0, left: 0 }}>
 					<LoudnessCanvas
-						computeResult={computeResult}
+						computeResult={displayResult}
 						rmsEnvelope
 						momentary
 						shortTerm
@@ -98,13 +104,13 @@ export const App = () => {
 
 			<h2 style={{ color: "#888", marginTop: 24, marginBottom: 8 }}>Combined</h2>
 			<div style={{ ...canvasStyle, position: "relative", width, height }}>
-				<SpectrogramCanvas computeResult={computeResult} />
+				<SpectrogramCanvas computeResult={displayResult} />
 				<div style={{ position: "absolute", top: 0, left: 0 }}>
-					<WaveformCanvas computeResult={computeResult} color={waveformColor} />
+					<WaveformCanvas computeResult={displayResult} color={waveformColor} />
 				</div>
 				<div style={{ position: "absolute", top: 0, left: 0 }}>
 					<LoudnessCanvas
-						computeResult={computeResult}
+						computeResult={displayResult}
 						rmsEnvelope
 						momentary
 						shortTerm
