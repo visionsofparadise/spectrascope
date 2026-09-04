@@ -1,48 +1,54 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/ci.yml"
-      - "package.json"
-      - "package-lock.json"
-      - "turbo.json"
-      - "tsconfig.json"
-      - "eslint.config.js"
-      - "apps/**"
-      - "packages/**"
-  pull_request:
-    paths:
-      - ".github/workflows/ci.yml"
-      - "package.json"
-      - "package-lock.json"
-      - "turbo.json"
-      - "tsconfig.json"
-      - "eslint.config.js"
-      - "apps/**"
-      - "packages/**"
-  workflow_dispatch:
+   push:
+      branches: [main]
+      paths:
+         - ".github/workflows/ci.yml"
+         - "package.json"
+         - "package-lock.json"
+         - "turbo.json"
+         - "tsconfig.json"
+         - "eslint.config.js"
+         - "apps/**"
+         - "packages/**"
+   pull_request:
+      paths:
+         - ".github/workflows/ci.yml"
+         - "package.json"
+         - "package-lock.json"
+         - "turbo.json"
+         - "tsconfig.json"
+         - "eslint.config.js"
+         - "apps/**"
+         - "packages/**"
+   workflow_dispatch:
 
 jobs:
-  ci:
-    runs-on: ubuntu-latest
+   ci:
+      runs-on: ubuntu-latest
 
-    steps:
-      - uses: actions/checkout@v4
+      steps:
+         - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22.14"
+         - uses: actions/setup-node@v4
+           with:
+              node-version: "24"
 
-      - name: Install dependencies
-        run: npm ci
+         - name: Pin npm 12
+           run: npm install -g npm@12
 
-      - name: Check (topo-ordered across all workspaces)
-        run: npm run check
+         - name: Enforce install-script allowlist
+           run: npm config set strict-allow-scripts=true --location=project
 
-      - name: Unit (topo-ordered)
-        run: npm run unit
+         - name: Install dependencies
+           run: npm ci
 
-      - name: Build (topo-ordered)
-        run: npm run build
+         - name: Check (topo-ordered across all workspaces)
+           run: npm run check
+
+         - name: Unit (topo-ordered)
+           run: npm run unit
+
+         - name: Build (topo-ordered)
+           run: npm run build
