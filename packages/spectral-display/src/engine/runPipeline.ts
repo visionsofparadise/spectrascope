@@ -1,8 +1,8 @@
-import type { RequiredProperties } from "../utils/RequiredProperties";
-import { resolveConfig, type Dimensions, type SpectralConfig, type SpectralEngine } from "./SpectralEngine";
-import type { LoudnessData } from "./loudness";
 import { computeLoudnessData, WAVEFORM_POINTS_PER_SECOND } from "./loudness";
 import { createScanContext, finalizeScan, scanSamples } from "./sample-scan";
+import { resolveConfig, type Dimensions, type SpectralConfig, type SpectralEngine } from "./SpectralEngine";
+import type { LoudnessData } from "./loudness";
+import type { RequiredProperties } from "../utils/RequiredProperties";
 
 export interface SpectralMetadata {
 	sampleRate: number;
@@ -46,7 +46,12 @@ export interface PipelineResult {
  * Waveform scan density. Loudness pins 500 pts/sec (LUFS window math assumes it);
  * otherwise density is query-derived at ~2 points per output pixel column.
  */
-export function computeSamplesPerPoint(windowSamples: number, width: number, sampleRate: number, loudness: boolean): number {
+export function computeSamplesPerPoint(
+	windowSamples: number,
+	width: number,
+	sampleRate: number,
+	loudness: boolean,
+): number {
 	if (loudness) {
 		return Math.round(sampleRate / WAVEFORM_POINTS_PER_SECOND);
 	}
@@ -80,9 +85,26 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 	const samplesPerPoint = computeSamplesPerPoint(sampleCount, sampleQuery.width, sampleRate, loudness);
 	const pointCount = Math.ceil(sampleCount / samplesPerPoint);
 
-	const scanContext = createScanContext(metadata, pointCount, samplesPerPoint, DEFAULT_CHUNK_SIZE, loudness, computeTruePeak, stereo, channelInput);
+	const scanContext = createScanContext(
+		metadata,
+		pointCount,
+		samplesPerPoint,
+		DEFAULT_CHUNK_SIZE,
+		loudness,
+		computeTruePeak,
+		stereo,
+		channelInput,
+	);
 
-	const spectralContext = spectrogram || ltas ? await engine.prepare(sampleCount, sampleRate, { width: sampleQuery.width, height: sampleQuery.height }, resolvedConfig) : null;
+	const spectralContext =
+		spectrogram || ltas
+			? await engine.prepare(
+					sampleCount,
+					sampleRate,
+					{ width: sampleQuery.width, height: sampleQuery.height },
+					resolvedConfig,
+				)
+			: null;
 
 	let offset = 0;
 
@@ -96,7 +118,9 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 
 			const chunkFrames = Math.min(DEFAULT_CHUNK_SIZE, sampleCount - offset);
 
-			const channelBuffers = await Promise.all(Array.from({ length: channelCount }, (_, ch) => readSamples(ch, startSample + offset, chunkFrames)));
+			const channelBuffers = await Promise.all(
+				Array.from({ length: channelCount }, (_, ch) => readSamples(ch, startSample + offset, chunkFrames)),
+			);
 
 			scanSamples(channelBuffers, chunkFrames, scanContext);
 
@@ -122,7 +146,9 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 
 	const { overallPeak, overallRms, truePeak } = finalizeScan(scanContext);
 
-	const loudnessData = loudness ? computeLoudnessData(scanContext, overallPeak, overallRms, computeTruePeak ? truePeak : undefined) : null;
+	const loudnessData = loudness
+		? computeLoudnessData(scanContext, overallPeak, overallRms, computeTruePeak ? truePeak : undefined)
+		: null;
 
 	let spectrogramTexture: GPUTexture | null = null;
 	let ltasResult: Float32Array | null = null;

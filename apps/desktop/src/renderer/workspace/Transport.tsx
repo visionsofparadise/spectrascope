@@ -1,7 +1,7 @@
-import { useCallback, useRef } from "react";
-import type { ReactNode } from "react";
 import { Icon } from "@iconify/react";
+import { useCallback, useRef } from "react";
 import { IconButton } from "../components/IconButton";
+import type { ReactNode } from "react";
 
 /**
  * Cursor readout — the time / frequency / amplitude values a view publishes to
@@ -84,9 +84,7 @@ function formatTimecode(sec: number): string {
 	const mins = Math.floor(totalSec / 60);
 	const secs = totalSec % 60;
 
-	return `${mins.toString().padStart(2, "0")}:${secs
-		.toString()
-		.padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
+	return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
 }
 
 /**
@@ -128,11 +126,7 @@ function MediaButton({
 			}`}
 			aria-label={label}
 		>
-			<span
-				className={`flex items-center justify-center ${
-					active && !disabled ? "bg-primary" : ""
-				}`}
-			>
+			<span className={`flex items-center justify-center ${active && !disabled ? "bg-primary" : ""}`}>
 				<Icon icon={icon} width={large ? 24 : 17} height={large ? 24 : 17} />
 			</span>
 		</button>
@@ -172,8 +166,7 @@ function ReadoutPanel({
 }) {
 	const headClass =
 		"font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-right text-chrome-text-dim";
-	const rowLabelClass =
-		"font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-dim";
+	const rowLabelClass = "font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-dim";
 	const valueClass = `font-technical text-[length:var(--text-sm)] tabular-nums text-right ${
 		disabled ? "text-chrome-text-dim" : "text-chrome-text"
 	}`;
@@ -292,22 +285,11 @@ function VolumeSlider({
 	);
 
 	const pct = volume * 100;
-	const glyph =
-		volume === 0
-			? "lucide:volume-x"
-			: volume < 0.5
-				? "lucide:volume-1"
-				: "lucide:volume-2";
+	const glyph = volume === 0 ? "lucide:volume-x" : volume < 0.5 ? "lucide:volume-1" : "lucide:volume-2";
 
 	return (
 		<div className="flex items-center gap-2">
-			<Icon
-				icon={glyph}
-				width={16}
-				height={16}
-				className="shrink-0 text-chrome-text-secondary"
-				aria-hidden="true"
-			/>
+			<Icon icon={glyph} width={16} height={16} className="shrink-0 text-chrome-text-secondary" aria-hidden="true" />
 			<div
 				ref={trackRef}
 				role="slider"
@@ -375,15 +357,11 @@ export function Transport({ control, volume, onVolumeChange, viewControls }: Tra
 	} = control;
 
 	const timecodeMainClass = disabled ? "text-chrome-text-dim" : "text-chrome-text";
-	const timecodeSecondaryClass = disabled
-		? "text-chrome-text-dim"
-		: "text-chrome-text-secondary";
+	const timecodeSecondaryClass = disabled ? "text-chrome-text-dim" : "text-chrome-text-secondary";
 
 	// Selection In/Out — em-dash when the active view publishes no selection.
-	const selectionInLabel =
-		selectionInSec !== undefined ? formatTimecode(selectionInSec) : "—";
-	const selectionOutLabel =
-		selectionOutSec !== undefined ? formatTimecode(selectionOutSec) : "—";
+	const selectionInLabel = selectionInSec !== undefined ? formatTimecode(selectionInSec) : "—";
+	const selectionOutLabel = selectionOutSec !== undefined ? formatTimecode(selectionOutSec) : "—";
 
 	return (
 		<div className="flex h-full items-center bg-void px-4">
@@ -411,14 +389,7 @@ export function Transport({ control, volume, onVolumeChange, viewControls }: Tra
 						<MediaButton icon="lucide:chevrons-right" label="Jump forward" disabled={disabled} />
 						<MediaButton icon="lucide:skip-forward" label="Skip to end" disabled={disabled} />
 					</div>
-					<IconButton
-						icon="lucide:repeat"
-						label="Loop"
-						size={16}
-						variant="ghost"
-						dim
-						disabled={disabled}
-					/>
+					<IconButton icon="lucide:repeat" label="Loop" size={16} variant="ghost" dim disabled={disabled} />
 				</div>
 
 				{/* Speed + timecode. The speed control is a visual stub (no

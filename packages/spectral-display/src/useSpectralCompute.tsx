@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { type Dimensions, type SpectralConfig, SpectralEngine } from "./engine/SpectralEngine";
 import { getDevice } from "./engine/device";
+import {
+	type PipelineOptions,
+	type ResolvedPipelineOptions,
+	runPipeline,
+	type SampleQuery,
+	type SpectralMetadata,
+} from "./engine/runPipeline";
+import { type Dimensions, type SpectralConfig, SpectralEngine } from "./engine/SpectralEngine";
 import type { LoudnessData } from "./engine/loudness";
-import { type PipelineOptions, type ResolvedPipelineOptions, runPipeline, type SampleQuery, type SpectralMetadata } from "./engine/runPipeline";
 
 export interface SpectralQuery extends Dimensions {
 	startMs: number;
@@ -56,6 +62,7 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 	const readSamplesRef = useRef(readSamples);
 
 	readSamplesRef.current = readSamples;
+
 	const [result, setResult] = useState<ComputeResult>(EMPTY_RESULT);
 
 	const configKey = JSON.stringify(config ?? null);

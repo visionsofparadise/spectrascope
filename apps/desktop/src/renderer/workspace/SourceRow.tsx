@@ -1,17 +1,12 @@
-import { useEffect, useRef, useState } from "react";
 import { Icon } from "@iconify/react";
-import type { Source } from "./source";
-import type { SourceStreamStatus } from "../audio/useSourceStreams";
-import type { LayerColor } from "./layers";
+import { useEffect, useRef, useState } from "react";
+import { cn } from "../cn";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "../components/DropdownMenu";
 import { IconButton } from "../components/IconButton";
 import { LayerColorPicker } from "./LayerColorPicker";
-import {
-	DropdownMenu,
-	DropdownMenuTrigger,
-	DropdownMenuContent,
-	DropdownMenuItem,
-} from "../components/DropdownMenu";
-import { cn } from "../cn";
+import type { LayerColor } from "./layers";
+import type { Source } from "./source";
+import type { SourceStreamStatus } from "../audio/useSourceStreams";
 
 interface SourceRowProps {
 	readonly source: Source;
@@ -60,14 +55,7 @@ function fileNameOf(source: Source): string {
  * owns the background). The ⋯ actions menu sits at the end of the utility
  * row, after Solo.
  */
-export function SourceRow({
-	source,
-	status,
-	onChange,
-	onRemove,
-	active,
-	onActivate,
-}: SourceRowProps) {
+export function SourceRow({ source, status, onChange, onRemove, active, onActivate }: SourceRowProps) {
 	const [pickerOpen, setPickerOpen] = useState(false);
 
 	const rowRef = useRef<HTMLDivElement | null>(null);
@@ -190,8 +178,7 @@ export function SourceRow({
 						style={{ direction: "rtl", textAlign: "left" }}
 						title={source.audioFilePath}
 					>
-						‎
-						{source.audioFilePath || " "}
+						‎{source.audioFilePath || " "}
 					</span>
 				</div>
 
@@ -254,12 +241,7 @@ export function SourceRow({
 								className="flex items-center justify-center px-1 py-1.5 text-chrome-text-secondary outline-none hover:text-chrome-text"
 							>
 								<span className="flex items-center justify-center bg-chrome-raised">
-									<Icon
-										icon="lucide:more-horizontal"
-										width={18}
-										height={18}
-										aria-hidden="true"
-									/>
+									<Icon icon="lucide:more-horizontal" width={18} height={18} aria-hidden="true" />
 								</span>
 							</button>
 						</DropdownMenuTrigger>

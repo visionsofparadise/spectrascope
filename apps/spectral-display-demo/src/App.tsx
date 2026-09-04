@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { LoudnessCanvas, SpectrogramCanvas, WaveformCanvas, useSpectralCompute } from "spectral-display";
-import type { SpectralConfig, SpectralOptions } from "spectral-display";
 import { loadAudio, type AudioData } from "./audio-loader";
+import type { SpectralConfig, SpectralOptions } from "spectral-display";
 
 const WIDTH = 800;
 const HEIGHT = 200;
@@ -60,7 +60,11 @@ export const App = () => {
 	}
 
 	if (computeResult.status === "error") {
-		return <div style={{ padding: 24, background: "#111", color: "#f44", minHeight: "100vh" }}>{computeResult.error.message}</div>;
+		return (
+			<div style={{ padding: 24, background: "#111", color: "#f44", minHeight: "100vh" }}>
+				{computeResult.error.message}
+			</div>
+		);
 	}
 
 	if (computeResult.status === "idle") {
@@ -68,10 +72,15 @@ export const App = () => {
 	}
 
 	if (computeResult.status === "computing" && computeResult.previous === null) {
-		return <div style={{ padding: 24, background: "#111", color: "#ccc", minHeight: "100vh" }}>Computing… {Math.round(computeResult.fraction * 100)}%</div>;
+		return (
+			<div style={{ padding: 24, background: "#111", color: "#ccc", minHeight: "100vh" }}>
+				Computing… {Math.round(computeResult.fraction * 100)}%
+			</div>
+		);
 	}
 
-	const displayResult = computeResult.status === "computing" ? (computeResult.previous ?? computeResult) : computeResult;
+	const displayResult =
+		computeResult.status === "computing" ? (computeResult.previous ?? computeResult) : computeResult;
 
 	const canvasStyle = { background: "#000", display: "inline-block" };
 
@@ -91,14 +100,7 @@ export const App = () => {
 			<div style={{ ...canvasStyle, position: "relative", width, height }}>
 				<canvas width={width} height={height} style={{ background: "#000" }} />
 				<div style={{ position: "absolute", top: 0, left: 0 }}>
-					<LoudnessCanvas
-						computeResult={displayResult}
-						rmsEnvelope
-						momentary
-						shortTerm
-						integrated
-						truePeak
-					/>
+					<LoudnessCanvas computeResult={displayResult} rmsEnvelope momentary shortTerm integrated truePeak />
 				</div>
 			</div>
 
@@ -109,14 +111,7 @@ export const App = () => {
 					<WaveformCanvas computeResult={displayResult} color={waveformColor} />
 				</div>
 				<div style={{ position: "absolute", top: 0, left: 0 }}>
-					<LoudnessCanvas
-						computeResult={displayResult}
-						rmsEnvelope
-						momentary
-						shortTerm
-						integrated
-						truePeak
-					/>
+					<LoudnessCanvas computeResult={displayResult} rmsEnvelope momentary shortTerm integrated truePeak />
 				</div>
 			</div>
 		</div>

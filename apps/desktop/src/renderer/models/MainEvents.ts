@@ -1,7 +1,7 @@
 import EventEmitter from "events";
-import type { IpcRendererEvent } from "electron";
-import type { MainEventMap } from "../../shared/utilities/emitToRenderer";
 import type { Main } from "./Main";
+import type { MainEventMap } from "../../shared/utilities/emitToRenderer";
+import type { IpcRendererEvent } from "electron";
 
 /**
  * Wraps the IPC event bridge in a normal Node EventEmitter so renderer code

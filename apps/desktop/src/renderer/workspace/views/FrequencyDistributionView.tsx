@@ -1,20 +1,17 @@
 import { useEffect, useMemo } from "react";
 import { getBandFrequencies, useSpectralCompute } from "spectral-display";
-import type { ChannelInput, SpectralOptions } from "spectral-display";
-import type { Source } from "../source";
 import { LinearDbAxis } from "../spectral/Axes";
 import { ComputeProgress } from "../spectral/ComputeProgress";
-import {
-	useFirstComputeProgress,
-	useReportComputeState,
-} from "../spectral/firstComputeProgress";
-import type { ComputeState } from "../spectral/firstComputeProgress";
-import type { TransportControl } from "../Transport";
-import type { AudioData } from "../spectral/types";
-import type { ViewControlSettings } from "../viewSettings";
+import { useFirstComputeProgress, useReportComputeState } from "../spectral/firstComputeProgress";
 import { buildPolylineSegments } from "./chartTrace";
 import { resolveVisibleSourceAudio } from "./viewAudio";
+import type { Source } from "../source";
 import type { SourceWithAudio } from "./viewAudio";
+import type { ComputeState } from "../spectral/firstComputeProgress";
+import type { AudioData } from "../spectral/types";
+import type { TransportControl } from "../Transport";
+import type { ViewControlSettings } from "../viewSettings";
+import type { ChannelInput, SpectralOptions } from "spectral-display";
 
 /**
  * FrequencyDistributionView — per-source long-term-average-spectrum (LTAS) lines
@@ -127,7 +124,14 @@ interface SourceLtasTraceProps {
  * (or one whose clip is too short for the FFT — the engine throws, leaving
  * `ltas` null) renders nothing.
  */
-function SourceLtasTrace({ source, audioData, fftSize, hopOverlap, channelInput, onComputeState }: SourceLtasTraceProps) {
+function SourceLtasTrace({
+	source,
+	audioData,
+	fftSize,
+	hopOverlap,
+	channelInput,
+	onComputeState,
+}: SourceLtasTraceProps) {
 	const spectralOptions = useMemo<SpectralOptions>(
 		() => ({
 			metadata: {
@@ -251,11 +255,7 @@ function ChartCanvas({ renderableSources, fftSize, hopOverlap, channelInput, onC
 			    pass. `preserveAspectRatio="none"` lets the chart stretch to fill
 			    the cell; `vectorEffect="non-scaling-stroke"` keeps stroke width
 			    uniform under non-uniform scaling. */}
-			<svg
-				className="absolute inset-0 h-full w-full"
-				viewBox="0 0 1 1"
-				preserveAspectRatio="none"
-			>
+			<svg className="absolute inset-0 h-full w-full" viewBox="0 0 1 1" preserveAspectRatio="none">
 				{renderableSources.map(({ source, audioData }) => (
 					<SourceLtasTrace
 						key={source.id}
@@ -289,7 +289,11 @@ function HorizontalFrequencyAxis() {
 				const xPct = freqToX(tick.hz) * 100;
 
 				return (
-					<div key={tick.hz} className="absolute top-0" style={{ left: `${xPct}%`, transform: "translateX(-50%)" }}>
+					<div
+						key={tick.hz}
+						className="absolute top-0"
+						style={{ left: `${xPct}%`, transform: "translateX(-50%)" }}
+					>
 						<span className="absolute top-0 left-1/2 h-1.5 w-px -translate-x-1/2 bg-chrome-border" />
 						<span className="absolute top-2 left-1/2 -translate-x-1/2 whitespace-nowrap">{tick.label}</span>
 					</div>
@@ -299,11 +303,14 @@ function HorizontalFrequencyAxis() {
 	);
 }
 
-export function FrequencyDistributionView({ sources, sourceAudio, settings, channelInput, onTransportControlChange }: FrequencyDistributionViewProps) {
-	const renderableSources = useMemo(
-		() => resolveVisibleSourceAudio(sources, sourceAudio),
-		[sources, sourceAudio],
-	);
+export function FrequencyDistributionView({
+	sources,
+	sourceAudio,
+	settings,
+	channelInput,
+	onTransportControlChange,
+}: FrequencyDistributionViewProps) {
+	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
 	// First-compute progress aggregated across the per-source LTAS traces — a
 	// shimmer + mean-fraction bar over the chart while any source first-computes.
@@ -338,9 +345,7 @@ export function FrequencyDistributionView({ sources, sourceAudio, settings, chan
 									channelInput={channelInput}
 									onComputeState={progress.handleComputeState}
 								/>
-								{progress.firstComputing && (
-									<ComputeProgress fraction={progress.fraction} />
-								)}
+								{progress.firstComputing && <ComputeProgress fraction={progress.fraction} />}
 							</>
 						)}
 					</div>

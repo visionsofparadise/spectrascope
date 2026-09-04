@@ -1,9 +1,9 @@
-import type { ChannelInput } from "spectral-display";
 import { Select } from "../components/Select";
-import type { SourceStreamStatus } from "../audio/useSourceStreams";
 import { SourcesPanel } from "./SourcesPanel";
 import type { Source } from "./source";
 import type { ViewId } from "./Workspace";
+import type { SourceStreamStatus } from "../audio/useSourceStreams";
+import type { ChannelInput } from "spectral-display";
 
 interface SidebarProps {
 	readonly activeView: ViewId;
@@ -85,9 +85,7 @@ export function Sidebar({
 	return (
 		<div className="flex h-full flex-col bg-void">
 			<div className="flex flex-col gap-1.5 px-4 py-3">
-				<span className="font-technical text-xs uppercase tracking-[0.08em] text-chrome-text-secondary">
-					View
-				</span>
+				<span className="font-technical text-xs uppercase tracking-[0.08em] text-chrome-text-secondary">View</span>
 				<Select
 					value={activeView}
 					options={VIEW_OPTIONS}
@@ -115,9 +113,7 @@ export function Sidebar({
 			</div>
 
 			<div className="flex flex-col gap-1.5 px-4 py-3">
-				<span className="font-technical text-xs uppercase tracking-[0.08em] text-chrome-text-secondary">
-					Rate
-				</span>
+				<span className="font-technical text-xs uppercase tracking-[0.08em] text-chrome-text-secondary">Rate</span>
 				<Select
 					value={canonicalSampleRate === null ? RATE_UNSET_LABEL : String(canonicalSampleRate)}
 					options={rateOptions}

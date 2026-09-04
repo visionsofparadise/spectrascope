@@ -1,10 +1,10 @@
-import type { QueryClient } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
-import type { Logger } from "../../shared/models/Logger";
 import { main } from "../models/Main";
 import { ProxyStore } from "../models/ProxyStore/ProxyStore";
 import { loadAppState } from "../models/State/App";
 import { AppLayout } from "./Layout";
+import type { Logger } from "../../shared/models/Logger";
+import type { QueryClient } from "@tanstack/react-query";
 
 const appStore = new ProxyStore();
 

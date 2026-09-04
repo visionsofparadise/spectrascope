@@ -7,7 +7,9 @@ describe("computeSamplesPerPoint", () => {
 	it("pins density to 500 pts/sec when loudness is enabled", () => {
 		const sampleRate = 48000;
 
-		expect(computeSamplesPerPoint(sampleRate * 10, 800, sampleRate, true)).toBe(Math.round(sampleRate / WAVEFORM_POINTS_PER_SECOND));
+		expect(computeSamplesPerPoint(sampleRate * 10, 800, sampleRate, true)).toBe(
+			Math.round(sampleRate / WAVEFORM_POINTS_PER_SECOND),
+		);
 	});
 
 	it("derives ~2 points per output pixel column when loudness is off", () => {

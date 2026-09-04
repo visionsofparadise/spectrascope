@@ -35,7 +35,12 @@ function lufsToY(lufs: number, canvasHeight: number): number {
 	return canvasHeight / 2 - amplitude * (canvasHeight / 2);
 }
 
-function drawRmsEnvelope(loudness: LoudnessData, color: string, dimensions: Dimensions, context: CanvasRenderingContext2D): void {
+function drawRmsEnvelope(
+	loudness: LoudnessData,
+	color: string,
+	dimensions: Dimensions,
+	context: CanvasRenderingContext2D,
+): void {
 	const { rmsEnvelope, pointCount } = loudness;
 	const { width, height } = dimensions;
 
@@ -83,7 +88,13 @@ function drawRmsEnvelope(loudness: LoudnessData, color: string, dimensions: Dime
 	context.fill();
 }
 
-function drawLufsLine(lufsData: Float32Array, pointCount: number, color: string, dimensions: Dimensions, context: CanvasRenderingContext2D): void {
+function drawLufsLine(
+	lufsData: Float32Array,
+	pointCount: number,
+	color: string,
+	dimensions: Dimensions,
+	context: CanvasRenderingContext2D,
+): void {
 	const { width, height } = dimensions;
 
 	if (pointCount === 0) return;
@@ -104,7 +115,12 @@ function drawLufsLine(lufsData: Float32Array, pointCount: number, color: string,
 	context.stroke();
 }
 
-function drawAmplitudeLine(amplitude: number, color: string, dimensions: Dimensions, context: CanvasRenderingContext2D): void {
+function drawAmplitudeLine(
+	amplitude: number,
+	color: string,
+	dimensions: Dimensions,
+	context: CanvasRenderingContext2D,
+): void {
 	const { width, height } = dimensions;
 
 	if (amplitude <= 0) return;
@@ -121,7 +137,12 @@ function drawAmplitudeLine(amplitude: number, color: string, dimensions: Dimensi
 	context.setLineDash([]);
 }
 
-function drawIntegratedLine(integratedLufs: number, color: string, dimensions: Dimensions, context: CanvasRenderingContext2D): void {
+function drawIntegratedLine(
+	integratedLufs: number,
+	color: string,
+	dimensions: Dimensions,
+	context: CanvasRenderingContext2D,
+): void {
 	const { width, height } = dimensions;
 
 	if (!isFinite(integratedLufs) || integratedLufs < -60) return;
@@ -138,7 +159,15 @@ function drawIntegratedLine(integratedLufs: number, color: string, dimensions: D
 	context.setLineDash([]);
 }
 
-export const LoudnessCanvas: React.FC<LoudnessCanvasProps> = ({ computeResult, rmsEnvelope = true, momentary = false, shortTerm = false, integrated = true, truePeak = false, colors }) => {
+export const LoudnessCanvas: React.FC<LoudnessCanvasProps> = ({
+	computeResult,
+	rmsEnvelope = true,
+	momentary = false,
+	shortTerm = false,
+	integrated = true,
+	truePeak = false,
+	colors,
+}) => {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 
 	const resolvedColors = {
@@ -174,11 +203,23 @@ export const LoudnessCanvas: React.FC<LoudnessCanvasProps> = ({ computeResult, r
 		}
 
 		if (momentary) {
-			drawLufsLine(loudnessData.momentaryLufs, loudnessData.pointCount, resolvedColors.momentary, dimensions, context);
+			drawLufsLine(
+				loudnessData.momentaryLufs,
+				loudnessData.pointCount,
+				resolvedColors.momentary,
+				dimensions,
+				context,
+			);
 		}
 
 		if (shortTerm) {
-			drawLufsLine(loudnessData.shortTermLufs, loudnessData.pointCount, resolvedColors.shortTerm, dimensions, context);
+			drawLufsLine(
+				loudnessData.shortTermLufs,
+				loudnessData.pointCount,
+				resolvedColors.shortTerm,
+				dimensions,
+				context,
+			);
 		}
 
 		if (integrated) {
@@ -188,15 +229,23 @@ export const LoudnessCanvas: React.FC<LoudnessCanvasProps> = ({ computeResult, r
 		if (truePeak && loudnessData.truePeak !== undefined) {
 			drawAmplitudeLine(loudnessData.truePeak, resolvedColors.truePeak, dimensions, context);
 		}
-	}, [computeResult, width, height, rmsEnvelope, momentary, shortTerm, integrated, truePeak, resolvedColors.rms, resolvedColors.momentary, resolvedColors.shortTerm, resolvedColors.integrated, resolvedColors.truePeak]);
+	}, [
+		computeResult,
+		width,
+		height,
+		rmsEnvelope,
+		momentary,
+		shortTerm,
+		integrated,
+		truePeak,
+		resolvedColors.rms,
+		resolvedColors.momentary,
+		resolvedColors.shortTerm,
+		resolvedColors.integrated,
+		resolvedColors.truePeak,
+	]);
 
 	if (computeResult.status !== "ready" || !computeResult.loudnessData) return null;
 
-	return (
-		<canvas
-			ref={canvasRef}
-			width={width}
-			height={height}
-		/>
-	);
+	return <canvas ref={canvasRef} width={width} height={height} />;
 };

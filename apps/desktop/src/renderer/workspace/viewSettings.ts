@@ -13,13 +13,7 @@
 export type GridMode = "freq" | "amp";
 
 /** The six loudness metrics the Loudness view plots. */
-export type LoudnessMetric =
-	| "truePeak"
-	| "samplePeak"
-	| "integrated"
-	| "momentary"
-	| "shortTerm"
-	| "rms";
+export type LoudnessMetric = "truePeak" | "samplePeak" | "integrated" | "momentary" | "shortTerm" | "rms";
 
 export interface MetricSpec {
 	readonly id: LoudnessMetric;

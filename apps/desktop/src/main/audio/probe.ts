@@ -14,9 +14,13 @@ export const probeAudioFile = async (filePath: string): Promise<AudioProbe> => {
 	const { sampleRate, numberOfChannels, duration, container, codec } = format;
 
 	if (sampleRate === undefined) throw new Error(`Probe of "${filePath}" reported no sampleRate`);
+
 	if (numberOfChannels === undefined) throw new Error(`Probe of "${filePath}" reported no numberOfChannels`);
+
 	if (duration === undefined) throw new Error(`Probe of "${filePath}" reported no duration`);
+
 	if (container === undefined) throw new Error(`Probe of "${filePath}" reported no container`);
+
 	if (codec === undefined) throw new Error(`Probe of "${filePath}" reported no codec`);
 
 	return {

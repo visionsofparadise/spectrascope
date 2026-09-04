@@ -1,5 +1,5 @@
-import type fs from "node:fs/promises";
 import { parseWavHeader, readFrames, type WavHeader } from "./wavReader";
+import type fs from "node:fs/promises";
 
 export interface StreamInput {
 	readonly pcmPath: string;
@@ -69,7 +69,10 @@ const deriveFoldCoefficients = (channelCount: number): Float32Array => {
  * caller owns the returned handles' lifecycle; on any failure this closes the
  * handles it opened so a rejected resolve never leaks descriptors.
  */
-export const resolveStream = async (spec: StreamSpec, openHandle: (pcmPath: string) => Promise<fs.FileHandle>): Promise<ResolvedStream> => {
+export const resolveStream = async (
+	spec: StreamSpec,
+	openHandle: (pcmPath: string) => Promise<fs.FileHandle>,
+): Promise<ResolvedStream> => {
 	if (spec.inputs.length === 0) throw new Error("Cannot resolve a stream with no inputs");
 
 	const fileHandles = await Promise.all(spec.inputs.map((input) => openHandle(input.pcmPath)));
@@ -96,7 +99,9 @@ export const resolveStream = async (spec: StreamSpec, openHandle: (pcmPath: stri
 				sampleRate = header.sampleRate;
 				firstChannelCount = header.channelCount;
 			} else if (header.sampleRate !== sampleRate) {
-				throw new Error(`Stream input "${input.pcmPath}" sample rate ${String(header.sampleRate)} ≠ ${String(sampleRate)} (all inputs must share the canonical rate)`);
+				throw new Error(
+					`Stream input "${input.pcmPath}" sample rate ${String(header.sampleRate)} ≠ ${String(sampleRate)} (all inputs must share the canonical rate)`,
+				);
 			}
 
 			const offsetFrames = Math.round((input.offsetMs * header.sampleRate) / 1000);
@@ -122,7 +127,16 @@ export const resolveStream = async (spec: StreamSpec, openHandle: (pcmPath: stri
 	}
 };
 
-const accumulateInput = (output: Float32Array, outputChannels: number, outputFrameStart: number, frames: Float32Array, inputChannels: number, frameCount: number, gain: 1 | -1, foldCoefficients: Float32Array | null): void => {
+const accumulateInput = (
+	output: Float32Array,
+	outputChannels: number,
+	outputFrameStart: number,
+	frames: Float32Array,
+	inputChannels: number,
+	frameCount: number,
+	gain: 1 | -1,
+	foldCoefficients: Float32Array | null,
+): void => {
 	if (foldCoefficients === null) {
 		for (let frame = 0; frame < frameCount; frame++) {
 			const inputBase = frame * inputChannels;
@@ -165,7 +179,11 @@ const accumulateInput = (output: Float32Array, outputChannels: number, outputFra
  * (no reliance on `readFrames` zero-padding beyond the file); the sum is not
  * normalized.
  */
-export const renderRange = async (resolved: ResolvedStream, frameOffset: number, frameCount: number): Promise<Float32Array> => {
+export const renderRange = async (
+	resolved: ResolvedStream,
+	frameOffset: number,
+	frameCount: number,
+): Promise<Float32Array> => {
 	const { outputChannels, inputs } = resolved;
 	const output = new Float32Array(frameCount * outputChannels);
 
@@ -181,7 +199,16 @@ export const renderRange = async (resolved: ResolvedStream, frameOffset: number,
 			const overlapCount = overlapEnd - overlapStart;
 			const frames = await readFrames(input.fileHandle, input.header, inputReadOffset, overlapCount);
 
-			accumulateInput(output, outputChannels, overlapStart - frameOffset, frames, input.header.channelCount, overlapCount, input.gain, input.foldCoefficients);
+			accumulateInput(
+				output,
+				outputChannels,
+				overlapStart - frameOffset,
+				frames,
+				input.header.channelCount,
+				overlapCount,
+				input.gain,
+				input.foldCoefficients,
+			);
 		}),
 	);
 

@@ -22,16 +22,20 @@ const readExact = async (fileHandle: fs.FileHandle, position: number, length: nu
 
 	const { bytesRead } = await fileHandle.read(buffer, 0, length, position);
 
-	if (bytesRead < length) throw new Error(`Expected ${String(length)} bytes at offset ${String(position)} but read ${String(bytesRead)}`);
+	if (bytesRead < length)
+		throw new Error(`Expected ${String(length)} bytes at offset ${String(position)} but read ${String(bytesRead)}`);
 
 	return buffer;
 };
 
 const resolveFormat = (formatCode: number): "int" | "float" => {
 	if (formatCode === WAVE_FORMAT_PCM) return "int";
+
 	if (formatCode === WAVE_FORMAT_IEEE_FLOAT) return "float";
 
-	throw new Error(`Unsupported WAV audio format code ${String(formatCode)} (expected 1 = PCM int, 3 = IEEE float, or 0xFFFE resolving to one)`);
+	throw new Error(
+		`Unsupported WAV audio format code ${String(formatCode)} (expected 1 = PCM int, 3 = IEEE float, or 0xFFFE resolving to one)`,
+	);
 };
 
 export const parseWavHeader = async (fileHandle: fs.FileHandle): Promise<WavHeader> => {
@@ -40,6 +44,7 @@ export const parseWavHeader = async (fileHandle: fs.FileHandle): Promise<WavHead
 	const waveId = riff.toString("ascii", 8, 12);
 
 	if (riffId !== "RIFF" && riffId !== "RF64") throw new Error(`Not a RIFF/RF64 file (leading id "${riffId}")`);
+
 	if (waveId !== "WAVE") throw new Error(`Not a WAVE file (form type "${waveId}")`);
 
 	let ds64DataSize: number | null = null;
@@ -71,7 +76,8 @@ export const parseWavHeader = async (fileHandle: fs.FileHandle): Promise<WavHead
 			bitsPerSample = body.readUInt16LE(14);
 
 			if (formatCode === WAVE_FORMAT_EXTENSIBLE) {
-				if (chunkSize < 40) throw new Error(`WAVE_FORMAT_EXTENSIBLE fmt chunk too small (${String(chunkSize)} bytes)`);
+				if (chunkSize < 40)
+					throw new Error(`WAVE_FORMAT_EXTENSIBLE fmt chunk too small (${String(chunkSize)} bytes)`);
 
 				formatCode = body.readUInt16LE(24);
 			}
@@ -93,7 +99,16 @@ export const parseWavHeader = async (fileHandle: fs.FileHandle): Promise<WavHead
 
 			const frameCount = Math.floor(dataByteLength / (channelCount * bytesPerSample));
 
-			return { format, sampleRate, channelCount, bitsPerSample, bytesPerSample, dataOffset: bodyOffset, dataByteLength, frameCount };
+			return {
+				format,
+				sampleRate,
+				channelCount,
+				bitsPerSample,
+				bytesPerSample,
+				dataOffset: bodyOffset,
+				dataByteLength,
+				frameCount,
+			};
 		}
 
 		position = bodyOffset + chunkSize + (chunkSize % 2);
@@ -104,12 +119,18 @@ const readSample = (buffer: Buffer, offset: number, header: WavHeader): number =
 	if (header.format === "float") return buffer.readFloatLE(offset);
 
 	if (header.bitsPerSample === 16) return buffer.readInt16LE(offset) / 32768;
+
 	if (header.bitsPerSample === 24) return buffer.readIntLE(offset, 3) / 8388608;
 
 	return buffer.readInt32LE(offset) / 2147483648;
 };
 
-export const readFrames = async (fileHandle: fs.FileHandle, header: WavHeader, frameOffset: number, frameCount: number): Promise<Float32Array> => {
+export const readFrames = async (
+	fileHandle: fs.FileHandle,
+	header: WavHeader,
+	frameOffset: number,
+	frameCount: number,
+): Promise<Float32Array> => {
 	const clampedOffset = Math.max(0, Math.min(frameOffset, header.frameCount));
 	const clampedCount = Math.max(0, Math.min(frameCount, header.frameCount - clampedOffset));
 

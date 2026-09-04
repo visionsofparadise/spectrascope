@@ -1,14 +1,9 @@
 import { Icon } from "@iconify/react";
 import { Knob } from "../components/Knob";
 import { Select } from "../components/Select";
-import type { ViewId } from "./Workspace";
-import {
-	FFT_OPTIONS,
-	HOP_LABELS,
-	HOP_OPTIONS,
-	METRICS,
-} from "./viewSettings";
+import { FFT_OPTIONS, HOP_LABELS, HOP_OPTIONS, METRICS } from "./viewSettings";
 import type { ViewControlSettings } from "./viewSettings";
+import type { ViewId } from "./Workspace";
 
 interface TransportViewControlsProps {
 	readonly activeView: ViewId;
@@ -80,9 +75,7 @@ function GridModeToggle({
 			aria-pressed={active}
 			onClick={onClick}
 			className={`flex items-center justify-center px-1 py-1.5 ${
-				active
-					? "text-chrome-text"
-					: "text-chrome-text-secondary hover:text-chrome-text"
+				active ? "text-chrome-text" : "text-chrome-text-secondary hover:text-chrome-text"
 			}`}
 		>
 			<Icon icon={icon} width={12} height={12} aria-hidden="true" />
@@ -115,11 +108,7 @@ function SyncToggle({
 			}}
 			className="flex shrink-0 items-center px-2 py-1 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text-secondary hover:text-chrome-text"
 		>
-			<span
-				className={`flex items-center gap-1 ${
-					enabled ? "bg-secondary text-chrome-text" : ""
-				}`}
-			>
+			<span className={`flex items-center gap-1 ${enabled ? "bg-secondary text-chrome-text" : ""}`}>
 				<Icon icon="lucide:link" width={14} height={14} aria-hidden="true" />
 				<span>Sync</span>
 			</span>
@@ -152,10 +141,7 @@ export function TransportViewControls({
 	onSyncEnabledChange,
 }: TransportViewControlsProps) {
 	const isSpectralGroup =
-		activeView === "overlay" ||
-		activeView === "slider" ||
-		activeView === "difference" ||
-		activeView === "sum";
+		activeView === "overlay" || activeView === "slider" || activeView === "difference" || activeView === "sum";
 
 	if (isSpectralGroup) {
 		return (

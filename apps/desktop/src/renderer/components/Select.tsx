@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "@iconify/react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../cn";
 
 interface SelectOption {
@@ -121,12 +121,7 @@ export function Select({
 				className="flex w-full items-center justify-between gap-2 border border-chrome-border bg-void px-2 py-1.5 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text hover:border-chrome-text-dim"
 			>
 				<span>{displayLabel}</span>
-				<Icon
-					icon="lucide:chevron-down"
-					width={14}
-					height={14}
-					className="shrink-0 text-chrome-text-dim"
-				/>
+				<Icon icon="lucide:chevron-down" width={14} height={14} className="shrink-0 text-chrome-text-dim" />
 			</button>
 		) : (
 			<button

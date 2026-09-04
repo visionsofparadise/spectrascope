@@ -189,7 +189,10 @@ describe("computeColumnRange", () => {
 				}
 			}
 
-			expect(missed, `touched column ${missed} outside [${colFirst}, ${colLast}] at ${totalFrames}/${width} base ${batchBase}`).toBe(-1);
+			expect(
+				missed,
+				`touched column ${missed} outside [${colFirst}, ${colLast}] at ${totalFrames}/${width} base ${batchBase}`,
+			).toBe(-1);
 		}
 	});
 

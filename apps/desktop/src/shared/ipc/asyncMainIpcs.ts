@@ -9,14 +9,14 @@ import { StatMainIpc } from "./FileSystem/stat/Main";
 import { UnwatchFileMainIpc } from "./FileSystem/unwatchFile/Main";
 import { WatchFileMainIpc } from "./FileSystem/watchFile/Main";
 import { WriteFileMainIpc } from "./FileSystem/writeFile/Main";
+import { PrepareSourceMainIpc } from "./Source/prepareSource/Main";
+import { RegisterStreamMainIpc } from "./Stream/registerStream/Main";
 import { GetAllDisplaysMainIpc } from "./System/getAllDisplays/Main";
 import { GetAppVersionMainIpc } from "./System/getAppVersion/Main";
 import { GetUserDataPathMainIpc } from "./System/getUserDataPath/Main";
 import { GetWindowIdMainIpc } from "./System/getWindowId/Main";
 import { QuitAppMainIpc } from "./System/quitApp/Main";
 import { SetBoundsMainIpc } from "./System/setBounds/Main";
-import { PrepareSourceMainIpc } from "./Source/prepareSource/Main";
-import { RegisterStreamMainIpc } from "./Stream/registerStream/Main";
 
 export const ASYNC_MAIN_IPCS = [
 	DeleteFileMainIpc,

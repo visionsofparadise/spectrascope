@@ -63,7 +63,10 @@ describe("parseWavHeader + readFrames", () => {
 		data.writeInt16LE(32767, 4);
 		data.writeInt16LE(0, 6);
 
-		const filePath = writeFixture("int16.wav", riff("RIFF", Buffer.concat([chunk("fmt ", fmtChunk(1, 2, 48000, 16)), chunk("data", data)])));
+		const filePath = writeFixture(
+			"int16.wav",
+			riff("RIFF", Buffer.concat([chunk("fmt ", fmtChunk(1, 2, 48000, 16)), chunk("data", data)])),
+		);
 		const handle = await fsPromises.open(filePath, "r");
 
 		try {
@@ -89,7 +92,10 @@ describe("parseWavHeader + readFrames", () => {
 
 		values.forEach((value, index) => data.writeFloatLE(value, index * 4));
 
-		const filePath = writeFixture("float32.wav", riff("RIFF", Buffer.concat([chunk("fmt ", fmtChunk(3, 1, 44100, 32)), chunk("data", data)])));
+		const filePath = writeFixture(
+			"float32.wav",
+			riff("RIFF", Buffer.concat([chunk("fmt ", fmtChunk(3, 1, 44100, 32)), chunk("data", data)])),
+		);
 		const handle = await fsPromises.open(filePath, "r");
 
 		try {
@@ -147,18 +153,25 @@ describe("parseWavHeader + readFrames", () => {
 		ds64Body.writeUInt32LE(0, 24); // tableLength
 
 		// data chunk with the 32-bit size sentinel; real size comes from ds64.
-		const dataChunk = Buffer.concat([Buffer.from("data", "ascii"), (() => {
-			const size = Buffer.alloc(4);
-			size.writeUInt32LE(0xffffffff, 0);
-			return size;
-		})(), data]);
+		const dataChunk = Buffer.concat([
+			Buffer.from("data", "ascii"),
+			(() => {
+				const size = Buffer.alloc(4);
+				size.writeUInt32LE(0xffffffff, 0);
+				return size;
+			})(),
+			data,
+		]);
 
 		const head = Buffer.alloc(12);
 		head.write("RF64", 0, "ascii");
 		head.writeUInt32LE(0xffffffff, 4);
 		head.write("WAVE", 8, "ascii");
 
-		const filePath = writeFixture("rf64.wav", Buffer.concat([head, chunk("ds64", ds64Body), chunk("fmt ", fmtChunk(3, 1, 96000, 32)), dataChunk]));
+		const filePath = writeFixture(
+			"rf64.wav",
+			Buffer.concat([head, chunk("ds64", ds64Body), chunk("fmt ", fmtChunk(3, 1, 96000, 32)), dataChunk]),
+		);
 		const handle = await fsPromises.open(filePath, "r");
 
 		try {
@@ -193,7 +206,10 @@ describe("parseWavHeader + readFrames", () => {
 		body.writeUInt32LE(0, 20); // channelMask
 		body.writeUInt16LE(1, 24); // SubFormat first two bytes = PCM int
 
-		const filePath = writeFixture("extensible.wav", riff("RIFF", Buffer.concat([chunk("fmt ", body), chunk("data", data)])));
+		const filePath = writeFixture(
+			"extensible.wav",
+			riff("RIFF", Buffer.concat([chunk("fmt ", body), chunk("data", data)])),
+		);
 		const handle = await fsPromises.open(filePath, "r");
 
 		try {
@@ -214,7 +230,10 @@ describe("parseWavHeader + readFrames", () => {
 		const data = Buffer.alloc(8);
 		[100, 200, 300, 400].forEach((value, index) => data.writeInt16LE(value, index * 2));
 
-		const filePath = writeFixture("range.wav", riff("RIFF", Buffer.concat([chunk("fmt ", fmtChunk(1, 1, 48000, 16)), chunk("data", data)])));
+		const filePath = writeFixture(
+			"range.wav",
+			riff("RIFF", Buffer.concat([chunk("fmt ", fmtChunk(1, 1, 48000, 16)), chunk("data", data)])),
+		);
 		const handle = await fsPromises.open(filePath, "r");
 
 		try {

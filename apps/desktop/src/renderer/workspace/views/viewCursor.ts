@@ -14,18 +14,14 @@
  * NOT clamped — a caller checks the `[0, 1]` range so an off-window cursor is
  * simply not drawn.
  */
-export function timeToFraction(
-  ms: number | null,
-  startMs: number,
-  endMs: number,
-): number | null {
-  if (ms === null) return null;
+export function timeToFraction(ms: number | null, startMs: number, endMs: number): number | null {
+	if (ms === null) return null;
 
-  const span = endMs - startMs;
+	const span = endMs - startMs;
 
-  if (span <= 0) return null;
+	if (span <= 0) return null;
 
-  return (ms - startMs) / span;
+	return (ms - startMs) / span;
 }
 
 /**
@@ -34,15 +30,15 @@ export function timeToFraction(
  * clamped to that window. Returns `null` for a degenerate rect.
  */
 export function eventToTime(
-  event: { readonly clientX: number; readonly currentTarget: Element },
-  startMs: number,
-  endMs: number,
+	event: { readonly clientX: number; readonly currentTarget: Element },
+	startMs: number,
+	endMs: number,
 ): number | null {
-  const rect = event.currentTarget.getBoundingClientRect();
+	const rect = event.currentTarget.getBoundingClientRect();
 
-  if (rect.width <= 0) return null;
+	if (rect.width <= 0) return null;
 
-  const frac = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+	const frac = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
 
-  return startMs + frac * (endMs - startMs);
+	return startMs + frac * (endMs - startMs);
 }

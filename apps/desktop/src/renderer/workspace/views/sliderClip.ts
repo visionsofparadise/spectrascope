@@ -13,12 +13,12 @@ export function defaultCurtainPositions(count: number): Array<number> {
 
 /** Left edge fraction of a strip: the curtain before it, or `0` for the first strip. */
 export function stripLeft(stripIndex: number, positions: ReadonlyArray<number>): number {
-	return stripIndex === 0 ? 0 : positions[stripIndex - 1] ?? 0;
+	return stripIndex === 0 ? 0 : (positions[stripIndex - 1] ?? 0);
 }
 
 /** Right edge fraction of a strip: the curtain after it, or `1` for the last strip. */
 export function stripRight(stripIndex: number, positions: ReadonlyArray<number>, count: number): number {
-	return stripIndex === count - 1 ? 1 : positions[stripIndex] ?? 1;
+	return stripIndex === count - 1 ? 1 : (positions[stripIndex] ?? 1);
 }
 
 /**

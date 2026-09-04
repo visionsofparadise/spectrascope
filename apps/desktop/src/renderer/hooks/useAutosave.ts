@@ -28,6 +28,7 @@ export function useAutosave(app: Snapshot<AppState>, store: ProxyStore, main: Ma
 			pendingData = JSON.stringify(proxy, null, 2);
 
 			if (timer !== null) clearTimeout(timer);
+
 			timer = setTimeout(() => {
 				timer = null;
 				flush();

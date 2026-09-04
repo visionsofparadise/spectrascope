@@ -3,10 +3,12 @@ import { useSyncExternalStore } from "react";
 import { snapshot as valtioSnapshot, subscribe as valtioSubscribe } from "valtio/vanilla";
 import type { ProxyStore } from "./ProxyStore";
 
-const isSnapshot = (value: unknown): value is { _key: symbol } => typeof value === "object" && value !== null && "_key" in value && typeof (value)._key === "symbol";
+const isSnapshot = (value: unknown): value is { _key: symbol } =>
+	typeof value === "object" && value !== null && "_key" in value && typeof value._key === "symbol";
 
 const shouldTraverse = (value: unknown): boolean => {
 	if (value === null || typeof value !== "object") return false;
+
 	if (Array.isArray(value)) return true;
 
 	const proto: unknown = Object.getPrototypeOf(value);
@@ -132,7 +134,10 @@ export const resnapshot = <P extends { context: StoreContext }>(component: FC<P>
 
 		const snapshotPaths = useMemo(() => findSnapshotPaths(props), [props]);
 
-		const staleSnapshots = useMemo(() => snapshotPaths.map((path) => getAtPath(props, path) as { _key: symbol }), [props, snapshotPaths]);
+		const staleSnapshots = useMemo(
+			() => snapshotPaths.map((path) => getAtPath(props, path) as { _key: symbol }),
+			[props, snapshotPaths],
+		);
 
 		const freshSnapshots = useResnapshotAll(stores, staleSnapshots);
 

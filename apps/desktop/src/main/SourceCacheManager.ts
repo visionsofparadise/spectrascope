@@ -3,9 +3,9 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import fsPromises from "node:fs/promises";
 import path from "node:path";
-import { getFfmpegPath } from "./ffmpeg/ffmpegPath";
 import { probeAudioFile } from "./audio/probe";
 import { parseWavHeader, type WavHeader } from "./audio/wavReader";
+import { getFfmpegPath } from "./ffmpeg/ffmpegPath";
 
 export interface PreparedSource {
 	readonly pcmPath: string;
@@ -43,7 +43,13 @@ export const shouldPassThrough = (header: WavHeader | null, targetSampleRate: nu
  * Moves `hash` to most-recently-used and evicts the least-recently-used entries
  * beyond `maxEntries`, calling `onEvict` with each evicted file path.
  */
-export const touchLru = (cache: Map<string, string>, hash: string, filePath: string, maxEntries: number, onEvict: (path: string) => void): void => {
+export const touchLru = (
+	cache: Map<string, string>,
+	hash: string,
+	filePath: string,
+	maxEntries: number,
+	onEvict: (path: string) => void,
+): void => {
 	cache.delete(hash);
 	cache.set(hash, filePath);
 
@@ -192,7 +198,12 @@ export class SourceCacheManager {
 	 * a truncated file, then atomically renames on a clean exit. `-f wav` is
 	 * required because the `.partial` extension gives ffmpeg no format to infer.
 	 */
-	private async runFfmpeg(filePath: string, targetSampleRate: number, outputPath: string, signal: AbortSignal): Promise<void> {
+	private async runFfmpeg(
+		filePath: string,
+		targetSampleRate: number,
+		outputPath: string,
+		signal: AbortSignal,
+	): Promise<void> {
 		const tempPath = `${outputPath}.partial`;
 
 		const args = [

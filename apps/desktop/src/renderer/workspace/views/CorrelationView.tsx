@@ -1,24 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSpectralCompute } from "spectral-display";
-import type { SpectralOptions } from "spectral-display";
-import type { Source } from "../source";
 import { LinearDbAxis, TimeRuler } from "../spectral/Axes";
 import { ComputeProgress } from "../spectral/ComputeProgress";
-import {
-	useFirstComputeProgress,
-	useReportComputeState,
-} from "../spectral/firstComputeProgress";
-import type { ComputeState } from "../spectral/firstComputeProgress";
+import { useFirstComputeProgress, useReportComputeState } from "../spectral/firstComputeProgress";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
 import { computeWindowTransform, useTimeViewport } from "../useTimeViewport";
-import type {
-	TransportControl,
-	TransportCursorReadout,
-} from "../Transport";
-import type { AudioData } from "../spectral/types";
 import { buildPolylineSegments } from "./chartTrace";
 import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
+import type { Source } from "../source";
 import type { SourceWithAudio } from "./viewAudio";
+import type { ComputeState } from "../spectral/firstComputeProgress";
+import type { AudioData } from "../spectral/types";
+import type { TransportControl, TransportCursorReadout } from "../Transport";
+import type { SpectralOptions } from "spectral-display";
 
 /** Local `#RRGGBB` → `[r, g, b]` helper. Duplicates the per-view copies in the
  *  SourceRender-based views and `LoudnessView`. */
@@ -122,14 +116,7 @@ function SourceCorrelationTrace({
 				stereo: true,
 			},
 		}),
-		[
-			audioData.sampleRate,
-			audioData.totalSamples,
-			audioData.channels,
-			audioData.readSamples,
-			startMs,
-			endMs,
-		],
+		[audioData.sampleRate, audioData.totalSamples, audioData.channels, audioData.readSamples, startMs, endMs],
 	);
 
 	const computeResult = useSpectralCompute(spectralOptions);
@@ -145,10 +132,7 @@ function SourceCorrelationTrace({
 
 	const envelope = renderable ? renderable.correlationEnvelope : null;
 
-	const segments = useMemo(
-		() => (envelope ? buildPolylineSegments(envelope, corrToY) : []),
-		[envelope],
-	);
+	const segments = useMemo(() => (envelope ? buildPolylineSegments(envelope, corrToY) : []), [envelope]);
 
 	useReportComputeState(source.id, computeResult, onComputeState);
 
@@ -193,14 +177,7 @@ interface ChartCanvasProps {
 	readonly onComputeState: (sourceId: string, state: ComputeState | null) => void;
 }
 
-function ChartCanvas({
-	renderableSources,
-	startMs,
-	endMs,
-	liveStartMs,
-	liveEndMs,
-	onComputeState,
-}: ChartCanvasProps) {
+function ChartCanvas({ renderableSources, startMs, endMs, liveStartMs, liveEndMs, onComputeState }: ChartCanvasProps) {
 	return (
 		<div className="relative h-full w-full overflow-hidden bg-void">
 			{/* Correlation gridlines — one horizontal rule per tick, all
@@ -220,11 +197,7 @@ function ChartCanvas({
 			{/* Each trace carries its own gesture transform on its `<g>` (held
 			    render's window → live window), so they swap independently as each
 			    source's recompute lands. */}
-			<svg
-				className="absolute inset-0 h-full w-full"
-				viewBox="0 0 1 1"
-				preserveAspectRatio="none"
-			>
+			<svg className="absolute inset-0 h-full w-full" viewBox="0 0 1 1" preserveAspectRatio="none">
 				{renderableSources.map(({ source, audioData }) => (
 					<SourceCorrelationTrace
 						key={source.id}
@@ -242,16 +215,9 @@ function ChartCanvas({
 	);
 }
 
-export function CorrelationView({
-	sources,
-	sourceAudio,
-	onTransportControlChange,
-}: CorrelationViewProps) {
+export function CorrelationView({ sources, sourceAudio, onTransportControlChange }: CorrelationViewProps) {
 	// Visible sources that have decoded audio, paired with their `AudioData`.
-	const renderableSources = useMemo(
-		() => resolveVisibleSourceAudio(sources, sourceAudio),
-		[sources, sourceAudio],
-	);
+	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
 	// Shared chrome (time ruler, minimap, duration) sizes against the first
 	// renderable source's audio; a zero-duration fallback when none.
@@ -275,10 +241,8 @@ export function CorrelationView({
 		[chromeAudio.durationMs, viewport],
 	);
 
-	const viewStartFrac =
-		chromeAudio.durationMs > 0 ? viewport.startMs / chromeAudio.durationMs : 0;
-	const viewEndFrac =
-		chromeAudio.durationMs > 0 ? viewport.endMs / chromeAudio.durationMs : 1;
+	const viewStartFrac = chromeAudio.durationMs > 0 ? viewport.startMs / chromeAudio.durationMs : 0;
+	const viewEndFrac = chromeAudio.durationMs > 0 ? viewport.endMs / chromeAudio.durationMs : 1;
 
 	const [playing, setPlaying] = useState(false);
 	const [positionSec, setPositionSec] = useState(0);
@@ -379,9 +343,7 @@ export function CorrelationView({
 					>
 						{renderableSources.length === 0 ? (
 							<div className="flex h-full items-center justify-center bg-void">
-								<p className="font-body text-sm text-chrome-text-secondary">
-									No visible sources.
-								</p>
+								<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
 							</div>
 						) : (
 							<>
@@ -393,9 +355,7 @@ export function CorrelationView({
 									liveEndMs={viewport.endMs}
 									onComputeState={progress.handleComputeState}
 								/>
-								{progress.firstComputing && (
-									<ComputeProgress fraction={progress.fraction} />
-								)}
+								{progress.firstComputing && <ComputeProgress fraction={progress.fraction} />}
 							</>
 						)}
 					</div>

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { main } from "../models/Main";
+import { createStreamAudioData } from "./streamAudioData";
 import type { StreamInput, StreamSpec } from "../../main/audio/streamDsp";
 import type { PreparedSource } from "../../main/SourceCacheManager";
 import type { StreamInfo } from "../../main/StreamManager";
-import { main } from "../models/Main";
-import type { AudioData } from "../workspace/spectral/types";
 import type { Source } from "../workspace/source";
-import { createStreamAudioData } from "./streamAudioData";
+import type { AudioData } from "../workspace/spectral/types";
 
 /**
  * Zero-duration `AudioData` routed into a derived (Sum / Difference) view whose
@@ -113,9 +113,13 @@ export function useDerivedStreams(
 	// removed) falls back to the default the same as null, so the rendered diff
 	// tracks what the A/B selectors display rather than emptying until reselect.
 	const effectiveA =
-		differenceA !== null && sources.some((source) => source.id === differenceA) ? differenceA : sources[0]?.id ?? null;
+		differenceA !== null && sources.some((source) => source.id === differenceA)
+			? differenceA
+			: (sources[0]?.id ?? null);
 	const effectiveB =
-		differenceB !== null && sources.some((source) => source.id === differenceB) ? differenceB : sources[1]?.id ?? null;
+		differenceB !== null && sources.some((source) => source.id === differenceB)
+			? differenceB
+			: (sources[1]?.id ?? null);
 
 	const diffInputs = useMemo<ReadonlyArray<StreamInput> | null>(() => {
 		if (effectiveA === null || effectiveB === null) return null;

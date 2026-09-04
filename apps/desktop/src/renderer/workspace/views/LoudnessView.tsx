@@ -1,30 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSpectralCompute } from "spectral-display";
-import type { LoudnessData, SpectralOptions } from "spectral-display";
-import type { Source } from "../source";
 import { LinearDbAxis, TimeRuler } from "../spectral/Axes";
 import { ComputeProgress } from "../spectral/ComputeProgress";
-import {
-	useFirstComputeProgress,
-	useReportComputeState,
-} from "../spectral/firstComputeProgress";
-import type { ComputeState } from "../spectral/firstComputeProgress";
+import { useFirstComputeProgress, useReportComputeState } from "../spectral/firstComputeProgress";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
 import { computeWindowTransform, useTimeViewport } from "../useTimeViewport";
-import type {
-	TransportControl,
-	TransportCursorReadout,
-} from "../Transport";
-import type { AudioData } from "../spectral/types";
 import { METRICS } from "../viewSettings";
-import type {
-	LoudnessMetric,
-	MetricSpec,
-	ViewControlSettings,
-} from "../viewSettings";
 import { buildPolylineSegments } from "./chartTrace";
 import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
+import type { Source } from "../source";
 import type { SourceWithAudio } from "./viewAudio";
+import type { ComputeState } from "../spectral/firstComputeProgress";
+import type { AudioData } from "../spectral/types";
+import type { TransportControl, TransportCursorReadout } from "../Transport";
+import type { LoudnessMetric, MetricSpec, ViewControlSettings } from "../viewSettings";
+import type { LoudnessData, SpectralOptions } from "spectral-display";
 
 /** Local `#RRGGBB` → `[r, g, b]` helper. Duplicates the per-view copies in the
  *  SourceRender-based views. */
@@ -121,9 +111,7 @@ function formatDbFs(db: number): string {
  * source (they are). The other three metrics are genuine time series.
  */
 function isScalarMetric(metric: LoudnessMetric): boolean {
-	return (
-		metric === "truePeak" || metric === "samplePeak" || metric === "integrated"
-	);
+	return metric === "truePeak" || metric === "samplePeak" || metric === "integrated";
 }
 
 function scalarMetricValue(
@@ -198,14 +186,7 @@ function SourceLoudnessTrace({
 				truePeak: true,
 			},
 		}),
-		[
-			audioData.sampleRate,
-			audioData.totalSamples,
-			audioData.channels,
-			audioData.readSamples,
-			startMs,
-			endMs,
-		],
+		[audioData.sampleRate, audioData.totalSamples, audioData.channels, audioData.readSamples, startMs, endMs],
 	);
 
 	const computeResult = useSpectralCompute(spectralOptions);
@@ -274,9 +255,7 @@ function SourceLoudnessTrace({
 	if (!series) return null;
 
 	const mapValueToDb = mapperForMetric(metric.id, metric.axisMin);
-	const segments = buildPolylineSegments(series, (value) =>
-		dbToY(mapValueToDb(value), metric.axisMin),
-	);
+	const segments = buildPolylineSegments(series, (value) => dbToY(mapValueToDb(value), metric.axisMin));
 
 	return (
 		<g style={transformStyle}>
@@ -387,26 +366,21 @@ function ChartCanvas({
 	liveEndMs,
 	onComputeState,
 }: ChartCanvasProps) {
-	const [loudnessMap, setLoudnessMap] = useState<Map<string, LoudnessData | null>>(
-		() => new Map(),
-	);
+	const [loudnessMap, setLoudnessMap] = useState<Map<string, LoudnessData | null>>(() => new Map());
 
-	const handleLoudnessData = useCallback(
-		(sourceId: string, data: LoudnessData | null) => {
-			setLoudnessMap((prev) => {
-				const next = new Map(prev);
+	const handleLoudnessData = useCallback((sourceId: string, data: LoudnessData | null) => {
+		setLoudnessMap((prev) => {
+			const next = new Map(prev);
 
-				if (data === null) {
-					next.delete(sourceId);
-				} else {
-					next.set(sourceId, data);
-				}
+			if (data === null) {
+				next.delete(sourceId);
+			} else {
+				next.set(sourceId, data);
+			}
 
-				return next;
-			});
-		},
-		[],
-	);
+			return next;
+		});
+	}, []);
 
 	const dbTicks = metric.axisMin === -60 ? DB_TICKS_60 : DB_TICKS_40;
 
@@ -426,11 +400,7 @@ function ChartCanvas({
 			{/* Each trace carries its own gesture transform on its `<g>` (held
 			    render's window → live window), so they swap independently as each
 			    source's recompute lands. */}
-			<svg
-				className="absolute inset-0 h-full w-full"
-				viewBox="0 0 1 1"
-				preserveAspectRatio="none"
-			>
+			<svg className="absolute inset-0 h-full w-full" viewBox="0 0 1 1" preserveAspectRatio="none">
 				{renderableSources.map(({ source, audioData }) => (
 					<SourceLoudnessTrace
 						key={source.id}
@@ -457,17 +427,9 @@ function ChartCanvas({
 	);
 }
 
-export function LoudnessView({
-	sources,
-	sourceAudio,
-	settings,
-	onTransportControlChange,
-}: LoudnessViewProps) {
+export function LoudnessView({ sources, sourceAudio, settings, onTransportControlChange }: LoudnessViewProps) {
 	// Visible sources that have decoded audio, paired with their `AudioData`.
-	const renderableSources = useMemo(
-		() => resolveVisibleSourceAudio(sources, sourceAudio),
-		[sources, sourceAudio],
-	);
+	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
 	// Shared chrome (time ruler, minimap, duration) sizes against the first
 	// renderable source's audio; a zero-duration fallback when none.
@@ -491,15 +453,11 @@ export function LoudnessView({
 		[chromeAudio.durationMs, viewport],
 	);
 
-	const viewStartFrac =
-		chromeAudio.durationMs > 0 ? viewport.startMs / chromeAudio.durationMs : 0;
-	const viewEndFrac =
-		chromeAudio.durationMs > 0 ? viewport.endMs / chromeAudio.durationMs : 1;
+	const viewStartFrac = chromeAudio.durationMs > 0 ? viewport.startMs / chromeAudio.durationMs : 0;
+	const viewEndFrac = chromeAudio.durationMs > 0 ? viewport.endMs / chromeAudio.durationMs : 1;
 
 	const metricSpec = useMemo(
-		() =>
-			METRICS.find((entry) => entry.id === settings.loudnessMetric) ??
-			DEFAULT_METRIC,
+		() => METRICS.find((entry) => entry.id === settings.loudnessMetric) ?? DEFAULT_METRIC,
 		[settings.loudnessMetric],
 	);
 
@@ -611,9 +569,7 @@ export function LoudnessView({
 					>
 						{renderableSources.length === 0 ? (
 							<div className="flex h-full items-center justify-center bg-void">
-								<p className="font-body text-sm text-chrome-text-secondary">
-									No visible sources.
-								</p>
+								<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
 							</div>
 						) : (
 							<>
@@ -626,9 +582,7 @@ export function LoudnessView({
 									liveEndMs={viewport.endMs}
 									onComputeState={progress.handleComputeState}
 								/>
-								{progress.firstComputing && (
-									<ComputeProgress fraction={progress.fraction} />
-								)}
+								{progress.firstComputing && <ComputeProgress fraction={progress.fraction} />}
 							</>
 						)}
 					</div>

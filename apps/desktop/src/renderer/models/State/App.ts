@@ -1,8 +1,8 @@
-import type { Snapshot } from "valtio/vanilla";
 import { z } from "zod";
-import type { State } from ".";
 import { useCreateState } from "../ProxyStore/hooks/useCreateState";
+import type { State } from ".";
 import type { ProxyStore } from "../ProxyStore/ProxyStore";
+import type { Snapshot } from "valtio/vanilla";
 
 /** Each tab is one comparison; it references its comparison by id. */
 const TabEntrySchema = z.object({
@@ -109,7 +109,10 @@ const SavedStateSchema = AppStateSchema.pick({
 	comparisons: true,
 }).partial();
 
-export async function loadAppState(main: { getUserDataPath: () => Promise<string>; readFile: (path: string) => Promise<string> }): Promise<Omit<AppState, "_key">> {
+export async function loadAppState(main: {
+	getUserDataPath: () => Promise<string>;
+	readFile: (path: string) => Promise<string>;
+}): Promise<Omit<AppState, "_key">> {
 	const userDataPath = await main.getUserDataPath();
 	const path = `${userDataPath}/state.json`;
 
@@ -134,7 +137,9 @@ export async function loadAppState(main: { getUserDataPath: () => Promise<string
 	const comparisonIds = new Set(comparisons.map((comparison) => comparison.id));
 	const tabs = (saved.tabs ?? []).filter((tab) => comparisonIds.has(tab.comparisonId));
 
-	const activeTabId = tabs.some((tab) => tab.id === saved.activeTabId) ? (saved.activeTabId ?? null) : (tabs[0]?.id ?? null);
+	const activeTabId = tabs.some((tab) => tab.id === saved.activeTabId)
+		? (saved.activeTabId ?? null)
+		: (tabs[0]?.id ?? null);
 
 	return {
 		tabs,

@@ -1,30 +1,26 @@
 {
-  "$schema": "https://turbo.build/schema.json",
-  "tasks": {
-    "check": {
-      "dependsOn": ["^build"],
-      "inputs": ["src/**", "./tsconfig.json"],
-      "outputs": []
-    },
-    "build": {
-      "dependsOn": ["^build", "check"],
-      "inputs": ["src/**", "./tsconfig.json", "./package.json"],
-      "outputs": ["dist/**"]
-    },
-    "unit": {
-      "dependsOn": ["check"]
-    },
-    "integration": {
-      "dependsOn": ["build"]
-    },
-    "start": {},
-    "lint": {
-      "dependsOn": []
-    },
-    "docs": {
-      "dependsOn": ["^build"],
-      "inputs": ["src/**", "scripts/**", "README.md"],
-      "outputs": ["README.md"]
-    }
-  }
+	"$schema": "https://turbo.build/schema.json",
+	"globalDependencies": ["eslint.config.js", ".prettierrc", "tsconfig.json"],
+	"tasks": {
+		"fix": {
+			"cache": false
+		},
+		"check": {
+			"dependsOn": ["^build"],
+			"inputs": ["src/**", "./tsconfig.json", "./package.json", "./eslint.config.js"],
+			"outputs": []
+		},
+		"build": {
+			"dependsOn": ["^build", "check"],
+			"inputs": ["src/**", "./tsconfig.json", "./package.json"],
+			"outputs": ["dist/**"]
+		},
+		"unit": {
+			"dependsOn": ["check"]
+		},
+		"integration": {
+			"dependsOn": ["build"]
+		},
+		"start": {}
+	}
 }

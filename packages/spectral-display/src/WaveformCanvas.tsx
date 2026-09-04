@@ -14,11 +14,17 @@ interface WaveformCanvasProps {
 
 const DEFAULT_WAVEFORM_COLOR: [number, number, number] = [0, 255, 0];
 
-export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({ computeResult, ref, color = DEFAULT_WAVEFORM_COLOR, onRendered }) => {
+export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
+	computeResult,
+	ref,
+	color = DEFAULT_WAVEFORM_COLOR,
+	onRendered,
+}) => {
 	const [internalCanvasReference, canvasCallback] = useCanvasRef(ref);
 	const onRenderedRef = useRef(onRendered);
 
 	onRenderedRef.current = onRendered;
+
 	const blitReference = useRef<BlitRenderer | null>(null);
 	const blitDeviceRef = useRef<GPUDevice | null>(null);
 	const pipelineReference = useRef<GPUComputePipeline | null>(null);
@@ -32,7 +38,12 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({ computeResult, r
 	useEffect(() => {
 		const canvas = internalCanvasReference.current;
 
-		if (!canvas || computeResult.status !== "ready" || !computeResult.waveformBuffer || computeResult.waveformPointCount === 0) {
+		if (
+			!canvas ||
+			computeResult.status !== "ready" ||
+			!computeResult.waveformBuffer ||
+			computeResult.waveformPointCount === 0
+		) {
 			return;
 		}
 
@@ -160,13 +171,8 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({ computeResult, r
 		[],
 	);
 
-	const { width, height } = computeResult.status === "ready" ? computeResult.options.sampleQuery : { width: 0, height: 0 };
+	const { width, height } =
+		computeResult.status === "ready" ? computeResult.options.sampleQuery : { width: 0, height: 0 };
 
-	return (
-		<canvas
-			ref={canvasCallback}
-			width={width}
-			height={height}
-		/>
-	);
+	return <canvas ref={canvasCallback} width={width} height={height} />;
 };

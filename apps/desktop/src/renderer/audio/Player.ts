@@ -11,12 +11,16 @@
 export interface Player {
 	/** Begin (or resume) playback from the current position. */
 	play(): Promise<void>;
+
 	/** Pause playback, holding the current position. */
 	pause(): void;
+
 	/** Seek to an absolute position in seconds (clamped to `[0, duration]`). */
 	seek(sec: number): void;
+
 	/** Set the master / monitor gain — `0` silent, `1` unity. */
 	setVolume(volume: number): void;
+
 	/** The total playable duration in seconds (`0` until known). */
 	readonly durationSec: number;
 	/** Whether playback is currently running. */
@@ -28,12 +32,16 @@ export interface Player {
 	 * playback wraps from `end` back to `start`. `null` clears the region.
 	 */
 	setLoopRegion(region: { readonly startSec: number; readonly endSec: number } | null): void;
+
 	/** Enable / disable looping over the loop region (no-op when no region set). */
 	setLooping(looping: boolean): void;
+
 	/** Subscribe to position updates (seconds). Returns an unsubscribe function. */
 	onPositionChange(listener: (positionSec: number) => void): () => void;
+
 	/** Subscribe to play/pause transitions. Returns an unsubscribe function. */
 	onPlayingChange(listener: (playing: boolean) => void): () => void;
+
 	/** Release all audio resources. The player is unusable after this. */
 	dispose(): void;
 }

@@ -59,7 +59,10 @@ export function resolveColormap(colormap: "lava" | "viridis" | ColormapDefinitio
 	return colormap;
 }
 
-export function resolveWaveformColor(colormap: "lava" | "viridis" | ColormapDefinition, override?: [number, number, number]): [number, number, number] {
+export function resolveWaveformColor(
+	colormap: "lava" | "viridis" | ColormapDefinition,
+	override?: [number, number, number],
+): [number, number, number] {
 	if (override) {
 		return override;
 	}

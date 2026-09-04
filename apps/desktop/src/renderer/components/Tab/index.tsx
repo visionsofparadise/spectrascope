@@ -1,7 +1,7 @@
-import type { AppContext } from "../../models/Context";
-import type { HistoryControl } from "../../state/useComparisonHistory";
 import { HomeScreen } from "../HomeScreen";
 import { ComparisonTab } from "./Comparison";
+import type { AppContext } from "../../models/Context";
+import type { HistoryControl } from "../../state/useComparisonHistory";
 
 interface Props {
 	readonly context: AppContext;

@@ -61,7 +61,12 @@ const BYTES_PER_SAMPLE = 4;
 /** Frames rendered per pull of a no-Range streamed body. */
 const STREAM_SEGMENT_FRAMES = 65536;
 
-function deinterleaveChannel(interleaved: Float32Array, channelCount: number, channel: number, frameCount: number): Float32Array {
+function deinterleaveChannel(
+	interleaved: Float32Array,
+	channelCount: number,
+	channel: number,
+	frameCount: number,
+): Float32Array {
 	const channelData = new Float32Array(frameCount);
 
 	for (let frame = 0; frame < frameCount; frame++) {

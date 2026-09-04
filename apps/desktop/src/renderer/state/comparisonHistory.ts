@@ -1,5 +1,5 @@
-import type { Snapshot } from "valtio/vanilla";
 import type { Comparison } from "../models/State/App";
+import type { Snapshot } from "valtio/vanilla";
 
 /**
  * The history-relevant projection of a comparison — every field of `Comparison`
@@ -213,9 +213,13 @@ export function classifyEdit(previous: ComparisonHistoryState, next: ComparisonH
 	}
 
 	if (sourcesChanged) return "sources";
+
 	if (viewChanged) return "view";
+
 	if (channelChanged) return "channelInput";
+
 	if (sampleRateChanged) return "sampleRate";
+
 	if (differenceChanged) return "difference";
 
 	return "selection";

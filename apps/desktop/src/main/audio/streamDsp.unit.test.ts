@@ -34,7 +34,12 @@ const chunk = (id: string, body: Buffer): Buffer => {
 };
 
 /** Writes an interleaved float32 WAV fixture and returns its path. */
-const writeFloatWav = (name: string, channelCount: number, sampleRate: number, interleaved: ReadonlyArray<number>): string => {
+const writeFloatWav = (
+	name: string,
+	channelCount: number,
+	sampleRate: number,
+	interleaved: ReadonlyArray<number>,
+): string => {
 	const data = Buffer.alloc(interleaved.length * 4);
 
 	interleaved.forEach((value, index) => data.writeFloatLE(value, index * 4));
@@ -46,7 +51,10 @@ const writeFloatWav = (name: string, channelCount: number, sampleRate: number, i
 
 	const filePath = path.join(tempDir, name);
 
-	fs.writeFileSync(filePath, Buffer.concat([head, chunk("fmt ", fmtChunk(channelCount, sampleRate)), chunk("data", data)]));
+	fs.writeFileSync(
+		filePath,
+		Buffer.concat([head, chunk("fmt ", fmtChunk(channelCount, sampleRate)), chunk("data", data)]),
+	);
 
 	return filePath;
 };
@@ -73,26 +81,42 @@ describe("streamDsp", () => {
 		const a = writeFloatWav("sum-a.wav", 1, 1000, [1, 2, 3]);
 		const b = writeFloatWav("sum-b.wav", 1, 1000, [10, 20]);
 
-		await withStream({ inputs: [{ pcmPath: a, offsetMs: 0, gain: 1 }, { pcmPath: b, offsetMs: 1, gain: 1 }] }, async (resolved) => {
-			expect(resolved.outputChannels).toBe(2);
-			expect(resolved.totalFrames).toBe(3);
+		await withStream(
+			{
+				inputs: [
+					{ pcmPath: a, offsetMs: 0, gain: 1 },
+					{ pcmPath: b, offsetMs: 1, gain: 1 },
+				],
+			},
+			async (resolved) => {
+				expect(resolved.outputChannels).toBe(2);
+				expect(resolved.totalFrames).toBe(3);
 
-			const rendered = await renderRange(resolved, 0, 3);
+				const rendered = await renderRange(resolved, 0, 3);
 
-			// frame0: a=1; frame1: a=2 + b=10 = 12; frame2: a=3 + b=20 = 23 — mono duplicated to L and R.
-			expect(Array.from(rendered)).toEqual([1, 1, 12, 12, 23, 23]);
-		});
+				// frame0: a=1; frame1: a=2 + b=10 = 12; frame2: a=3 + b=20 = 23 — mono duplicated to L and R.
+				expect(Array.from(rendered)).toEqual([1, 1, 12, 12, 23, 23]);
+			},
+		);
 	});
 
 	it("nulls an identical pair to exact zeros under gain -1", async () => {
 		const a = writeFloatWav("null-a.wav", 1, 1000, [0.5, -0.5, 0.25]);
 		const b = writeFloatWav("null-b.wav", 1, 1000, [0.5, -0.5, 0.25]);
 
-		await withStream({ inputs: [{ pcmPath: a, offsetMs: 0, gain: 1 }, { pcmPath: b, offsetMs: 0, gain: -1 }] }, async (resolved) => {
-			const rendered = await renderRange(resolved, 0, 3);
+		await withStream(
+			{
+				inputs: [
+					{ pcmPath: a, offsetMs: 0, gain: 1 },
+					{ pcmPath: b, offsetMs: 0, gain: -1 },
+				],
+			},
+			async (resolved) => {
+				const rendered = await renderRange(resolved, 0, 3);
 
-			expect(Array.from(rendered)).toEqual([0, 0, 0, 0, 0, 0]);
-		});
+				expect(Array.from(rendered)).toEqual([0, 0, 0, 0, 0, 0]);
+			},
+		);
 	});
 
 	it("zero-fills frames before and after a single input's placed extent", async () => {
@@ -112,14 +136,22 @@ describe("streamDsp", () => {
 		const mono = writeFloatWav("mix-mono.wav", 1, 1000, [1]);
 		const stereo = writeFloatWav("mix-stereo.wav", 2, 1000, [2, 3]);
 
-		await withStream({ inputs: [{ pcmPath: mono, offsetMs: 0, gain: 1 }, { pcmPath: stereo, offsetMs: 0, gain: 1 }] }, async (resolved) => {
-			expect(resolved.outputChannels).toBe(2);
+		await withStream(
+			{
+				inputs: [
+					{ pcmPath: mono, offsetMs: 0, gain: 1 },
+					{ pcmPath: stereo, offsetMs: 0, gain: 1 },
+				],
+			},
+			async (resolved) => {
+				expect(resolved.outputChannels).toBe(2);
 
-			const rendered = await renderRange(resolved, 0, 1);
+				const rendered = await renderRange(resolved, 0, 1);
 
-			// mono 1 → L=1,R=1; stereo → L=2,R=3; sum L=3,R=4.
-			expect(Array.from(rendered)).toEqual([3, 4]);
-		});
+				// mono 1 → L=1,R=1; stereo → L=2,R=3; sum L=3,R=4.
+				expect(Array.from(rendered)).toEqual([3, 4]);
+			},
+		);
 	});
 
 	it("keeps a single mono input at one channel with no fold", async () => {

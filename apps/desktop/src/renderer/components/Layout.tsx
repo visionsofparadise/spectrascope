@@ -1,17 +1,17 @@
-import type { QueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Logger } from "../../shared/models/Logger";
 import { AUDIO_FILE_EXTENSIONS, createComparison, createTabId } from "../comparison/createComparison";
 import { useAutosave } from "../hooks/useAutosave";
 import { useWindowState } from "../hooks/useWindowState";
-import type { AppContext } from "../models/Context";
 import { main } from "../models/Main";
 import { MainEvents } from "../models/MainEvents";
-import type { ProxyStore } from "../models/ProxyStore/ProxyStore";
 import { useAppState, type AppState, type Comparison } from "../models/State/App";
-import type { HistoryControl } from "../state/useComparisonHistory";
 import { AppBar } from "./AppBar";
 import { TabContent } from "./Tab";
+import type { Logger } from "../../shared/models/Logger";
+import type { AppContext } from "../models/Context";
+import type { ProxyStore } from "../models/ProxyStore/ProxyStore";
+import type { HistoryControl } from "../state/useComparisonHistory";
+import type { QueryClient } from "@tanstack/react-query";
 
 interface Props {
 	readonly initialState: Omit<AppState, "_key">;
@@ -47,7 +47,10 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 	 * comparison opened from saved state has no entry until something repopulates
 	 * it, so the tab bar falls back to "Comparison".
 	 */
-	const labelForComparison = useCallback((comparison: Comparison): string => comparison.sources[0]?.name ?? "New Comparison", []);
+	const labelForComparison = useCallback(
+		(comparison: Comparison): string => comparison.sources[0]?.name ?? "New Comparison",
+		[],
+	);
 
 	/**
 	 * Append a comparison to the store, open a tab referencing it, activate that
@@ -119,7 +122,18 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 			newComparison,
 			renameTab,
 		}),
-		[app, appStore, logger, mainEvents, queryClient, windowId, userDataPath, openComparison, newComparison, renameTab],
+		[
+			app,
+			appStore,
+			logger,
+			mainEvents,
+			queryClient,
+			windowId,
+			userDataPath,
+			openComparison,
+			newComparison,
+			renameTab,
+		],
 	);
 
 	useEffect(() => {

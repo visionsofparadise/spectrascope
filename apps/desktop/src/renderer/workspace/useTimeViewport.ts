@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /** A time window in milliseconds. */
 export interface TimeWindow {
-  readonly startMs: number;
-  readonly endMs: number;
+	readonly startMs: number;
+	readonly endMs: number;
 }
 
 /** The smallest window a zoom-in can reach — 10 ms of audio. */
@@ -21,45 +21,38 @@ const ZOOM_SENSITIVITY = 0.002;
  * shrunk to the full extent. An empty extent yields the extent itself.
  */
 export function clampWindowToExtent(window: TimeWindow, extent: TimeWindow): TimeWindow {
-  const extentSpan = extent.endMs - extent.startMs;
+	const extentSpan = extent.endMs - extent.startMs;
 
-  if (extentSpan <= 0) {
-    return { startMs: extent.startMs, endMs: extent.startMs };
-  }
+	if (extentSpan <= 0) {
+		return { startMs: extent.startMs, endMs: extent.startMs };
+	}
 
-  const span = Math.min(window.endMs - window.startMs, extentSpan);
-  let start = window.startMs;
-  let end = start + span;
+	const span = Math.min(window.endMs - window.startMs, extentSpan);
+	let start = window.startMs;
+	let end = start + span;
 
-  if (start < extent.startMs) {
-    start = extent.startMs;
-    end = start + span;
-  }
+	if (start < extent.startMs) {
+		start = extent.startMs;
+		end = start + span;
+	}
 
-  if (end > extent.endMs) {
-    end = extent.endMs;
-    start = end - span;
-  }
+	if (end > extent.endMs) {
+		end = extent.endMs;
+		start = end - span;
+	}
 
-  return { startMs: start, endMs: end };
+	return { startMs: start, endMs: end };
 }
 
 /**
  * Shift a window along the time axis by `deltaFrac` of its own span, clamped to
  * the extent (panning past an edge stops there with the span preserved).
  */
-export function panWindow(
-  window: TimeWindow,
-  deltaFrac: number,
-  extent: TimeWindow,
-): TimeWindow {
-  const span = window.endMs - window.startMs;
-  const shift = deltaFrac * span;
+export function panWindow(window: TimeWindow, deltaFrac: number, extent: TimeWindow): TimeWindow {
+	const span = window.endMs - window.startMs;
+	const shift = deltaFrac * span;
 
-  return clampWindowToExtent(
-    { startMs: window.startMs + shift, endMs: window.endMs + shift },
-    extent,
-  );
+	return clampWindowToExtent({ startMs: window.startMs + shift, endMs: window.endMs + shift }, extent);
 }
 
 /**
@@ -69,20 +62,20 @@ export function panWindow(
  * the result is clamped into the extent.
  */
 export function zoomWindow(
-  window: TimeWindow,
-  factor: number,
-  cursorFrac: number,
-  extent: TimeWindow,
-  minWindowMs: number,
+	window: TimeWindow,
+	factor: number,
+	cursorFrac: number,
+	extent: TimeWindow,
+	minWindowMs: number,
 ): TimeWindow {
-  const span = window.endMs - window.startMs;
-  const extentSpan = extent.endMs - extent.startMs;
-  const cursorTime = window.startMs + cursorFrac * span;
-  const maxSpan = extentSpan > 0 ? extentSpan : span;
-  const newSpan = Math.min(Math.max(span * factor, minWindowMs), maxSpan);
-  const start = cursorTime - cursorFrac * newSpan;
+	const span = window.endMs - window.startMs;
+	const extentSpan = extent.endMs - extent.startMs;
+	const cursorTime = window.startMs + cursorFrac * span;
+	const maxSpan = extentSpan > 0 ? extentSpan : span;
+	const newSpan = Math.min(Math.max(span * factor, minWindowMs), maxSpan);
+	const start = cursorTime - cursorFrac * newSpan;
 
-  return clampWindowToExtent({ startMs: start, endMs: start + newSpan }, extent);
+	return clampWindowToExtent({ startMs: start, endMs: start + newSpan }, extent);
 }
 
 /**
@@ -90,19 +83,14 @@ export function zoomWindow(
  * whole previous extent (or is degenerate) follows to the full new extent;
  * otherwise it is clamped into the new extent.
  */
-function reconcileToExtent(
-  current: TimeWindow,
-  previousExtent: TimeWindow,
-  nextExtent: TimeWindow,
-): TimeWindow {
-  const wasFull =
-    current.startMs <= previousExtent.startMs && current.endMs >= previousExtent.endMs;
+function reconcileToExtent(current: TimeWindow, previousExtent: TimeWindow, nextExtent: TimeWindow): TimeWindow {
+	const wasFull = current.startMs <= previousExtent.startMs && current.endMs >= previousExtent.endMs;
 
-  if (wasFull || current.endMs <= current.startMs) {
-    return { startMs: nextExtent.startMs, endMs: nextExtent.endMs };
-  }
+	if (wasFull || current.endMs <= current.startMs) {
+		return { startMs: nextExtent.startMs, endMs: nextExtent.endMs };
+	}
 
-  return clampWindowToExtent(current, nextExtent);
+	return clampWindowToExtent(current, nextExtent);
 }
 
 /**
@@ -113,35 +101,35 @@ function reconcileToExtent(
  * fallback when the live span is degenerate.
  */
 export function computeWindowTransform(rendered: TimeWindow, live: TimeWindow): string {
-  const liveSpan = live.endMs - live.startMs;
+	const liveSpan = live.endMs - live.startMs;
 
-  if (liveSpan <= 0) return "translateX(0%) scaleX(1)";
+	if (liveSpan <= 0) return "translateX(0%) scaleX(1)";
 
-  const renderedSpan = rendered.endMs - rendered.startMs;
-  const scaleX = renderedSpan / liveSpan;
-  const translateFrac = (rendered.startMs - live.startMs) / liveSpan;
+	const renderedSpan = rendered.endMs - rendered.startMs;
+	const scaleX = renderedSpan / liveSpan;
+	const translateFrac = (rendered.startMs - live.startMs) / liveSpan;
 
-  return `translateX(${translateFrac * 100}%) scaleX(${scaleX})`;
+	return `translateX(${translateFrac * 100}%) scaleX(${scaleX})`;
 }
 
 export interface TimeViewport {
-  /** Live window start — updates immediately on every gesture tick. */
-  readonly startMs: number;
-  /** Live window end — updates immediately on every gesture tick. */
-  readonly endMs: number;
-  /** Committed window start — follows the live window after a 150 ms idle. */
-  readonly committedStartMs: number;
-  /** Committed window end — follows the live window after a 150 ms idle. */
-  readonly committedEndMs: number;
-  /**
-   * CSS `translateX`/`scaleX` mapping the committed window onto the live one,
-   * for a canvas-wrapping div (`transform-origin: left`). Identity when settled.
-   */
-  readonly transform: string;
-  /** Attach `ref` to the gesture surface (a non-passive wheel listener binds here). */
-  readonly wheelHandlers: { readonly ref: React.RefObject<HTMLDivElement | null> };
-  /** Set the window directly (minimap click/drag); live updates now, commit debounces. */
-  readonly setViewport: (window: TimeWindow) => void;
+	/** Live window start — updates immediately on every gesture tick. */
+	readonly startMs: number;
+	/** Live window end — updates immediately on every gesture tick. */
+	readonly endMs: number;
+	/** Committed window start — follows the live window after a 150 ms idle. */
+	readonly committedStartMs: number;
+	/** Committed window end — follows the live window after a 150 ms idle. */
+	readonly committedEndMs: number;
+	/**
+	 * CSS `translateX`/`scaleX` mapping the committed window onto the live one,
+	 * for a canvas-wrapping div (`transform-origin: left`). Identity when settled.
+	 */
+	readonly transform: string;
+	/** Attach `ref` to the gesture surface (a non-passive wheel listener binds here). */
+	readonly wheelHandlers: { readonly ref: React.RefObject<HTMLDivElement | null> };
+	/** Set the window directly (minimap click/drag); live updates now, commit debounces. */
+	readonly setViewport: (window: TimeWindow) => void;
 }
 
 /**
@@ -152,112 +140,108 @@ export interface TimeViewport {
  * persisted nor pushed to undo history.
  */
 export function useTimeViewport(extentStartMs: number, extentEndMs: number): TimeViewport {
-  const [live, setLive] = useState<TimeWindow>({ startMs: extentStartMs, endMs: extentEndMs });
-  const [committed, setCommitted] = useState<TimeWindow>({
-    startMs: extentStartMs,
-    endMs: extentEndMs,
-  });
+	const [live, setLive] = useState<TimeWindow>({ startMs: extentStartMs, endMs: extentEndMs });
+	const [committed, setCommitted] = useState<TimeWindow>({
+		startMs: extentStartMs,
+		endMs: extentEndMs,
+	});
 
-  const wheelTargetRef = useRef<HTMLDivElement | null>(null);
-  const liveRef = useRef(live);
-  const extentRef = useRef<TimeWindow>({ startMs: extentStartMs, endMs: extentEndMs });
-  const previousExtentRef = useRef<TimeWindow>({ startMs: extentStartMs, endMs: extentEndMs });
-  const commitTimerRef = useRef<number | null>(null);
+	const wheelTargetRef = useRef<HTMLDivElement | null>(null);
+	const liveRef = useRef(live);
+	const extentRef = useRef<TimeWindow>({ startMs: extentStartMs, endMs: extentEndMs });
+	const previousExtentRef = useRef<TimeWindow>({ startMs: extentStartMs, endMs: extentEndMs });
+	const commitTimerRef = useRef<number | null>(null);
 
-  liveRef.current = live;
-  extentRef.current = { startMs: extentStartMs, endMs: extentEndMs };
+	liveRef.current = live;
+	extentRef.current = { startMs: extentStartMs, endMs: extentEndMs };
 
-  const scheduleCommit = useCallback(() => {
-    if (commitTimerRef.current !== null) {
-      window.clearTimeout(commitTimerRef.current);
-    }
+	const scheduleCommit = useCallback(() => {
+		if (commitTimerRef.current !== null) {
+			window.clearTimeout(commitTimerRef.current);
+		}
 
-    commitTimerRef.current = window.setTimeout(() => {
-      commitTimerRef.current = null;
-      setCommitted(liveRef.current);
-    }, COMMIT_DEBOUNCE_MS);
-  }, []);
+		commitTimerRef.current = window.setTimeout(() => {
+			commitTimerRef.current = null;
+			setCommitted(liveRef.current);
+		}, COMMIT_DEBOUNCE_MS);
+	}, []);
 
-  // Follow the extent when it changes (e.g. audio finishes loading): a full or
-  // degenerate window snaps to the new extent, a zoomed one clamps into it.
-  useEffect(() => {
-    const previous = previousExtentRef.current;
+	// Follow the extent when it changes (e.g. audio finishes loading): a full or
+	// degenerate window snaps to the new extent, a zoomed one clamps into it.
+	useEffect(() => {
+		const previous = previousExtentRef.current;
 
-    if (previous.startMs === extentStartMs && previous.endMs === extentEndMs) return;
+		if (previous.startMs === extentStartMs && previous.endMs === extentEndMs) return;
 
-    const nextExtent = { startMs: extentStartMs, endMs: extentEndMs };
+		const nextExtent = { startMs: extentStartMs, endMs: extentEndMs };
 
-    previousExtentRef.current = nextExtent;
-    setLive((current) => reconcileToExtent(current, previous, nextExtent));
-    setCommitted((current) => reconcileToExtent(current, previous, nextExtent));
-  }, [extentStartMs, extentEndMs]);
+		previousExtentRef.current = nextExtent;
+		setLive((current) => reconcileToExtent(current, previous, nextExtent));
+		setCommitted((current) => reconcileToExtent(current, previous, nextExtent));
+	}, [extentStartMs, extentEndMs]);
 
-  // Non-passive wheel listener — a React `onWheel` prop is passive and cannot
-  // `preventDefault`, so the browser would page-zoom on ctrl+wheel.
-  useEffect(() => {
-    const element = wheelTargetRef.current;
+	// Non-passive wheel listener — a React `onWheel` prop is passive and cannot
+	// `preventDefault`, so the browser would page-zoom on ctrl+wheel.
+	useEffect(() => {
+		const element = wheelTargetRef.current;
 
-    if (!element) return;
+		if (!element) return;
 
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault();
+		const onWheel = (event: WheelEvent) => {
+			event.preventDefault();
 
-      const rect = element.getBoundingClientRect();
+			const rect = element.getBoundingClientRect();
 
-      if (event.ctrlKey || event.metaKey) {
-        const factor = Math.exp(event.deltaY * ZOOM_SENSITIVITY);
-        const cursorFrac =
-          rect.width > 0
-            ? Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
-            : 0.5;
+			if (event.ctrlKey || event.metaKey) {
+				const factor = Math.exp(event.deltaY * ZOOM_SENSITIVITY);
+				const cursorFrac =
+					rect.width > 0 ? Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) : 0.5;
 
-        setLive((current) =>
-          zoomWindow(current, factor, cursorFrac, extentRef.current, MIN_WINDOW_MS),
-        );
-      } else {
-        const deltaFrac = rect.height > 0 ? event.deltaY / rect.height : 0;
+				setLive((current) => zoomWindow(current, factor, cursorFrac, extentRef.current, MIN_WINDOW_MS));
+			} else {
+				const deltaFrac = rect.height > 0 ? event.deltaY / rect.height : 0;
 
-        setLive((current) => panWindow(current, deltaFrac, extentRef.current));
-      }
+				setLive((current) => panWindow(current, deltaFrac, extentRef.current));
+			}
 
-      scheduleCommit();
-    };
+			scheduleCommit();
+		};
 
-    element.addEventListener("wheel", onWheel, { passive: false });
+		element.addEventListener("wheel", onWheel, { passive: false });
 
-    return () => {
-      element.removeEventListener("wheel", onWheel);
-    };
-  }, [scheduleCommit]);
+		return () => {
+			element.removeEventListener("wheel", onWheel);
+		};
+	}, [scheduleCommit]);
 
-  useEffect(
-    () => () => {
-      if (commitTimerRef.current !== null) {
-        window.clearTimeout(commitTimerRef.current);
-      }
-    },
-    [],
-  );
+	useEffect(
+		() => () => {
+			if (commitTimerRef.current !== null) {
+				window.clearTimeout(commitTimerRef.current);
+			}
+		},
+		[],
+	);
 
-  const setViewport = useCallback(
-    (next: TimeWindow) => {
-      setLive(clampWindowToExtent(next, extentRef.current));
-      scheduleCommit();
-    },
-    [scheduleCommit],
-  );
+	const setViewport = useCallback(
+		(next: TimeWindow) => {
+			setLive(clampWindowToExtent(next, extentRef.current));
+			scheduleCommit();
+		},
+		[scheduleCommit],
+	);
 
-  const transform = useMemo(() => computeWindowTransform(committed, live), [live, committed]);
+	const transform = useMemo(() => computeWindowTransform(committed, live), [live, committed]);
 
-  const wheelHandlers = useMemo(() => ({ ref: wheelTargetRef }), []);
+	const wheelHandlers = useMemo(() => ({ ref: wheelTargetRef }), []);
 
-  return {
-    startMs: live.startMs,
-    endMs: live.endMs,
-    committedStartMs: committed.startMs,
-    committedEndMs: committed.endMs,
-    transform,
-    wheelHandlers,
-    setViewport,
-  };
+	return {
+		startMs: live.startMs,
+		endMs: live.endMs,
+		committedStartMs: committed.startMs,
+		committedEndMs: committed.endMs,
+		transform,
+		wheelHandlers,
+		setViewport,
+	};
 }

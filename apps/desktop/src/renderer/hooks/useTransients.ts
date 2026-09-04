@@ -37,6 +37,5 @@ export function useTransients(transients: ReadonlyArray<Transient<unknown>>, cal
 				rafRef.current = undefined;
 			}
 		};
-		 
 	}, transients);
 }

@@ -1,20 +1,20 @@
 /** One clip on the shared timeline — its stored placement and length in ms. */
 export interface TimelineClip {
-  readonly id: string;
-  readonly offsetMs: number;
-  readonly durationMs: number;
+	readonly id: string;
+	readonly offsetMs: number;
+	readonly durationMs: number;
 }
 
 /** A live drag replacing one clip's stored offset while a gesture is in flight. */
 export interface TimelineDrag {
-  readonly id: string;
-  readonly offsetMs: number;
+	readonly id: string;
+	readonly offsetMs: number;
 }
 
 /** A time window in milliseconds. */
 export interface TimelineExtent {
-  readonly startMs: number;
-  readonly endMs: number;
+	readonly startMs: number;
+	readonly endMs: number;
 }
 
 /**
@@ -25,23 +25,20 @@ export interface TimelineExtent {
  * `endMs`; dragging the earliest clip right shrinks `startMs`). Empty input
  * collapses to `0/0`.
  */
-export function computeTimelineExtent(
-  clips: ReadonlyArray<TimelineClip>,
-  drag: TimelineDrag | null,
-): TimelineExtent {
-  if (clips.length === 0) return { startMs: 0, endMs: 0 };
+export function computeTimelineExtent(clips: ReadonlyArray<TimelineClip>, drag: TimelineDrag | null): TimelineExtent {
+	if (clips.length === 0) return { startMs: 0, endMs: 0 };
 
-  let startMs = Number.POSITIVE_INFINITY;
-  let endMs = 0;
+	let startMs = Number.POSITIVE_INFINITY;
+	let endMs = 0;
 
-  for (const clip of clips) {
-    const rawOffset =
-      drag?.id === clip.id ? drag.offsetMs : clip.offsetMs;
-    const offsetMs = Math.max(0, rawOffset);
+	for (const clip of clips) {
+		const rawOffset = drag?.id === clip.id ? drag.offsetMs : clip.offsetMs;
+		const offsetMs = Math.max(0, rawOffset);
 
-    if (offsetMs < startMs) startMs = offsetMs;
-    if (offsetMs + clip.durationMs > endMs) endMs = offsetMs + clip.durationMs;
-  }
+		if (offsetMs < startMs) startMs = offsetMs;
 
-  return { startMs: startMs === Number.POSITIVE_INFINITY ? 0 : startMs, endMs };
+		if (offsetMs + clip.durationMs > endMs) endMs = offsetMs + clip.durationMs;
+	}
+
+	return { startMs: startMs === Number.POSITIVE_INFINITY ? 0 : startMs, endMs };
 }

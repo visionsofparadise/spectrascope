@@ -1,14 +1,14 @@
 import type { ReactNode } from "react";
 
 interface AppShellProps {
-  readonly sidebar: ReactNode;
-  readonly workspace: ReactNode;
-  /**
-   * Bottom transport strip. Optional — when absent (e.g. the Frequency
-   * Distribution view, which has no playback) the workspace pane spans the
-   * full height and no transport row is rendered.
-   */
-  readonly transport?: ReactNode;
+	readonly sidebar: ReactNode;
+	readonly workspace: ReactNode;
+	/**
+	 * Bottom transport strip. Optional — when absent (e.g. the Frequency
+	 * Distribution view, which has no playback) the workspace pane spans the
+	 * full height and no transport row is rendered.
+	 */
+	readonly transport?: ReactNode;
 }
 
 /**
@@ -28,40 +28,33 @@ interface AppShellProps {
  * distinguished by their content, not by borders.
  */
 export function AppShell({ sidebar, workspace, transport }: AppShellProps) {
-  const hasTransport = transport !== undefined && transport !== null;
+	const hasTransport = transport !== undefined && transport !== null;
 
-  return (
-    <div
-      className="grid h-full w-full bg-void text-chrome-text"
-      style={{
-        gridTemplateColumns: "240px 1fr",
-        gridTemplateRows: hasTransport ? "minmax(0, 1fr) auto" : "minmax(0, 1fr)",
-      }}
-    >
-      {/* Sidebar — col 1. Spans both rows when a transport is present. */}
-      <aside
-        className="min-h-0 overflow-visible bg-void"
-        style={{ gridColumn: "1", gridRow: hasTransport ? "1 / span 2" : "1" }}
-      >
-        {sidebar}
-      </aside>
+	return (
+		<div
+			className="grid h-full w-full bg-void text-chrome-text"
+			style={{
+				gridTemplateColumns: "240px 1fr",
+				gridTemplateRows: hasTransport ? "minmax(0, 1fr) auto" : "minmax(0, 1fr)",
+			}}
+		>
+			{/* Sidebar — col 1. Spans both rows when a transport is present. */}
+			<aside
+				className="min-h-0 overflow-visible bg-void"
+				style={{ gridColumn: "1", gridRow: hasTransport ? "1 / span 2" : "1" }}
+			>
+				{sidebar}
+			</aside>
 
-      {/* Workspace — row 1, col 2 */}
-      <main
-        className="min-h-0 min-w-0 overflow-hidden bg-void"
-        style={{ gridColumn: "2", gridRow: "1" }}
-      >
-        {workspace}
-      </main>
+			{/* Workspace — row 1, col 2 */}
+			<main className="min-h-0 min-w-0 overflow-hidden bg-void" style={{ gridColumn: "2", gridRow: "1" }}>
+				{workspace}
+			</main>
 
-      {/* Transport — row 2, col 2. The Transport component owns its own
+			{/* Transport — row 2, col 2. The Transport component owns its own
           `bg-void` background; the shell row contributes no chrome of its
           own. */}
-      {hasTransport && (
-        <div style={{ gridColumn: "2", gridRow: "2", height: "92px" }}>
-          {transport}
-        </div>
-      )}
-    </div>
-  );
+			{hasTransport && <div style={{ gridColumn: "2", gridRow: "2", height: "92px" }}>{transport}</div>}
+		</div>
+	);
 }

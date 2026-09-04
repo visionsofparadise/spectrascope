@@ -1,9 +1,9 @@
 import { Icon } from "@iconify/react";
-import type { Source } from "./source";
-import { createDefaultSource } from "./source";
-import type { SourceStreamStatus } from "../audio/useSourceStreams";
 import { Button } from "../components/Button";
+import { createDefaultSource } from "./source";
 import { SourceRow } from "./SourceRow";
+import type { Source } from "./source";
+import type { SourceStreamStatus } from "../audio/useSourceStreams";
 
 interface SourcesPanelProps {
 	readonly sources: ReadonlyArray<Source>;
@@ -80,11 +80,7 @@ export function SourcesPanel({
 								onChange={replaceSource}
 								onRemove={() => removeSource(source.id)}
 								active={source.id === activeSourceId}
-								onActivate={
-									onActiveSourceChange
-										? () => onActiveSourceChange(source.id)
-										: undefined
-								}
+								onActivate={onActiveSourceChange ? () => onActiveSourceChange(source.id) : undefined}
 							/>
 						</li>
 					))}

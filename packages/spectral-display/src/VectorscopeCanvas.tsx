@@ -74,11 +74,5 @@ export const VectorscopeCanvas: React.FC<VectorscopeCanvasProps> = ({ computeRes
 
 	const size = Math.round(VECTORSCOPE_GRID_SIZE * canvasScale);
 
-	return (
-		<canvas
-			ref={canvasCallback}
-			width={size}
-			height={size}
-		/>
-	);
+	return <canvas ref={canvasCallback} width={size} height={size} />;
 };

@@ -1,17 +1,14 @@
 import { useEffect, useMemo } from "react";
 import { useSpectralCompute, VectorscopeCanvas } from "spectral-display";
-import type { SpectralOptions } from "spectral-display";
-import type { Source } from "../source";
 import { hexToRgb255 } from "../spectral/colorUtil";
 import { ComputeProgress } from "../spectral/ComputeProgress";
-import {
-	useFirstComputeProgress,
-	useReportComputeState,
-} from "../spectral/firstComputeProgress";
-import type { ComputeState } from "../spectral/firstComputeProgress";
-import type { TransportControl } from "../Transport";
-import type { AudioData } from "../spectral/types";
+import { useFirstComputeProgress, useReportComputeState } from "../spectral/firstComputeProgress";
 import { resolveVisibleSourceAudio } from "./viewAudio";
+import type { Source } from "../source";
+import type { ComputeState } from "../spectral/firstComputeProgress";
+import type { AudioData } from "../spectral/types";
+import type { TransportControl } from "../Transport";
+import type { SpectralOptions } from "spectral-display";
 
 /**
  * VectorscopeView — a single shared vectorscope scope with every visible
@@ -166,13 +163,7 @@ function SourceCloud({ source, audioData, onComputeState }: SourceCloudProps) {
 				stereo: true,
 			},
 		}),
-		[
-			audioData.sampleRate,
-			audioData.totalSamples,
-			audioData.channels,
-			audioData.durationMs,
-			audioData.readSamples,
-		],
+		[audioData.sampleRate, audioData.totalSamples, audioData.channels, audioData.durationMs, audioData.readSamples],
 	);
 
 	const computeResult = useSpectralCompute(spectralOptions);
@@ -194,10 +185,7 @@ function SourceCloud({ source, audioData, onComputeState }: SourceCloudProps) {
 	// The cloud's tint is this source's primary layer color. `VectorscopeCanvas`
 	// takes an `[r, g, b]` triple of 0–255 ints (matching `WaveformCanvas`'s
 	// `color` prop), so convert the hex through the shared `hexToRgb255` helper.
-	const tint = useMemo(
-		() => hexToRgb255(source.layerColor.primary),
-		[source.layerColor.primary],
-	);
+	const tint = useMemo(() => hexToRgb255(source.layerColor.primary), [source.layerColor.primary]);
 
 	return (
 		<div className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full">
@@ -206,16 +194,9 @@ function SourceCloud({ source, audioData, onComputeState }: SourceCloudProps) {
 	);
 }
 
-export function VectorscopeView({
-	sources,
-	sourceAudio,
-	onTransportControlChange,
-}: VectorscopeViewProps) {
+export function VectorscopeView({ sources, sourceAudio, onTransportControlChange }: VectorscopeViewProps) {
 	// Visible sources that have decoded audio, paired with their `AudioData`.
-	const renderableSources = useMemo(
-		() => resolveVisibleSourceAudio(sources, sourceAudio),
-		[sources, sourceAudio],
-	);
+	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
 	// First-compute progress aggregated across the per-source clouds — a shimmer
 	// + mean-fraction bar over the scope while any source first-computes.
@@ -231,9 +212,7 @@ export function VectorscopeView({
 		<div className="flex h-full min-h-0 w-full flex-col bg-void p-4">
 			{renderableSources.length === 0 ? (
 				<div className="flex h-full items-center justify-center bg-void">
-					<p className="font-body text-sm text-chrome-text-secondary">
-						No visible sources.
-					</p>
+					<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
 				</div>
 			) : (
 				/* Scope region. The single square scope is the largest square
@@ -245,10 +224,7 @@ export function VectorscopeView({
 				   scoped to the square. `containerType: "size"` (not Tailwind's
 				   `@container`, which is `inline-size`-only) makes `cqmin`
 				   account for both the region's width and its height. */
-				<div
-					className="relative flex min-h-0 flex-1 items-center justify-center"
-					style={{ containerType: "size" }}
-				>
+				<div className="relative flex min-h-0 flex-1 items-center justify-center" style={{ containerType: "size" }}>
 					<FullBleedAxes />
 					<div
 						className="relative aspect-square overflow-hidden"
@@ -257,10 +233,7 @@ export function VectorscopeView({
 						{/* Z-stacked tinted clouds, blended with `mix-blend-mode:
 						    lighten` — the same compositing the Overlay view uses,
 						    so multiple overlaid clouds stay distinguishable. */}
-						<div
-							className="absolute inset-0"
-							style={{ mixBlendMode: "lighten" }}
-						>
+						<div className="absolute inset-0" style={{ mixBlendMode: "lighten" }}>
 							{renderableSources.map(({ source, audioData }) => (
 								<SourceCloud
 									key={source.id}
@@ -272,9 +245,7 @@ export function VectorscopeView({
 						</div>
 						<ScopeDiagonals />
 					</div>
-					{progress.firstComputing && (
-						<ComputeProgress fraction={progress.fraction} />
-					)}
+					{progress.firstComputing && <ComputeProgress fraction={progress.fraction} />}
 				</div>
 			)}
 		</div>

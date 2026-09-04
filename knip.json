@@ -1,0 +1,37 @@
+{
+	"$schema": "https://unpkg.com/knip@6/schema.json",
+	"ignore": [".githooks/pre-push.mjs"],
+	"ignoreDependencies": [
+		"prettier",
+		"@commitlint/cli",
+		"eslint-formatter-unix",
+		"textlint-filter-rule-comments",
+		"textlint-rule-no-dead-link",
+		"@types/react-dom",
+		"react-dom",
+		"tailwindcss",
+		"@fontsource-variable/space-grotesk",
+		"@fontsource/dm-mono"
+	],
+	"workspaces": {
+		".": {},
+		"apps/desktop": {
+			"entry": [
+				"forge.config.ts",
+				"vite.main.config.ts",
+				"vite.preload.config.ts",
+				"vite.renderer.config.ts",
+				"src/main/index.ts",
+				"src/preload/index.ts"
+			],
+			"project": ["src/**/*.{ts,tsx}"]
+		},
+		"apps/spectral-display-demo": {
+			"entry": ["src/bench.ts"],
+			"project": ["src/**/*.{ts,tsx}"]
+		},
+		"packages/spectral-display": {
+			"project": ["src/**/*.{ts,tsx}"]
+		}
+	}
+}

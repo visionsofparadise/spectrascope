@@ -1,12 +1,13 @@
-import { app, BrowserWindow } from "electron";
 import path from "path";
+import { app, BrowserWindow } from "electron";
 import { ASYNC_MAIN_IPCS } from "../shared/ipc/asyncMainIpcs";
-import type { Logger } from "../shared/models/Logger";
 import { FileWatcherManager } from "./FileWatcherManager";
 import { SourceCacheManager } from "./SourceCacheManager";
 import type { StreamManager } from "./StreamManager";
+import type { Logger } from "../shared/models/Logger";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string;
+
 declare const MAIN_WINDOW_VITE_NAME: string;
 
 const WINDOW_CONFIG = {
@@ -39,7 +40,14 @@ export const createWindow = (logger: Logger, streamManager: StreamManager): Brow
 	const sourceCacheManager = new SourceCacheManager(app.getPath("userData"));
 
 	for (const AsyncMainIpc of ASYNC_MAIN_IPCS) {
-		new AsyncMainIpc().register({ browserWindow, fileWatcherManager, sourceCacheManager, streamManager, logger, windowId });
+		new AsyncMainIpc().register({
+			browserWindow,
+			fileWatcherManager,
+			sourceCacheManager,
+			streamManager,
+			logger,
+			windowId,
+		});
 	}
 
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -52,6 +60,7 @@ export const createWindow = (logger: Logger, streamManager: StreamManager): Brow
 
 	const debouncedEmit = (): void => {
 		if (debounceTimer) clearTimeout(debounceTimer);
+
 		debounceTimer = setTimeout(emitBounds, 500);
 	};
 

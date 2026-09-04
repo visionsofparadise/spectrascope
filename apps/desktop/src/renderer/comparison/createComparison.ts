@@ -1,6 +1,6 @@
 import { createDefaultSource } from "../workspace/source";
-import type { Source } from "../workspace/source";
 import type { Comparison, SourceState } from "../models/State/App";
+import type { Source } from "../workspace/source";
 
 /** Audio file extensions offered in the open dialog. */
 export const AUDIO_FILE_EXTENSIONS = ["wav", "mp3", "flac", "m4a", "ogg", "aiff"] as const;
@@ -88,10 +88,7 @@ export function createTabId(): string {
  * signature of a bare add is: exactly one extra source, appended at the end,
  * with no file path — every preceding source unchanged (same id, same order).
  */
-export function isBareAddSource(
-	current: ReadonlyArray<Source>,
-	next: ReadonlyArray<Source>,
-): boolean {
+export function isBareAddSource(current: ReadonlyArray<Source>, next: ReadonlyArray<Source>): boolean {
 	if (next.length !== current.length + 1) return false;
 
 	const added = next[next.length - 1];

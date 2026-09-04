@@ -33,7 +33,9 @@ function makeState(overrides: Partial<ComparisonHistoryState> = {}): ComparisonH
 }
 
 /** Build one source with all fields concrete, so per-source value equality can be exercised. */
-function makeSource(overrides: Partial<ComparisonHistoryState["sources"][number]> = {}): ComparisonHistoryState["sources"][number] {
+function makeSource(
+	overrides: Partial<ComparisonHistoryState["sources"][number]> = {},
+): ComparisonHistoryState["sources"][number] {
 	return {
 		id: "source-1",
 		name: "Take 1",
@@ -211,7 +213,11 @@ describe("ComparisonHistory", () => {
 		for (let index = 0; index < total; index += 1) {
 			const kind = index % 2 === 0 ? "view" : "channelInput";
 
-			history.push(makeState({ channelInput: "side", activeView: index % 2 === 0 ? "sum" : "overlay" }), kind, index * 10_000);
+			history.push(
+				makeState({ channelInput: "side", activeView: index % 2 === 0 ? "sum" : "overlay" }),
+				kind,
+				index * 10_000,
+			);
 		}
 
 		let undoCount = 0;
@@ -279,9 +285,13 @@ describe("historyStatesEqual", () => {
 		expect(historyStatesEqual(base, makeState({ ...base, channelInput: "mid" }))).toBe(false);
 		expect(historyStatesEqual(base, makeState({ ...base, selection: { start: 1, end: 3 } }))).toBe(false);
 		expect(historyStatesEqual(base, makeState({ ...base, selection: null }))).toBe(false);
-		expect(historyStatesEqual(base, makeState({ ...base, sources: [makeSource(), makeSource({ id: "source-2" })] }))).toBe(false);
+		expect(
+			historyStatesEqual(base, makeState({ ...base, sources: [makeSource(), makeSource({ id: "source-2" })] })),
+		).toBe(false);
 		expect(historyStatesEqual(base, makeState({ ...base, sources: [makeSource({ muted: true })] }))).toBe(false);
-		expect(historyStatesEqual(base, makeState({ ...base, sources: [makeSource({ timelineOffsetMs: 50 })] }))).toBe(false);
+		expect(historyStatesEqual(base, makeState({ ...base, sources: [makeSource({ timelineOffsetMs: 50 })] }))).toBe(
+			false,
+		);
 	});
 
 	it("treats a transport-position-only comparison change as a value-equal projection", () => {

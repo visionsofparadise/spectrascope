@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Snapshot } from "valtio/vanilla";
+import { ComparisonHistory, classifyEdit, toHistoryState } from "./comparisonHistory";
 import type { ProxyStore } from "../models/ProxyStore/ProxyStore";
 import type { AppState, Comparison } from "../models/State/App";
-import { ComparisonHistory, classifyEdit, toHistoryState } from "./comparisonHistory";
+import type { Snapshot } from "valtio/vanilla";
 
 /** What `useComparisonHistory` exposes — bind these to the actions-cluster buttons and keyboard shortcuts. */
 export interface HistoryControl {
@@ -48,10 +48,7 @@ export function useComparisonHistory(
 	// `comparison.id` only — re-seeding on every snapshot change would discard
 	// the stack; the snapshot is read once here and subsequent changes flow
 	// through the effect below.
-	const history = useMemo(
-		() => new ComparisonHistory(toHistoryState(comparison)),
-		[comparison.id],
-	);
+	const history = useMemo(() => new ComparisonHistory(toHistoryState(comparison)), [comparison.id]);
 
 	// `canUndo`/`canRedo` are state so the buttons re-render when history moves —
 	// the `ComparisonHistory` instance itself is mutable and not React-observed.
@@ -118,7 +115,8 @@ export function useComparisonHistory(
 				}));
 				target.activeView = state.activeView;
 				target.channelInput = state.channelInput;
-				target.selection = state.selection === null ? null : { start: state.selection.start, end: state.selection.end };
+				target.selection =
+					state.selection === null ? null : { start: state.selection.start, end: state.selection.end };
 				target.canonicalSampleRate = state.canonicalSampleRate;
 				target.differenceA = state.differenceA;
 				target.differenceB = state.differenceB;

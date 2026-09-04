@@ -1,16 +1,16 @@
 /* eslint-disable no-console */
 import {
-  BlitRenderer,
-  computeIntegratedLufs,
-  computeMomentaryLufs,
-  computeRunningIntegratedLufs,
-  createScanContext,
-  finalizeScan,
-  getDevice,
-  meanSquareToLufs,
-  resolveConfig,
-  scanSamples,
-  SpectralEngine,
+	BlitRenderer,
+	computeIntegratedLufs,
+	computeMomentaryLufs,
+	computeRunningIntegratedLufs,
+	createScanContext,
+	finalizeScan,
+	getDevice,
+	meanSquareToLufs,
+	resolveConfig,
+	scanSamples,
+	SpectralEngine,
 } from "spectral-display";
 import { loadAudio } from "./audio-loader";
 
@@ -57,7 +57,12 @@ async function benchPipeline(
 	const signal = new AbortController().signal;
 	const options = resolveConfig({ device, signal });
 
-	const scanContext = createScanContext({ sampleRate, sampleCount: totalSamples, channelCount: channels }, pointCount, samplesPerPoint, DEFAULT_CHUNK_SIZE);
+	const scanContext = createScanContext(
+		{ sampleRate, sampleCount: totalSamples, channelCount: channels },
+		pointCount,
+		samplesPerPoint,
+		DEFAULT_CHUNK_SIZE,
+	);
 
 	const spectralCtx = await engine.prepare(sampleCount, sampleRate, { width: WIDTH, height: HEIGHT }, options);
 
@@ -93,6 +98,7 @@ async function benchPipeline(
 	const gpuFftWaitStart = performance.now();
 
 	await device.queue.onSubmittedWorkDone();
+
 	const gpuFftTime = performance.now() - gpuFftWaitStart;
 
 	const lufsStart = performance.now();
@@ -132,6 +138,7 @@ async function benchPipeline(
 	blit.resize(WIDTH, HEIGHT);
 	blit.render(result.spectrogramTexture);
 	await device.queue.onSubmittedWorkDone();
+
 	const gpuVizTime = performance.now() - vizStart;
 
 	result.spectrogramTexture.destroy();
@@ -189,6 +196,7 @@ async function main() {
 	}
 
 	results.sort((left, right) => left.total - right.total);
+
 	const median = results[Math.floor(runs / 2)]!;
 
 	const ts = new Date().toISOString();

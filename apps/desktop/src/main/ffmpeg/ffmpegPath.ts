@@ -1,5 +1,5 @@
-import { app } from "electron";
 import path from "node:path";
+import { app } from "electron";
 import ffmpegStatic from "ffmpeg-static";
 
 /**

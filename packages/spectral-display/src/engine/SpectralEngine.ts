@@ -1,8 +1,14 @@
-import type { RequiredProperties } from "../utils/RequiredProperties";
 import { computeBandMappings, type FrequencyScale } from "./band-mapping";
 import { generateColormapBuffer, resolveColormap, resolveWaveformColor, type ColormapDefinition } from "./colormap";
 import { getMaxFftSize } from "./device";
-import { FFT_PIPELINE_SHADER, LTAS_FOLD_SHADER, LTAS_REDUCE_SHADER, SPECTROGRAM_FOLD_SHADER, SPECTROGRAM_VISUALIZE_SHADER } from "./shaders";
+import {
+	FFT_PIPELINE_SHADER,
+	LTAS_FOLD_SHADER,
+	LTAS_REDUCE_SHADER,
+	SPECTROGRAM_FOLD_SHADER,
+	SPECTROGRAM_VISUALIZE_SHADER,
+} from "./shaders";
+import type { RequiredProperties } from "../utils/RequiredProperties";
 
 export interface Dimensions {
 	width: number;
@@ -94,7 +100,12 @@ export function computeNumBands(height: number, fftSize: number, isLinear: boole
  * between this range and the visualize/fold shaders' f32 partition; folding empty intersections is
  * a no-op, so a superset is safe.
  */
-export function computeColumnRange(batchBase: number, batchFrames: number, totalFrames: number, width: number): { colFirst: number; colLast: number } {
+export function computeColumnRange(
+	batchBase: number,
+	batchFrames: number,
+	totalFrames: number,
+	width: number,
+): { colFirst: number; colLast: number } {
 	const stride = totalFrames / width;
 	const colFirst = Math.max(0, Math.floor(batchBase / stride) - 1);
 	const colLast = Math.min(width - 1, Math.floor((batchBase + batchFrames) / stride) + 1);
@@ -150,14 +161,21 @@ export class SpectralEngine {
 		this.device = device;
 	}
 
-	async prepare(sampleCount: number, sampleRate: number, dimensions: Dimensions, config: SpectralConfig): Promise<SpectralProcessContext> {
+	async prepare(
+		sampleCount: number,
+		sampleRate: number,
+		dimensions: Dimensions,
+		config: SpectralConfig,
+	): Promise<SpectralProcessContext> {
 		const { fftSize: requestedFftSize, frequencyScale } = config;
 
 		const maxFft = getMaxFftSize(this.device);
 		const fftSize = Math.min(requestedFftSize, maxFft);
 
 		if (sampleCount < fftSize) {
-			throw new Error(`Audio segment too short for FFT size ${fftSize} — need at least ${fftSize} samples, got ${sampleCount}`);
+			throw new Error(
+				`Audio segment too short for FFT size ${fftSize} — need at least ${fftSize} samples, got ${sampleCount}`,
+			);
 		}
 
 		const isLinear = frequencyScale === "linear";
@@ -289,7 +307,8 @@ export class SpectralEngine {
 			throw new Error("Spectral context is missing its FFT magnitude output buffer");
 		}
 
-		const { foldUniformBuffer, spectrogramAccumulator, ltasAccumulator, spectrogramFoldPipeline, ltasFoldPipeline } = context;
+		const { foldUniformBuffer, spectrogramAccumulator, ltasAccumulator, spectrogramFoldPipeline, ltasFoldPipeline } =
+			context;
 
 		// Prepend overlap from previous chunk
 		const totalSamples = context.overlapCount + chunkLength;
@@ -307,14 +326,24 @@ export class SpectralEngine {
 		while (localOffset + fftSize <= totalSamples && context.hopOffset < totalFrames) {
 			const maxHops = Math.floor((totalSamples - localOffset - fftSize) / hopSize) + 1;
 			const remainingHops = totalFrames - context.hopOffset;
-			const hopsInBatch = Math.min(maxHops, remainingHops, Math.floor((MAX_INPUT_BUFFER_SAMPLES - fftSize) / hopSize) + 1);
+			const hopsInBatch = Math.min(
+				maxHops,
+				remainingHops,
+				Math.floor((MAX_INPUT_BUFFER_SAMPLES - fftSize) / hopSize) + 1,
+			);
 
 			if (hopsInBatch <= 0) break;
 
 			const batchSamples = (hopsInBatch - 1) * hopSize + fftSize;
 			const batchData = combined.subarray(localOffset, localOffset + batchSamples);
 
-			this.device.queue.writeBuffer(context.inputBuffer, 0, batchData.buffer, batchData.byteOffset, batchData.byteLength);
+			this.device.queue.writeBuffer(
+				context.inputBuffer,
+				0,
+				batchData.buffer,
+				batchData.byteOffset,
+				batchData.byteLength,
+			);
 
 			const uniformData = new Uint32Array(8);
 
@@ -349,7 +378,11 @@ export class SpectralEngine {
 				const { colFirst, colLast } = computeColumnRange(context.hopOffset, hopsInBatch, totalFrames, width);
 				const touchedColumns = colLast - colFirst + 1;
 
-				this.device.queue.writeBuffer(foldUniformBuffer, 0, new Uint32Array([totalFrames, width, numBands, context.hopOffset, hopsInBatch, colFirst]));
+				this.device.queue.writeBuffer(
+					foldUniformBuffer,
+					0,
+					new Uint32Array([totalFrames, width, numBands, context.hopOffset, hopsInBatch, colFirst]),
+				);
 
 				const foldPass = commandEncoder.beginComputePass();
 

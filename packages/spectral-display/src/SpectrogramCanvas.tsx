@@ -12,7 +12,12 @@ interface SpectrogramCanvasProps {
 	onRendered?: () => void;
 }
 
-export const SpectrogramCanvas: React.FC<SpectrogramCanvasProps> = ({ computeResult, ref, canvasScale = 1, onRendered }) => {
+export const SpectrogramCanvas: React.FC<SpectrogramCanvasProps> = ({
+	computeResult,
+	ref,
+	canvasScale = 1,
+	onRendered,
+}) => {
 	const [internalCanvasReference, canvasCallback] = useCanvasRef(ref);
 	const blitReference = useRef<BlitRenderer | null>(null);
 	const blitDeviceRef = useRef<GPUDevice | null>(null);
@@ -56,15 +61,10 @@ export const SpectrogramCanvas: React.FC<SpectrogramCanvasProps> = ({ computeRes
 		[],
 	);
 
-	const { width, height } = computeResult.status === "ready" ? computeResult.options.sampleQuery : { width: 0, height: 0 };
+	const { width, height } =
+		computeResult.status === "ready" ? computeResult.options.sampleQuery : { width: 0, height: 0 };
 	const canvasWidth = Math.round(width * canvasScale);
 	const canvasHeight = Math.round(height * canvasScale);
 
-	return (
-		<canvas
-			ref={canvasCallback}
-			width={canvasWidth}
-			height={canvasHeight}
-		/>
-	);
+	return <canvas ref={canvasCallback} width={canvasWidth} height={canvasHeight} />;
 };

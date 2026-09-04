@@ -1,6 +1,6 @@
-import type { StreamSpec } from "../../../../main/audio/streamDsp";
 import { AsyncMainIpc, type IpcHandlerDependencies } from "../../../models/AsyncMainIpc";
 import { REGISTER_STREAM_ACTION, type RegisterStreamIpcParameters, type RegisterStreamIpcReturn } from "./Renderer";
+import type { StreamSpec } from "../../../../main/audio/streamDsp";
 
 export class RegisterStreamMainIpc extends AsyncMainIpc<RegisterStreamIpcParameters, RegisterStreamIpcReturn> {
 	action = REGISTER_STREAM_ACTION;

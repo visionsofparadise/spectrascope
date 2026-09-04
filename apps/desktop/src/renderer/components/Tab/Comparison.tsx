@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChannelInput } from "spectral-display";
-import type { Snapshot } from "valtio/vanilla";
+import { streamUrl } from "../../audio/streamAudioData";
+import { resolveAudibleSources, useDerivedStreams } from "../../audio/useDerivedStreams";
+import { usePlayer } from "../../audio/usePlayer";
+import { useSourceStreams } from "../../audio/useSourceStreams";
+import { AUDIO_FILE_EXTENSIONS, createSourceFromFile, isBareAddSource } from "../../comparison/createComparison";
+import { main } from "../../models/Main";
+import { useComparisonHistory } from "../../state/useComparisonHistory";
 import { AppShell } from "../../workspace/AppShell";
 import { Sidebar } from "../../workspace/Sidebar";
 import { SyncProvider } from "../../workspace/sync";
-import type { SyncState } from "../../workspace/sync";
 import { Transport } from "../../workspace/Transport";
 import type { TransportControl } from "../../workspace/Transport";
 import { Workspace } from "../../workspace/Workspace";
@@ -12,16 +16,12 @@ import { TransportViewControls } from "../../workspace/TransportViewControls";
 import { INITIAL_VIEW_CONTROL_SETTINGS } from "../../workspace/viewSettings";
 import type { ViewId } from "../../workspace/Workspace";
 import type { Source } from "../../workspace/source";
-import { main } from "../../models/Main";
-import { AUDIO_FILE_EXTENSIONS, createSourceFromFile, isBareAddSource } from "../../comparison/createComparison";
-import { useSourceStreams } from "../../audio/useSourceStreams";
-import { resolveAudibleSources, useDerivedStreams } from "../../audio/useDerivedStreams";
-import { streamUrl } from "../../audio/streamAudioData";
-import { usePlayer } from "../../audio/usePlayer";
-import { useComparisonHistory } from "../../state/useComparisonHistory";
 import type { HistoryControl } from "../../state/useComparisonHistory";
 import type { AppContext } from "../../models/Context";
 import type { Comparison, SourceState } from "../../models/State/App";
+import type { SyncState } from "../../workspace/sync";
+import type { ChannelInput } from "spectral-display";
+import type { Snapshot } from "valtio/vanilla";
 
 interface Props {
 	readonly context: AppContext;
@@ -101,9 +101,7 @@ function toSourceState(source: Source): SourceState {
 export function ComparisonTab({ context, comparison, onHistoryControlChange }: Props) {
 	const { app, appStore } = context;
 
-	const [transportControl, setTransportControl] = useState<TransportControl>(
-		INITIAL_TRANSPORT_CONTROL,
-	);
+	const [transportControl, setTransportControl] = useState<TransportControl>(INITIAL_TRANSPORT_CONTROL);
 
 	// Monitor volume — controlled state for the Transport's `VolumeSlider`. Kept
 	// transient (not in the autosaved comparison state): it is a playback-side
@@ -239,10 +237,7 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 	// True while at least one source is still preparing — drives the "Preparing
 	// audio…" overlay. A file-less or failed source is `error`, not `preparing`,
 	// so it does not keep the indicator up.
-	const preparing = useMemo(
-		() => sources.some((source) => status.get(source.id) === "preparing"),
-		[sources, status],
-	);
+	const preparing = useMemo(() => sources.some((source) => status.get(source.id) === "preparing"), [sources, status]);
 
 	// --- Playback ------------------------------------------------------------
 

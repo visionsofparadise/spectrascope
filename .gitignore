@@ -1,7 +1,10 @@
 node_modules/
 dist/
 .tsbuildinfo
+tsconfig.tsbuildinfo
 .eslintcache
+.stylelintcache
+.tools/
 .vite/
 out/
 .turbo/

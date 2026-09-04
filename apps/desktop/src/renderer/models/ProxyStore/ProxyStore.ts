@@ -1,5 +1,5 @@
-import type { Snapshot } from "valtio/vanilla";
 import type { Mutable } from "../State";
+import type { Snapshot } from "valtio/vanilla";
 
 export class ProxyStore {
 	private readonly _map = new Map<symbol, object>();

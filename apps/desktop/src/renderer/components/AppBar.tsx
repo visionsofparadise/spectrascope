@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "@iconify/react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -57,6 +57,7 @@ export function AppBar({ context, historyControl }: Props) {
 				const index = proxy.tabs.findIndex((tab) => tab.id === id);
 
 				if (index === -1) return;
+
 				proxy.tabs.splice(index, 1);
 
 				if (proxy.activeTabId === id) {
@@ -103,10 +104,7 @@ export function AppBar({ context, historyControl }: Props) {
 	}, [editingTabId]);
 
 	return (
-		<div
-			className="flex h-12 shrink-0 items-center gap-2 bg-void pl-3 pr-[138px]"
-			style={DRAG}
-		>
+		<div className="flex h-12 shrink-0 items-center gap-2 bg-void pl-3 pr-[138px]" style={DRAG}>
 			{/* App menu */}
 			<div className="relative shrink-0" style={NO_DRAG}>
 				<DropdownMenu>
@@ -121,7 +119,9 @@ export function AppBar({ context, historyControl }: Props) {
 						<DropdownMenuItem disabled>Save As…</DropdownMenuItem>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem disabled>Export…</DropdownMenuItem>
-						<DropdownMenuItem disabled={!hasActiveTab} onSelect={closeActiveTab}>Close Session</DropdownMenuItem>
+						<DropdownMenuItem disabled={!hasActiveTab} onSelect={closeActiveTab}>
+							Close Session
+						</DropdownMenuItem>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem disabled>Preferences</DropdownMenuItem>
 					</DropdownMenuContent>
@@ -134,7 +134,10 @@ export function AppBar({ context, historyControl }: Props) {
 			    (inherited from the bar); each interactive child opts back out with
 			    no-drag. A faint wordmark sits behind the chips. */}
 			<div className="relative isolate flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-				<div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 flex items-center overflow-hidden">
+				<div
+					aria-hidden="true"
+					className="pointer-events-none absolute inset-0 -z-10 flex items-center overflow-hidden"
+				>
 					<span className="select-none whitespace-nowrap pl-1 font-display text-sm tracking-[0.5em] text-chrome-text-dim opacity-[0.08]">
 						SPECTRASCOPE
 					</span>

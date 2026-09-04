@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PreparedSource } from "../../main/SourceCacheManager";
 import { main } from "../models/Main";
-import type { AudioData } from "../workspace/spectral/types";
-import type { Source } from "../workspace/source";
 import { createStreamAudioData } from "./streamAudioData";
+import type { PreparedSource } from "../../main/SourceCacheManager";
+import type { Source } from "../workspace/source";
+import type { AudioData } from "../workspace/spectral/types";
 
 /** Per-source stream-preparation status — `preparing` until the stream registers, then `ready` or `error`. */
 export type SourceStreamStatus = "preparing" | "ready" | "error";
@@ -180,6 +180,7 @@ export function useSourceStreams(
 				// A file-less source has nothing to prepare — surface it as an error
 				// so a caller can distinguish it from a still-preparing source.
 				status.set(source.id, "error");
+
 				continue;
 			}
 
@@ -187,6 +188,7 @@ export function useSourceStreams(
 
 			if (!entry) {
 				status.set(source.id, "preparing");
+
 				continue;
 			}
 

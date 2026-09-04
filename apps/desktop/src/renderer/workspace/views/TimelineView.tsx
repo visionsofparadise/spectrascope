@@ -1,42 +1,42 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChannelInput } from "spectral-display";
 import { SourceRender } from "../SourceRender";
-import type { SourceRenderCursorReadout } from "../SourceRender";
-import type { Source } from "../source";
-import type { TransportControl } from "../Transport";
-import type { AudioData } from "../spectral/types";
-import type { ViewControlSettings } from "../viewSettings";
 import { TimeRuler } from "../spectral/Axes";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
 import { useTimeViewport } from "../useTimeViewport";
-import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
 import { computeTimelineExtent } from "./timelineExtent";
+import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
+import type { Source } from "../source";
+import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { TimelineDrag } from "./timelineExtent";
+import type { AudioData } from "../spectral/types";
+import type { TransportControl } from "../Transport";
+import type { ViewControlSettings } from "../viewSettings";
+import type { ChannelInput } from "spectral-display";
 
 const DEFAULT_CURSOR: SourceRenderCursorReadout = {
-  time: "00:00.000",
-  freq: "— Hz",
-  amp: "— dB",
+	time: "00:00.000",
+	freq: "— Hz",
+	amp: "— dB",
 };
 
 /** Local `#RRGGBB` → `[r, g, b]` helper. Duplicates the per-view copies in
  *  OverlayView / SliderView / DifferenceView / SumView. */
 function hexToRgb255(hex: string): [number, number, number] {
-  const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
-  const expanded =
-    cleaned.length === 3
-      ? cleaned
-          .split("")
-          .map((char) => `${char}${char}`)
-          .join("")
-      : cleaned;
-  const value = Number.parseInt(expanded, 16);
+	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
+	const expanded =
+		cleaned.length === 3
+			? cleaned
+					.split("")
+					.map((char) => `${char}${char}`)
+					.join("")
+			: cleaned;
+	const value = Number.parseInt(expanded, 16);
 
-  if (Number.isNaN(value) || expanded.length !== 6) {
-    return [184, 184, 192];
-  }
+	if (Number.isNaN(value) || expanded.length !== 6) {
+		return [184, 184, 192];
+	}
 
-  return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
+	return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 }
 
 /**
@@ -46,43 +46,43 @@ function hexToRgb255(hex: string): [number, number, number] {
  * so it draws time lines only.
  */
 function GridOverlay({
-  startMs,
-  endMs,
-  opacity,
+	startMs,
+	endMs,
+	opacity,
 }: {
-  readonly startMs: number;
-  readonly endMs: number;
-  readonly opacity: number;
+	readonly startMs: number;
+	readonly endMs: number;
+	readonly opacity: number;
 }) {
-  const spanMs = endMs - startMs;
+	const spanMs = endMs - startMs;
 
-  let majorMs = 5000;
+	let majorMs = 5000;
 
-  if (spanMs < 2000) majorMs = 200;
-  else if (spanMs < 5000) majorMs = 500;
-  else if (spanMs < 10000) majorMs = 1000;
-  else if (spanMs < 30000) majorMs = 2000;
-  else if (spanMs < 60000) majorMs = 5000;
-  else majorMs = 10000;
+	if (spanMs < 2000) majorMs = 200;
+	else if (spanMs < 5000) majorMs = 500;
+	else if (spanMs < 10000) majorMs = 1000;
+	else if (spanMs < 30000) majorMs = 2000;
+	else if (spanMs < 60000) majorMs = 5000;
+	else majorMs = 10000;
 
-  const timeTicks: Array<number> = [];
-  const first = Math.ceil(startMs / majorMs) * majorMs;
+	const timeTicks: Array<number> = [];
+	const first = Math.ceil(startMs / majorMs) * majorMs;
 
-  for (let tick = first; tick <= endMs; tick += majorMs) {
-    timeTicks.push((tick - startMs) / spanMs);
-  }
+	for (let tick = first; tick <= endMs; tick += majorMs) {
+		timeTicks.push((tick - startMs) / spanMs);
+	}
 
-  return (
-    <div className="pointer-events-none absolute inset-0" style={{ opacity }}>
-      {timeTicks.map((frac) => (
-        <div
-          key={`t${frac}`}
-          className="absolute top-0 bottom-0 w-px bg-chrome-text"
-          style={{ left: `${frac * 100}%` }}
-        />
-      ))}
-    </div>
-  );
+	return (
+		<div className="pointer-events-none absolute inset-0" style={{ opacity }}>
+			{timeTicks.map((frac) => (
+				<div
+					key={`t${frac}`}
+					className="absolute top-0 bottom-0 w-px bg-chrome-text"
+					style={{ left: `${frac * 100}%` }}
+				/>
+			))}
+		</div>
+	);
 }
 
 /**
@@ -106,243 +106,234 @@ function GridOverlay({
  * clip simply stops there; there is no upper bound (the extent follows).
  */
 function TimelineTrack({
-  source,
-  audioData,
-  offsetMs,
-  windowStartMs,
-  windowEndMs,
-  extentEndMs,
-  fftSize,
-  hopOverlap,
-  channelInput,
-  gridOpacity,
-  waveformOpacity,
-  spectrogramOpacity,
-  draggable,
-  dragging,
-  onCursorMove,
-  onDragMove,
-  onCommit,
+	source,
+	audioData,
+	offsetMs,
+	windowStartMs,
+	windowEndMs,
+	extentEndMs,
+	fftSize,
+	hopOverlap,
+	channelInput,
+	gridOpacity,
+	waveformOpacity,
+	spectrogramOpacity,
+	draggable,
+	dragging,
+	onCursorMove,
+	onDragMove,
+	onCommit,
 }: {
-  readonly source: Source;
-  readonly audioData: AudioData;
-  /** This source's effective placement on the shared timeline, in ms (≥ 0) —
-   *  the stored offset between drags, the live drag offset during one. */
-  readonly offsetMs: number;
-  /** Committed viewport window the row is laid out against, in absolute ms. */
-  readonly windowStartMs: number;
-  readonly windowEndMs: number;
-  /** Latest clip end across the timeline — the arrow-key `End` target / aria max. */
-  readonly extentEndMs: number;
-  readonly fftSize: number;
-  readonly hopOverlap: number;
-  readonly channelInput: ChannelInput;
-  readonly gridOpacity: number;
-  /** Per-layer opacity for the clip's `SourceRender` (from shared settings). */
-  readonly waveformOpacity: number;
-  readonly spectrogramOpacity: number;
-  /** Whether the clip can be dragged — false when no offset callback is wired. */
-  readonly draggable: boolean;
-  /** Whether this clip is the one currently being dragged (drives the accent). */
-  readonly dragging: boolean;
-  readonly onCursorMove: (readout: SourceRenderCursorReadout) => void;
-  /** Reports the live offset on every pointer tick during a drag (transient). */
-  readonly onDragMove: (offsetMs: number) => void;
-  /** Emits the final (floored ≥ 0) offset — once per drag (pointer-up) and once
-   *  per arrow-key nudge. */
-  readonly onCommit: (offsetMs: number) => void;
+	readonly source: Source;
+	readonly audioData: AudioData;
+	/** This source's effective placement on the shared timeline, in ms (≥ 0) —
+	 *  the stored offset between drags, the live drag offset during one. */
+	readonly offsetMs: number;
+	/** Committed viewport window the row is laid out against, in absolute ms. */
+	readonly windowStartMs: number;
+	readonly windowEndMs: number;
+	/** Latest clip end across the timeline — the arrow-key `End` target / aria max. */
+	readonly extentEndMs: number;
+	readonly fftSize: number;
+	readonly hopOverlap: number;
+	readonly channelInput: ChannelInput;
+	readonly gridOpacity: number;
+	/** Per-layer opacity for the clip's `SourceRender` (from shared settings). */
+	readonly waveformOpacity: number;
+	readonly spectrogramOpacity: number;
+	/** Whether the clip can be dragged — false when no offset callback is wired. */
+	readonly draggable: boolean;
+	/** Whether this clip is the one currently being dragged (drives the accent). */
+	readonly dragging: boolean;
+	readonly onCursorMove: (readout: SourceRenderCursorReadout) => void;
+	/** Reports the live offset on every pointer tick during a drag (transient). */
+	readonly onDragMove: (offsetMs: number) => void;
+	/** Emits the final (floored ≥ 0) offset — once per drag (pointer-up) and once
+	 *  per arrow-key nudge. */
+	readonly onCommit: (offsetMs: number) => void;
 }) {
-  const trackRef = useRef<HTMLDivElement>(null);
+	const trackRef = useRef<HTMLDivElement>(null);
 
-  const durationMs = audioData.durationMs;
+	const durationMs = audioData.durationMs;
 
-  // Latest values captured for the global pointer listeners (drag gesture).
-  const onDragMoveRef = useRef(onDragMove);
-  const onCommitRef = useRef(onCommit);
-  const windowStartRef = useRef(windowStartMs);
-  const windowSpanRef = useRef(windowEndMs - windowStartMs);
+	// Latest values captured for the global pointer listeners (drag gesture).
+	const onDragMoveRef = useRef(onDragMove);
+	const onCommitRef = useRef(onCommit);
+	const windowStartRef = useRef(windowStartMs);
+	const windowSpanRef = useRef(windowEndMs - windowStartMs);
 
-  useEffect(() => {
-    onDragMoveRef.current = onDragMove;
-  }, [onDragMove]);
-  useEffect(() => {
-    onCommitRef.current = onCommit;
-  }, [onCommit]);
-  useEffect(() => {
-    windowStartRef.current = windowStartMs;
-    windowSpanRef.current = windowEndMs - windowStartMs;
-  }, [windowStartMs, windowEndMs]);
+	useEffect(() => {
+		onDragMoveRef.current = onDragMove;
+	}, [onDragMove]);
+	useEffect(() => {
+		onCommitRef.current = onCommit;
+	}, [onCommit]);
+	useEffect(() => {
+		windowStartRef.current = windowStartMs;
+		windowSpanRef.current = windowEndMs - windowStartMs;
+	}, [windowStartMs, windowEndMs]);
 
-  const handlePointerDown = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      if (!draggable) return;
+	const handlePointerDown = useCallback(
+		(event: React.PointerEvent<HTMLButtonElement>) => {
+			if (!draggable) return;
 
-      event.preventDefault();
-      event.stopPropagation();
+			event.preventDefault();
+			event.stopPropagation();
 
-      const track = trackRef.current;
+			const track = trackRef.current;
 
-      if (!track) return;
+			if (!track) return;
 
-      const rect = track.getBoundingClientRect();
+			const rect = track.getBoundingClientRect();
 
-      if (rect.width <= 0) return;
+			if (rect.width <= 0) return;
 
-      // Pointer offset within the clip at grab time, in ms — keeps the grab
-      // point under the cursor for the whole drag (no jump-to-pointer).
-      const grabMs =
-        windowStartRef.current +
-        ((event.clientX - rect.left) / rect.width) * windowSpanRef.current;
-      const grabWithinClipMs = grabMs - offsetMs;
+			// Pointer offset within the clip at grab time, in ms — keeps the grab
+			// point under the cursor for the whole drag (no jump-to-pointer).
+			const grabMs = windowStartRef.current + ((event.clientX - rect.left) / rect.width) * windowSpanRef.current;
+			const grabWithinClipMs = grabMs - offsetMs;
 
-      // Resolve a floored offset from a pointer x-coordinate. Pure — does not
-      // touch state or emit; the callers decide what to do with the result.
-      // The px→ms mapping reads the *window* span (which the extent-follow may
-      // grow mid-drag), never the extent, so the drag speed stays stable.
-      const offsetFromClientX = (clientX: number) => {
-        const pointerMs =
-          windowStartRef.current +
-          ((clientX - rect.left) / rect.width) * windowSpanRef.current;
+			// Resolve a floored offset from a pointer x-coordinate. Pure — does not
+			// touch state or emit; the callers decide what to do with the result.
+			// The px→ms mapping reads the *window* span (which the extent-follow may
+			// grow mid-drag), never the extent, so the drag speed stays stable.
+			const offsetFromClientX = (clientX: number) => {
+				const pointerMs = windowStartRef.current + ((clientX - rect.left) / rect.width) * windowSpanRef.current;
 
-        return Math.max(0, pointerMs - grabWithinClipMs);
-      };
+				return Math.max(0, pointerMs - grabWithinClipMs);
+			};
 
-      const onMove = (moveEvent: PointerEvent) => {
-        // During the drag, report the transient offset up so the parent tracks
-        // the pointer and follows the extent — no commit here. Emitting a store
-        // mutation per `pointermove` would thrash disk and flood undo/redo.
-        onDragMoveRef.current(offsetFromClientX(moveEvent.clientX));
-      };
+			const onMove = (moveEvent: PointerEvent) => {
+				// During the drag, report the transient offset up so the parent tracks
+				// the pointer and follows the extent — no commit here. Emitting a store
+				// mutation per `pointermove` would thrash disk and flood undo/redo.
+				onDragMoveRef.current(offsetFromClientX(moveEvent.clientX));
+			};
 
-      const onUp = (upEvent: PointerEvent) => {
-        // Commit exactly once, at drag-end — one state mutation (and one
-        // undo/redo entry) per completed drag gesture.
-        onCommitRef.current(offsetFromClientX(upEvent.clientX));
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("pointercancel", onUp);
-      };
+			const onUp = (upEvent: PointerEvent) => {
+				// Commit exactly once, at drag-end — one state mutation (and one
+				// undo/redo entry) per completed drag gesture.
+				onCommitRef.current(offsetFromClientX(upEvent.clientX));
+				window.removeEventListener("pointermove", onMove);
+				window.removeEventListener("pointerup", onUp);
+				window.removeEventListener("pointercancel", onUp);
+			};
 
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-      window.addEventListener("pointercancel", onUp);
-    },
-    [draggable, offsetMs],
-  );
+			window.addEventListener("pointermove", onMove);
+			window.addEventListener("pointerup", onUp);
+			window.addEventListener("pointercancel", onUp);
+		},
+		[draggable, offsetMs],
+	);
 
-  // Keyboard nudge — arrow keys move the clip by a coarse/fine step so the
-  // affordance is operable without a pointer. Floored at 0; `End` aligns the
-  // clip's end with the latest content (there is no upper placement bound).
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLButtonElement>) => {
-      if (!draggable) return;
+	// Keyboard nudge — arrow keys move the clip by a coarse/fine step so the
+	// affordance is operable without a pointer. Floored at 0; `End` aligns the
+	// clip's end with the latest content (there is no upper placement bound).
+	const handleKeyDown = useCallback(
+		(event: React.KeyboardEvent<HTMLButtonElement>) => {
+			if (!draggable) return;
 
-      const fine = event.shiftKey ? 10 : 100;
-      let next: number | null = null;
+			const fine = event.shiftKey ? 10 : 100;
+			let next: number | null = null;
 
-      if (event.key === "ArrowLeft") next = offsetMs - fine;
-      else if (event.key === "ArrowRight") next = offsetMs + fine;
-      else if (event.key === "Home") next = 0;
-      else if (event.key === "End") next = extentEndMs - durationMs;
+			if (event.key === "ArrowLeft") next = offsetMs - fine;
+			else if (event.key === "ArrowRight") next = offsetMs + fine;
+			else if (event.key === "Home") next = 0;
+			else if (event.key === "End") next = extentEndMs - durationMs;
 
-      if (next === null) return;
+			if (next === null) return;
 
-      event.preventDefault();
-      onCommit(Math.max(0, next));
-    },
-    [draggable, offsetMs, extentEndMs, durationMs, onCommit],
-  );
+			event.preventDefault();
+			onCommit(Math.max(0, next));
+		},
+		[draggable, offsetMs, extentEndMs, durationMs, onCommit],
+	);
 
-  const windowSpanMs = windowEndMs - windowStartMs;
-  const span = windowSpanMs > 0 ? windowSpanMs : 1;
-  const leftPct = ((offsetMs - windowStartMs) / span) * 100;
-  const widthPct = (durationMs / span) * 100;
+	const windowSpanMs = windowEndMs - windowStartMs;
+	const span = windowSpanMs > 0 ? windowSpanMs : 1;
+	const leftPct = ((offsetMs - windowStartMs) / span) * 100;
+	const widthPct = (durationMs / span) * 100;
 
-  return (
-    <div ref={trackRef} className="relative min-h-0 flex-1 overflow-hidden">
-      {/* The clip — a `SourceRender` positioned on the shared timeline. The
+	return (
+		<div ref={trackRef} className="relative min-h-0 flex-1 overflow-hidden">
+			{/* The clip — a `SourceRender` positioned on the shared timeline. The
           render itself still shows its source's full content (0 → duration);
           placement is this wrapper's left/width. */}
-      <div
-        className="absolute inset-y-0"
-        style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
-      >
-        <SourceRender
-          source={source}
-          audioData={audioData}
-          startMs={0}
-          endMs={durationMs}
-          fftSize={fftSize}
-          hopOverlap={hopOverlap}
-          channelInput={channelInput}
-          waveformOpacity={waveformOpacity}
-          spectrogramOpacity={spectrogramOpacity}
-          onCursorMove={onCursorMove}
-        />
-        {/* Per-clip time grid — drawn over this clip's own content span. */}
-        <GridOverlay startMs={0} endMs={durationMs} opacity={gridOpacity} />
-        {/* A thin leading edge marks the clip's start on the timeline. While
+			<div className="absolute inset-y-0" style={{ left: `${leftPct}%`, width: `${widthPct}%` }}>
+				<SourceRender
+					source={source}
+					audioData={audioData}
+					startMs={0}
+					endMs={durationMs}
+					fftSize={fftSize}
+					hopOverlap={hopOverlap}
+					channelInput={channelInput}
+					waveformOpacity={waveformOpacity}
+					spectrogramOpacity={spectrogramOpacity}
+					onCursorMove={onCursorMove}
+				/>
+				{/* Per-clip time grid — drawn over this clip's own content span. */}
+				<GridOverlay startMs={0} endMs={durationMs} opacity={gridOpacity} />
+				{/* A thin leading edge marks the clip's start on the timeline. While
             dragging it brightens to the primary accent. */}
-        <div
-          aria-hidden
-          className={`pointer-events-none absolute inset-y-0 left-0 w-0.5 ${
-            dragging ? "bg-primary" : "bg-chrome-text/60"
-          }`}
-        />
-        {/* Drag handle — a DAW-style clip header strip across the top of the
+				<div
+					aria-hidden
+					className={`pointer-events-none absolute inset-y-0 left-0 w-0.5 ${
+						dragging ? "bg-primary" : "bg-chrome-text/60"
+					}`}
+				/>
+				{/* Drag handle — a DAW-style clip header strip across the top of the
             clip. The whole header is the grab target; the grip dots make the
             draggable affordance read. Hidden entirely when no offset callback
             is wired (the demo), so the view stays a pure display there. */}
-        {draggable && (
-          <button
-            type="button"
-            onPointerDown={handlePointerDown}
-            onKeyDown={handleKeyDown}
-            aria-label={`Timeline offset for ${source.name}`}
-            role="slider"
-            aria-valuemin={0}
-            aria-valuemax={Math.round(extentEndMs)}
-            aria-valuenow={Math.round(offsetMs)}
-            aria-valuetext={`${(offsetMs / 1000).toFixed(2)} seconds`}
-            className={`absolute top-0 left-0 right-0 flex h-4 cursor-ew-resize items-center gap-1 px-1.5 outline-none focus-visible:ring-1 focus-visible:ring-primary ${
-              dragging
-                ? "bg-primary/30"
-                : "bg-chrome-raised/70 hover:bg-chrome-raised"
-            }`}
-          >
-            <span aria-hidden className="flex items-center gap-0.5">
-              <span className="block h-2 w-px bg-chrome-text/70" />
-              <span className="block h-2 w-px bg-chrome-text/70" />
-              <span className="block h-2 w-px bg-chrome-text/70" />
-            </span>
-            <span className="truncate font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-secondary">
-              {source.name}
-            </span>
-          </button>
-        )}
-      </div>
-    </div>
-  );
+				{draggable && (
+					<button
+						type="button"
+						onPointerDown={handlePointerDown}
+						onKeyDown={handleKeyDown}
+						aria-label={`Timeline offset for ${source.name}`}
+						role="slider"
+						aria-valuemin={0}
+						aria-valuemax={Math.round(extentEndMs)}
+						aria-valuenow={Math.round(offsetMs)}
+						aria-valuetext={`${(offsetMs / 1000).toFixed(2)} seconds`}
+						className={`absolute top-0 left-0 right-0 flex h-4 cursor-ew-resize items-center gap-1 px-1.5 outline-none focus-visible:ring-1 focus-visible:ring-primary ${
+							dragging ? "bg-primary/30" : "bg-chrome-raised/70 hover:bg-chrome-raised"
+						}`}
+					>
+						<span aria-hidden className="flex items-center gap-0.5">
+							<span className="block h-2 w-px bg-chrome-text/70" />
+							<span className="block h-2 w-px bg-chrome-text/70" />
+							<span className="block h-2 w-px bg-chrome-text/70" />
+						</span>
+						<span className="truncate font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-secondary">
+							{source.name}
+						</span>
+					</button>
+				)}
+			</div>
+		</div>
+	);
 }
 
 interface TimelineViewProps {
-  readonly sources: ReadonlyArray<Source>;
-  /** Per-source PCM readers, keyed by `Source.id`. */
-  readonly sourceAudio: ReadonlyMap<string, AudioData>;
-  /** The global Mono/Mid/Side channel-input mode — passed to every strip. */
-  readonly channelInput: ChannelInput;
-  /** Shared display-control settings, owned by the comparison host. */
-  readonly settings: ViewControlSettings;
-  /**
-   * Emitted when a source's clip is dragged (or keyboard-nudged) on the
-   * timeline — `(sourceId, offsetMs)` with `offsetMs ≥ 0`. Controlled,
-   * props-in / callbacks-out: the view owns no placement state, it renders
-   * position from each `Source.timelineOffsetMs` and reports drag results out.
-   * When omitted, the timeline still lays strips out by offset but the drag
-   * affordance is not rendered (the component-showcase case).
-   */
-  readonly onSourceOffsetChange?: (sourceId: string, offsetMs: number) => void;
-  readonly onTransportControlChange?: (control: TransportControl) => void;
+	readonly sources: ReadonlyArray<Source>;
+	/** Per-source PCM readers, keyed by `Source.id`. */
+	readonly sourceAudio: ReadonlyMap<string, AudioData>;
+	/** The global Mono/Mid/Side channel-input mode — passed to every strip. */
+	readonly channelInput: ChannelInput;
+	/** Shared display-control settings, owned by the comparison host. */
+	readonly settings: ViewControlSettings;
+	/**
+	 * Emitted when a source's clip is dragged (or keyboard-nudged) on the
+	 * timeline — `(sourceId, offsetMs)` with `offsetMs ≥ 0`. Controlled,
+	 * props-in / callbacks-out: the view owns no placement state, it renders
+	 * position from each `Source.timelineOffsetMs` and reports drag results out.
+	 * When omitted, the timeline still lays strips out by offset but the drag
+	 * affordance is not rendered (the component-showcase case).
+	 */
+	readonly onSourceOffsetChange?: (sourceId: string, offsetMs: number) => void;
+	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
 /**
@@ -378,222 +369,210 @@ interface TimelineViewProps {
  * so the DAW grammar carries through.
  */
 export function TimelineView({
-  sources,
-  sourceAudio,
-  channelInput,
-  settings,
-  onSourceOffsetChange,
-  onTransportControlChange,
+	sources,
+	sourceAudio,
+	channelInput,
+	settings,
+	onSourceOffsetChange,
+	onTransportControlChange,
 }: TimelineViewProps) {
-  const [playing, setPlaying] = useState(false);
-  const [positionSec, setPositionSec] = useState(0);
-  const [cursorReadout, setCursorReadout] =
-    useState<SourceRenderCursorReadout>(DEFAULT_CURSOR);
-  // Transient live drag lifted out of the dragged `TimelineTrack` so the extent
-  // can follow the drag. Neither persisted nor in undo history; cleared on
-  // pointer-up when the committed offset is emitted through `onSourceOffsetChange`.
-  const [drag, setDrag] = useState<TimelineDrag | null>(null);
+	const [playing, setPlaying] = useState(false);
+	const [positionSec, setPositionSec] = useState(0);
+	const [cursorReadout, setCursorReadout] = useState<SourceRenderCursorReadout>(DEFAULT_CURSOR);
+	// Transient live drag lifted out of the dragged `TimelineTrack` so the extent
+	// can follow the drag. Neither persisted nor in undo history; cleared on
+	// pointer-up when the committed offset is emitted through `onSourceOffsetChange`.
+	const [drag, setDrag] = useState<TimelineDrag | null>(null);
 
-  // Visible sources that have decoded audio, paired with their `AudioData`.
-  const renderableSources = useMemo(
-    () => resolveVisibleSourceAudio(sources, sourceAudio),
-    [sources, sourceAudio],
-  );
+	// Visible sources that have decoded audio, paired with their `AudioData`.
+	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
-  // The shared timeline extent — earliest effective clip start → latest
-  // effective clip end. `drag` substitutes the dragged clip's live offset, so a
-  // drag grows/shrinks the extent live (extent-follow). `0/0` when nothing is
-  // renderable.
-  const extent = useMemo(
-    () =>
-      computeTimelineExtent(
-        renderableSources.map(({ source, audioData }) => ({
-          id: source.id,
-          offsetMs: source.timelineOffsetMs,
-          durationMs: audioData.durationMs,
-        })),
-        drag,
-      ),
-    [renderableSources, drag],
-  );
+	// The shared timeline extent — earliest effective clip start → latest
+	// effective clip end. `drag` substitutes the dragged clip's live offset, so a
+	// drag grows/shrinks the extent live (extent-follow). `0/0` when nothing is
+	// renderable.
+	const extent = useMemo(
+		() =>
+			computeTimelineExtent(
+				renderableSources.map(({ source, audioData }) => ({
+					id: source.id,
+					offsetMs: source.timelineOffsetMs,
+					durationMs: audioData.durationMs,
+				})),
+				drag,
+			),
+		[renderableSources, drag],
+	);
 
-  // Transient time viewport over the extent — the committed window feeds the
-  // ruler / track placement / playhead; the live window drives the minimap
-  // bracket and the gesture transform.
-  const viewport = useTimeViewport(extent.startMs, extent.endMs);
-  const windowStartMs = viewport.committedStartMs;
-  const windowEndMs = viewport.committedEndMs;
+	// Transient time viewport over the extent — the committed window feeds the
+	// ruler / track placement / playhead; the live window drives the minimap
+	// bracket and the gesture transform.
+	const viewport = useTimeViewport(extent.startMs, extent.endMs);
+	const windowStartMs = viewport.committedStartMs;
+	const windowEndMs = viewport.committedEndMs;
 
-  const extentSpanMs = extent.endMs - extent.startMs;
-  const durationSec = extent.endMs / 1000;
+	const extentSpanMs = extent.endMs - extent.startMs;
+	const durationSec = extent.endMs / 1000;
 
-  const setViewportToFraction = useCallback(
-    (fraction: number) => {
-      const centerMs = extent.startMs + fraction * extentSpanMs;
-      const span = viewport.endMs - viewport.startMs;
+	const setViewportToFraction = useCallback(
+		(fraction: number) => {
+			const centerMs = extent.startMs + fraction * extentSpanMs;
+			const span = viewport.endMs - viewport.startMs;
 
-      viewport.setViewport({ startMs: centerMs - span / 2, endMs: centerMs + span / 2 });
-    },
-    [extent.startMs, extentSpanMs, viewport],
-  );
+			viewport.setViewport({ startMs: centerMs - span / 2, endMs: centerMs + span / 2 });
+		},
+		[extent.startMs, extentSpanMs, viewport],
+	);
 
-  // Minimap bracket = committed window over the full extent.
-  const viewStartFrac =
-    extentSpanMs > 0 ? (windowStartMs - extent.startMs) / extentSpanMs : 0;
-  const viewEndFrac =
-    extentSpanMs > 0 ? (windowEndMs - extent.startMs) / extentSpanMs : 1;
+	// Minimap bracket = committed window over the full extent.
+	const viewStartFrac = extentSpanMs > 0 ? (windowStartMs - extent.startMs) / extentSpanMs : 0;
+	const viewEndFrac = extentSpanMs > 0 ? (windowEndMs - extent.startMs) / extentSpanMs : 1;
 
-  // The overview minimap renders the whole timeline as a single waveform; with
-  // N tracks placed at different offsets there is no one buffer that spans it,
-  // so the minimap shows the first renderable source's audio as a stand-in
-  // (its colour likewise). A neutral chrome pair when nothing is renderable.
-  const minimapAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
-  const minimapColor = renderableSources[0]?.source.layerColor ?? {
-    primary: "#B8B8C0",
-    secondary: "#44444C",
-  };
+	// The overview minimap renders the whole timeline as a single waveform; with
+	// N tracks placed at different offsets there is no one buffer that spans it,
+	// so the minimap shows the first renderable source's audio as a stand-in
+	// (its colour likewise). A neutral chrome pair when nothing is renderable.
+	const minimapAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
+	const minimapColor = renderableSources[0]?.source.layerColor ?? {
+		primary: "#B8B8C0",
+		secondary: "#44444C",
+	};
 
-  // Audibility — solo overrides mute. Reserved for future audio-pipeline
-  // wiring; the visual stack uses `visible === true` only.
-  const anySoloed = sources.some((source) => source.soloed);
-  const audibleSources = anySoloed
-    ? sources.filter((source) => source.soloed)
-    : sources.filter((source) => !source.muted && source.visible);
+	// Audibility — solo overrides mute. Reserved for future audio-pipeline
+	// wiring; the visual stack uses `visible === true` only.
+	const anySoloed = sources.some((source) => source.soloed);
+	const audibleSources = anySoloed
+		? sources.filter((source) => source.soloed)
+		: sources.filter((source) => !source.muted && source.visible);
 
-  void audibleSources;
+	void audibleSources;
 
-  const onPlayToggle = useCallback(() => {
-    setPlaying((prev) => !prev);
-  }, []);
+	const onPlayToggle = useCallback(() => {
+		setPlaying((prev) => !prev);
+	}, []);
 
-  const onSeek = useCallback(
-    (sec: number) => {
-      setPositionSec(Math.max(0, Math.min(durationSec, sec)));
-    },
-    [durationSec],
-  );
+	const onSeek = useCallback(
+		(sec: number) => {
+			setPositionSec(Math.max(0, Math.min(durationSec, sec)));
+		},
+		[durationSec],
+	);
 
-  const transportControl = useMemo<TransportControl>(
-    () => ({
-      playing,
-      positionSec,
-      durationSec,
-      onPlayToggle,
-      onSeek,
-      cursorReadout,
-      // Demo selection range (0.25–0.45 of duration) — surfaces as the
-      // transport's In / Out columns.
-      selectionInSec: durationSec * 0.25,
-      selectionOutSec: durationSec * 0.45,
-      selectionInAmp: "-19.7 dB",
-      selectionOutAmp: "-24.3 dB",
-    }),
-    [playing, positionSec, durationSec, onPlayToggle, onSeek, cursorReadout],
-  );
+	const transportControl = useMemo<TransportControl>(
+		() => ({
+			playing,
+			positionSec,
+			durationSec,
+			onPlayToggle,
+			onSeek,
+			cursorReadout,
+			// Demo selection range (0.25–0.45 of duration) — surfaces as the
+			// transport's In / Out columns.
+			selectionInSec: durationSec * 0.25,
+			selectionOutSec: durationSec * 0.45,
+			selectionInAmp: "-19.7 dB",
+			selectionOutAmp: "-24.3 dB",
+		}),
+		[playing, positionSec, durationSec, onPlayToggle, onSeek, cursorReadout],
+	);
 
-  useEffect(() => {
-    if (onTransportControlChange) {
-      onTransportControlChange(transportControl);
-    }
-  }, [onTransportControlChange, transportControl]);
+	useEffect(() => {
+		if (onTransportControlChange) {
+			onTransportControlChange(transportControl);
+		}
+	}, [onTransportControlChange, transportControl]);
 
-  // Playhead — absolute timeline position mapped through the committed window;
-  // rendered only when it falls inside the window.
-  const windowSpanMs = windowEndMs - windowStartMs;
-  const playheadFrac =
-    windowSpanMs > 0 ? (positionSec * 1000 - windowStartMs) / windowSpanMs : 0;
-  const playheadVisible = playheadFrac >= 0 && playheadFrac <= 1;
+	// Playhead — absolute timeline position mapped through the committed window;
+	// rendered only when it falls inside the window.
+	const windowSpanMs = windowEndMs - windowStartMs;
+	const playheadFrac = windowSpanMs > 0 ? (positionSec * 1000 - windowStartMs) / windowSpanMs : 0;
+	const playheadVisible = playheadFrac >= 0 && playheadFrac <= 1;
 
-  return (
-    <div className="flex h-full min-h-0 w-full overflow-hidden bg-void">
-      {/* Main grid — time ruler, track stack, overview minimap. */}
-      <div
-        className="min-h-0 min-w-0 flex-1 overflow-hidden"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr)",
-          gridTemplateRows: "auto minmax(0, 1fr) auto",
-        }}
-      >
-        {/* Row 1 — time ruler across the committed window. */}
-        <TimeRuler startMs={windowStartMs} endMs={windowEndMs} />
+	return (
+		<div className="flex h-full min-h-0 w-full overflow-hidden bg-void">
+			{/* Main grid — time ruler, track stack, overview minimap. */}
+			<div
+				className="min-h-0 min-w-0 flex-1 overflow-hidden"
+				style={{
+					display: "grid",
+					gridTemplateColumns: "minmax(0, 1fr)",
+					gridTemplateRows: "auto minmax(0, 1fr) auto",
+				}}
+			>
+				{/* Row 1 — time ruler across the committed window. */}
+				<TimeRuler startMs={windowStartMs} endMs={windowEndMs} />
 
-        {/* Row 2 — track stack + playhead. Scroll pans, ctrl+scroll zooms (the
+				{/* Row 2 — track stack + playhead. Scroll pans, ctrl+scroll zooms (the
             viewport's non-passive wheel listener binds to this element's ref). */}
-        <div
-          ref={viewport.wheelHandlers.ref}
-          className="relative flex flex-col overflow-hidden bg-void"
-        >
-          {renderableSources.length === 0 ? (
-            <div className="flex h-full items-center justify-center">
-              <p className="font-body text-sm text-chrome-text-secondary">
-                No visible sources.
-              </p>
-            </div>
-          ) : (
-            <>
-              {/* Track stack — the gesture `transform` maps the committed layout
+				<div ref={viewport.wheelHandlers.ref} className="relative flex flex-col overflow-hidden bg-void">
+					{renderableSources.length === 0 ? (
+						<div className="flex h-full items-center justify-center">
+							<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
+						</div>
+					) : (
+						<>
+							{/* Track stack — the gesture `transform` maps the committed layout
                   onto the live window during a scroll/zoom, reset on commit. */}
-              <div
-                className="absolute inset-0 flex flex-col"
-                style={{
-                  transform: viewport.transform,
-                  transformOrigin: "left",
-                }}
-              >
-                {renderableSources.map(({ source, audioData }) => (
-                  <TimelineTrack
-                    key={source.id}
-                    source={source}
-                    audioData={audioData}
-                    offsetMs={
-                      drag?.id === source.id
-                        ? Math.max(0, drag.offsetMs)
-                        : Math.max(0, source.timelineOffsetMs)
-                    }
-                    windowStartMs={windowStartMs}
-                    windowEndMs={windowEndMs}
-                    extentEndMs={extent.endMs}
-                    fftSize={settings.fftSize}
-                    hopOverlap={settings.hopOverlap}
-                    channelInput={channelInput}
-                    gridOpacity={settings.gridOpacity}
-                    waveformOpacity={settings.waveformOpacity}
-                    spectrogramOpacity={settings.spectrogramOpacity}
-                    draggable={onSourceOffsetChange !== undefined}
-                    dragging={drag?.id === source.id}
-                    onCursorMove={setCursorReadout}
-                    onDragMove={(offsetMs) => {
-                      setDrag({ id: source.id, offsetMs });
-                    }}
-                    onCommit={(offsetMs) => {
-                      setDrag(null);
-                      onSourceOffsetChange?.(source.id, offsetMs);
-                    }}
-                  />
-                ))}
-              </div>
-              {playheadVisible && (
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute top-0 bottom-0 w-px bg-data-cursor"
-                  style={{ left: `${playheadFrac * 100}%` }}
-                />
-              )}
-            </>
-          )}
-        </div>
+							<div
+								className="absolute inset-0 flex flex-col"
+								style={{
+									transform: viewport.transform,
+									transformOrigin: "left",
+								}}
+							>
+								{renderableSources.map(({ source, audioData }) => (
+									<TimelineTrack
+										key={source.id}
+										source={source}
+										audioData={audioData}
+										offsetMs={
+											drag?.id === source.id
+												? Math.max(0, drag.offsetMs)
+												: Math.max(0, source.timelineOffsetMs)
+										}
+										windowStartMs={windowStartMs}
+										windowEndMs={windowEndMs}
+										extentEndMs={extent.endMs}
+										fftSize={settings.fftSize}
+										hopOverlap={settings.hopOverlap}
+										channelInput={channelInput}
+										gridOpacity={settings.gridOpacity}
+										waveformOpacity={settings.waveformOpacity}
+										spectrogramOpacity={settings.spectrogramOpacity}
+										draggable={onSourceOffsetChange !== undefined}
+										dragging={drag?.id === source.id}
+										onCursorMove={setCursorReadout}
+										onDragMove={(offsetMs) => {
+											setDrag({ id: source.id, offsetMs });
+										}}
+										onCommit={(offsetMs) => {
+											setDrag(null);
+											onSourceOffsetChange?.(source.id, offsetMs);
+										}}
+									/>
+								))}
+							</div>
+							{playheadVisible && (
+								<div
+									aria-hidden
+									className="pointer-events-none absolute top-0 bottom-0 w-px bg-data-cursor"
+									style={{ left: `${playheadFrac * 100}%` }}
+								/>
+							)}
+						</>
+					)}
+				</div>
 
-        {/* Row 3 — horizontal overview minimap; the bracket is the committed
+				{/* Row 3 — horizontal overview minimap; the bracket is the committed
             window over the extent, and a scrub recentres the window. */}
-        <MinimapDisplay
-          audioData={minimapAudio}
-          viewStartFrac={viewStartFrac}
-          viewEndFrac={viewEndFrac}
-          waveformColor={hexToRgb255(minimapColor.primary)}
-          onScrubToFraction={setViewportToFraction}
-        />
-      </div>
-    </div>
-  );
+				<MinimapDisplay
+					audioData={minimapAudio}
+					viewStartFrac={viewStartFrac}
+					viewEndFrac={viewEndFrac}
+					waveformColor={hexToRgb255(minimapColor.primary)}
+					onScrubToFraction={setViewportToFraction}
+				/>
+			</div>
+		</div>
+	);
 }

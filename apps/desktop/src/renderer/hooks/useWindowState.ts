@@ -1,11 +1,16 @@
 import { useEffect } from "react";
-import type { Snapshot } from "valtio/vanilla";
 import type { Main } from "../models/Main";
 import type { MainEvents } from "../models/MainEvents";
 import type { ProxyStore } from "../models/ProxyStore/ProxyStore";
 import type { AppState, WindowBounds } from "../models/State/App";
+import type { Snapshot } from "valtio/vanilla";
 
-export function useWindowState(app: Snapshot<AppState>, appStore: ProxyStore, main: Main, mainEvents: MainEvents): void {
+export function useWindowState(
+	app: Snapshot<AppState>,
+	appStore: ProxyStore,
+	main: Main,
+	mainEvents: MainEvents,
+): void {
 	useEffect(() => {
 		// Restore saved window bounds on mount
 		if (app.windowBounds) {

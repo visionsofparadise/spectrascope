@@ -1,6 +1,6 @@
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
-import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "../cn";
+import type { ComponentPropsWithoutRef } from "react";
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;
 export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
@@ -29,10 +29,7 @@ export function DropdownMenuContent({
 	);
 }
 
-export function DropdownMenuItem({
-	className,
-	...props
-}: ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item>) {
+export function DropdownMenuItem({ className, ...props }: ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item>) {
 	return (
 		<DropdownMenuPrimitive.Item
 			className={cn(
@@ -64,10 +61,7 @@ export function DropdownMenuSeparator({
 	...props
 }: ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>) {
 	return (
-		<DropdownMenuPrimitive.Separator
-			className={cn("mx-2 my-1 h-px bg-chrome-border-subtle", className)}
-			{...props}
-		/>
+		<DropdownMenuPrimitive.Separator className={cn("mx-2 my-1 h-px bg-chrome-border-subtle", className)} {...props} />
 	);
 }
 

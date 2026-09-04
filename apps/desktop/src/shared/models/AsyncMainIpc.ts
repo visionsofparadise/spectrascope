@@ -1,8 +1,8 @@
-import type { BrowserWindow } from "electron";
+import { Logger } from "./Logger";
 import type { FileWatcherManager } from "../../main/FileWatcherManager";
 import type { SourceCacheManager } from "../../main/SourceCacheManager";
 import type { StreamManager } from "../../main/StreamManager";
-import { Logger } from "./Logger";
+import type { BrowserWindow } from "electron";
 
 export interface IpcHandlerDependencies {
 	readonly browserWindow: BrowserWindow;
@@ -49,6 +49,7 @@ export abstract class AsyncMainIpc<P extends Array<unknown>, R> {
 					transactionId,
 					action: this.action,
 				});
+
 				throw error;
 			}
 		});

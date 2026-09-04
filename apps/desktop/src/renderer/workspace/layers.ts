@@ -33,9 +33,13 @@ const VOID_RGB: readonly [number, number, number] = [2, 2, 4];
 
 function hexToRgb(hex: string): [number, number, number] {
 	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
-	const expanded = cleaned.length === 3
-		? cleaned.split("").map((char) => `${char}${char}`).join("")
-		: cleaned;
+	const expanded =
+		cleaned.length === 3
+			? cleaned
+					.split("")
+					.map((char) => `${char}${char}`)
+					.join("")
+			: cleaned;
 	const value = Number.parseInt(expanded, 16);
 
 	if (Number.isNaN(value) || expanded.length !== 6) {
