@@ -154,7 +154,6 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 
 	const preparing = useMemo(() => sources.some((source) => status.get(source.id) === "preparing"), [sources, status]);
 
-
 	const initialPositionRef = useRef(comparison.positionSec);
 
 	const persistPosition = useCallback(
@@ -292,7 +291,6 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 		},
 		[app, appStore, comparison.id],
 	);
-
 
 	const { undo, redo, canUndo, canRedo } = useComparisonHistory(comparison, app, appStore);
 

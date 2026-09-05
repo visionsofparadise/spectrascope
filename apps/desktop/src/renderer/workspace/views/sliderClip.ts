@@ -1,4 +1,3 @@
-
 export function defaultCurtainPositions(count: number): Array<number> {
 	return Array.from({ length: Math.max(0, count - 1) }, () => 1);
 }

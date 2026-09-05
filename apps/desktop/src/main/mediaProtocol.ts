@@ -5,7 +5,6 @@ import { renderRange, type ResolvedStream } from "./audio/streamDsp";
 import { buildWavHeader } from "./audio/wavHeader";
 import type { StreamManager } from "./StreamManager";
 
-
 const CONTENT_TYPE_BY_EXT: Readonly<Record<string, string>> = {
 	".wav": "audio/wav",
 	".mp3": "audio/mpeg",

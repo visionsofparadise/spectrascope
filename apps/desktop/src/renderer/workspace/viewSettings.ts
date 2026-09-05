@@ -1,4 +1,3 @@
-
 export type GridMode = "freq" | "amp";
 
 export type LoudnessMetric = "truePeak" | "samplePeak" | "integrated" | "momentary" | "shortTerm" | "rms";

@@ -13,7 +13,6 @@ import type { TransportControl } from "../Transport";
 import type { ViewControlSettings } from "../viewSettings";
 import type { ChannelInput, SpectralOptions } from "spectral-display";
 
-
 interface FrequencyDistributionViewProps {
 	readonly sources: ReadonlyArray<Source>;
 	readonly sourceAudio: ReadonlyMap<string, AudioData>;

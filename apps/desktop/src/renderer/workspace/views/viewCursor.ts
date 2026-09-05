@@ -1,4 +1,3 @@
-
 export function timeToFraction(ms: number | null, startMs: number, endMs: number): number | null {
 	if (ms === null) return null;
 

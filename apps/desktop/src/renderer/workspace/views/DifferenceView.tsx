@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Select } from "../../components/Select";
 import { SourceRender } from "../SourceRender";
@@ -251,7 +250,6 @@ export function DifferenceView({
 	const selectionEndFrac = timeToFraction(viewSync.selection?.end ?? null, startMs, endMs);
 
 	const minimapLayerColor = differenceSource.layerColor;
-
 
 	const sourceOptions = useMemo(() => sources.map((source) => ({ value: source.id, label: source.name })), [sources]);
 

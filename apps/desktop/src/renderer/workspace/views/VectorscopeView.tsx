@@ -10,7 +10,6 @@ import type { AudioData } from "../spectral/types";
 import type { TransportControl } from "../Transport";
 import type { SpectralOptions } from "spectral-display";
 
-
 interface VectorscopeViewProps {
 	readonly sources: ReadonlyArray<Source>;
 	readonly sourceAudio: ReadonlyMap<string, AudioData>;

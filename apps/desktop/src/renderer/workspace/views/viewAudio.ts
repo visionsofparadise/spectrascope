@@ -1,7 +1,6 @@
 import type { Source } from "../source";
 import type { AudioData } from "../spectral/types";
 
-
 export const EMPTY_AUDIO_DATA: AudioData = {
 	sampleRate: 48000,
 	channels: 1,

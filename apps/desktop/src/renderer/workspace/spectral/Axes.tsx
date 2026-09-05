@@ -1,4 +1,3 @@
-
 const FREQ_LABELS: ReadonlyArray<{ hz: number; label: string }> = [
 	{ hz: 100, label: "100" },
 	{ hz: 200, label: "200" },
@@ -51,7 +50,6 @@ export function FrequencyAxis() {
 		</div>
 	);
 }
-
 
 const DB_HALF_LABELS = [0, -3, -6, -12, -24];
 
@@ -112,7 +110,6 @@ export function DbAxis() {
 		</div>
 	);
 }
-
 
 interface TimeRulerProps {
 	readonly startMs: number;
@@ -194,7 +191,6 @@ export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
 		</div>
 	);
 }
-
 
 interface LinearDbAxisProps {
 	readonly ticks: ReadonlyArray<number>;

@@ -34,7 +34,6 @@ function hexToRgb255(hex: string): [number, number, number] {
 	return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 }
 
-
 interface LoudnessViewProps {
 	readonly sources: ReadonlyArray<Source>;
 	readonly sourceAudio: ReadonlyMap<string, AudioData>;

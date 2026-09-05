@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SourceRender } from "../SourceRender";
 import { FrequencyAxis, DbAxis, TimeRuler } from "../spectral/Axes";

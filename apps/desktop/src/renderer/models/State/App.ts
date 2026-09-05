@@ -108,8 +108,7 @@ export async function loadAppState(main: {
 		if (result.success) {
 			saved = result.data;
 		}
-	} catch {
-	}
+	} catch {}
 
 	const comparisons = saved.comparisons ?? [];
 
