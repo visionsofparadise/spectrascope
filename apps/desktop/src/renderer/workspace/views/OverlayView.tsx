@@ -15,11 +15,6 @@ import type { TransportControl } from "../Transport";
 import type { GridMode, ViewControlSettings } from "../viewSettings";
 import type { ChannelInput } from "spectral-display";
 
-/**
- * Local `#RRGGBB` → `[r, g, b]` helper. Duplicates SourceRender's hexToRgb255
- * because the strip keeps it private. If a third caller appears, lift to a
- * shared util (`components/spectral/colorUtil.ts`).
- */
 function hexToRgb255(hex: string): [number, number, number] {
 	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
 	const expanded =
@@ -40,16 +35,12 @@ function hexToRgb255(hex: string): [number, number, number] {
 
 interface OverlayViewProps {
 	readonly sources: ReadonlyArray<Source>;
-	/** Per-source PCM readers, keyed by `Source.id`. */
 	readonly sourceAudio: ReadonlyMap<string, AudioData>;
-	/** The global Mono/Mid/Side channel-input mode — passed to every strip. */
 	readonly channelInput: ChannelInput;
-	/** Shared display-control settings, owned by the comparison host. */
 	readonly settings: ViewControlSettings;
 	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
-/** Empty sync state — no cursor / selection until the user interacts. */
 const EMPTY_VIEW_SYNC = {
 	cursor: null,
 	selection: null,
@@ -61,16 +52,6 @@ const DEFAULT_CURSOR: SourceRenderCursorReadout = {
 	amp: "— dB",
 };
 
-/**
- * Inline `GridOverlay` — ported from the pre-deletion SpectralPage reference
- * (`archive/spectralpage-reference.tsx` lines ~124-191). Kept as a private
- * helper for now per the Phase 4.2 judgment call; promote to a shared
- * `components/views/GridOverlay.tsx` once a second view needs it.
- *
- * Renders vertical time-grid lines (matched to the `TimeRuler`'s major ticks)
- * and horizontal lines that switch between mel-spaced frequency lines and
- * symmetric dB amplitude lines depending on `mode`. Opacity is parent-owned.
- */
 function GridOverlay({
 	startMs,
 	endMs,
@@ -103,7 +84,6 @@ function GridOverlay({
 	const hLines: Array<number> = [];
 
 	if (mode === "freq") {
-		// Frequency lines — mel scale positions matching FrequencyAxis.
 		const FREQ_MIN = 20;
 		const FREQ_MAX = 22050;
 		const melMin = 2595 * Math.log10(1 + FREQ_MIN / 700);
@@ -115,7 +95,6 @@ function GridOverlay({
 			hLines.push(1 - (mel - melMin) / (melMax - melMin));
 		}
 	} else {
-		// Amplitude lines — dB positions matching the symmetric DbAxis.
 		const dbToLinear = (db: number) => Math.pow(10, db / 20);
 
 		for (const db of [-3, -6, -12, -24]) {
@@ -148,51 +127,6 @@ function GridOverlay({
 	);
 }
 
-/**
- * OverlayView — every visible source's `SourceRender` z-stacked in the same
- * viewport, blended via `mix-blend-mode: lighten`. The documented exception
- * to the no-opacity-for-data rule: for this view, the blend mode *is* the
- * data composition.
- *
- * Structural template: ported from the pre-deletion SpectralPage's
- * `SpectralPage` function (`archive/spectralpage-reference.tsx` lines ~327-575).
- * Keeps the SpectralPage grid layout and frequency minimap. The **content
- * cell** (row 2 col 2) is now N stacked `<SourceRender>` instances inside a
- * `mix-blend-mode: lighten` wrapper, plus a single shared `<GridOverlay>` +
- * `<Selection>` + playhead cursor line owned by the view. Display controls
- * (grid / waveform / spectrogram opacity, FFT / hop) live in the transport's
- * left region and arrive via the shared `settings` prop.
- *
- * Phase 4 deferrals (recorded in the workspace-shell plan Notes):
- * - The DemoTabBar / top-bar / source-pickers / A-B knobs / node-nav from the
- *   SpectralPage reference are gone — the sidebar's View selector replaces
- *   them, and the Sources Panel handles per-source picking.
- * - The stereo meter from the SpectralPage right column is gone — it didn't
- *   generalize across N sources; pending follow-up.
- * - Cursor readout (`time/freq/amp`) is held as local state and shown as an
- *   unobtrusive overlay in the bottom-left of the content cell. The Phase 1
- *   stripped Transport doesn't render readouts; wiring readouts back into
- *   Transport is deferred.
- * - The view window (`startMs/endMs`) is the committed window of a per-view
- *   `useTimeViewport` — scroll pans, ctrl+scroll zooms about the cursor, and a
- *   minimap click/drag recentres it.
- * - Each source carries its own `AudioData` (resolved from the `sourceAudio`
- *   map by id); the shared view chrome sizes against the first renderable
- *   source's audio.
- *
- * Cross-view sync (Phase 7): the inspection cursor and selection come from
- * `useViewSync` — the shared `SyncProvider` state when the global Sync toggle
- * is on, the view's own local state when it is off. Clicking the content cell
- * places the cursor at that time (absolute ms); with sync on, every synced
- * view's cursor line moves together.
- *
- * Layer opacity: `settings.waveformOpacity` / `settings.spectrogramOpacity`
- * route into the `SourceRender` layer-opacity props. `settings.loudnessOpacity`
- * has no layer in `SourceRender` (it has no loudness layer) and is unconsumed.
- *
- * Audibility rule (solo overrides mute) is computed for downstream audio
- * pipeline consumption; the visual stack uses `visible === true` only.
- */
 export function OverlayView({
 	sources,
 	sourceAudio,
@@ -202,21 +136,12 @@ export function OverlayView({
 }: OverlayViewProps) {
 	const [cursorReadout, setCursorReadout] = useState<SourceRenderCursorReadout>(DEFAULT_CURSOR);
 
-	// Cross-view sync — the inspection cursor / selection. Shared `SyncProvider`
-	// state when the global Sync toggle is on, this view's own local state when
-	// off.
 	const viewSync = useViewSync("overlay", EMPTY_VIEW_SYNC);
 
-	// Visible sources that have decoded audio, paired with their `AudioData`.
 	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
-	// Shared view chrome (time ruler, minimaps, duration) sizes against the
-	// first renderable source's audio; an empty zero-duration fallback when none.
 	const chromeAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
 
-	// Transient time viewport — extent is the first renderable source's duration.
-	// The committed window feeds the strips / ruler; the live window drives the
-	// minimap bracket and the gesture transform.
 	const viewport = useTimeViewport(0, chromeAudio.durationMs);
 	const startMs = viewport.committedStartMs;
 	const endMs = viewport.committedEndMs;
@@ -238,8 +163,6 @@ export function OverlayView({
 	const [positionSec, setPositionSec] = useState(0);
 	const durationSec = chromeAudio.durationMs / 1000;
 
-	// Audibility — solo overrides mute. Reserved for future audio-pipeline
-	// wiring; the visual stack uses `visible === true` only.
 	const anySoloed = sources.some((source) => source.soloed);
 	const audibleSources = anySoloed
 		? sources.filter((source) => source.soloed)
@@ -258,9 +181,6 @@ export function OverlayView({
 		[durationSec],
 	);
 
-	// Place the inspection cursor at the clicked time (absolute ms within the
-	// content window). Routes through `useViewSync`, so with the global Sync
-	// toggle on the cursor is shared across every synced view.
 	const handleCursorClick = useCallback(
 		(event: React.MouseEvent<HTMLDivElement>) => {
 			const time = eventToTime(event, startMs, endMs);
@@ -278,8 +198,6 @@ export function OverlayView({
 			onPlayToggle,
 			onSeek,
 			cursorReadout,
-			// Selection range — surfaces as the transport's In / Out columns. Driven
-			// by the (sync-aware) selection; `—` columns when nothing is selected.
 			selectionInSec: viewSync.selection !== null ? viewSync.selection.start / 1000 : undefined,
 			selectionOutSec: viewSync.selection !== null ? viewSync.selection.end / 1000 : undefined,
 		}),
@@ -292,14 +210,10 @@ export function OverlayView({
 		}
 	}, [onTransportControlChange, transportControl]);
 
-	// Cursor / selection display fractions within the content window.
 	const cursorFrac = timeToFraction(viewSync.cursor, startMs, endMs);
 	const selectionStartFrac = timeToFraction(viewSync.selection?.start ?? null, startMs, endMs);
 	const selectionEndFrac = timeToFraction(viewSync.selection?.end ?? null, startMs, endMs);
 
-	// Use the first renderable source's color for the frequency minimap (it's a
-	// single-source overview; with N sources the choice is arbitrary — pick the
-	// first stable renderable).
 	const minimapLayerColor = renderableSources[0]?.source.layerColor ?? {
 		primary: "#B8B8C0",
 		secondary: "#44444C",
@@ -307,7 +221,6 @@ export function OverlayView({
 
 	return (
 		<div className="flex h-full min-h-0 w-full overflow-hidden bg-void">
-			{/* Main grid — ported from SpectralPage reference (lines ~466-493). */}
 			<div
 				className="min-h-0 min-w-0 flex-1 overflow-hidden"
 				style={{
@@ -316,19 +229,13 @@ export function OverlayView({
 					gridTemplateRows: "2rem minmax(0, 1fr) 2rem",
 				}}
 			>
-				{/* Row 1: blank | ruler | blank | blank */}
 				<div className="bg-void" />
 				<TimeRuler startMs={startMs} endMs={endMs} />
 				<div className="bg-void" />
 				<div className="bg-void" />
 
-				{/* Row 2: freq axis | content cell | freq minimap | dB axis */}
 				<FrequencyAxis />
 
-				{/* Content cell — N stacked SourceRenders + shared view chrome.
-            Clicking places the inspection cursor (sync-aware); scroll pans,
-            ctrl+scroll zooms (the viewport's non-passive wheel listener binds
-            to this element's ref). */}
 				<div
 					ref={viewport.wheelHandlers.ref}
 					className="relative cursor-crosshair overflow-hidden bg-void"
@@ -340,8 +247,6 @@ export function OverlayView({
 						</div>
 					) : (
 						<>
-							{/* Render stack — each `SourceRender` maps its own held render onto
-                  the live window; this wrapper only carries the blend mode. */}
 							<div className="absolute inset-0" style={{ mixBlendMode: "lighten" }}>
 								{renderableSources.map(({ source, audioData }) => (
 									<SourceRender
@@ -377,9 +282,6 @@ export function OverlayView({
 									style={{ left: `${cursorFrac * 100}%` }}
 								/>
 							)}
-							{/* The time / freq / amp cursor readout is published up to the
-                  Transport (see `transportControl.cursorReadout`); the view
-                  itself draws no in-pane readout chip. */}
 						</>
 					)}
 				</div>
@@ -387,11 +289,6 @@ export function OverlayView({
 				<FrequencyMinimap audioData={chromeAudio} startMs={startMs} endMs={endMs} layerColor={minimapLayerColor} />
 				<DbAxis />
 
-				{/* Row 3: blank | horizontal MinimapDisplay | blank | blank.
-            Pairs with the vertical FrequencyMinimap in row 2 col 3 to give
-            the user a 2D zoom/pan overview. Waveform color is the first
-            visible source's `layerColor.primary` — arbitrary with N sources;
-            the first stable visible matches the FrequencyMinimap choice. */}
 				<div className="bg-void" />
 				<MinimapDisplay
 					audioData={chromeAudio}

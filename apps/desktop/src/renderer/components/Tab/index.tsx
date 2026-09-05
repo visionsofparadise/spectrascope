@@ -14,13 +14,6 @@ interface Props {
 	readonly onHistoryControlChange: (control: HistoryControl | null) => void;
 }
 
-/**
- * The tab-content slot. With no active tab it renders the home screen; with an
- * active tab it resolves that tab's comparison from the store and mounts the
- * workspace shell (`ComparisonTab`). A tab whose `comparisonId` resolves to no
- * comparison falls back to the home screen — `loadAppState` already drops such
- * tabs, so this is a defensive guard.
- */
 export function TabContent({ context, onHistoryControlChange }: Props) {
 	const activeTab = context.app.activeTabId
 		? context.app.tabs.find((tab) => tab.id === context.app.activeTabId)

@@ -32,7 +32,6 @@ function Swatch({ layer, active, onClick }: SwatchProps) {
 			className={cn("relative h-4 w-4 shrink-0 outline-none", active && "ring-1 ring-primary")}
 			style={{ backgroundColor: layer.primary }}
 		>
-			{/* Secondary stripe on the right edge — 3px wide */}
 			<span
 				aria-hidden
 				className="absolute right-0 top-0 bottom-0"

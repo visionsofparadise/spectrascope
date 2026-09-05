@@ -16,10 +16,8 @@ export interface PreparedSource {
 	readonly durationMs: number;
 }
 
-/** Largest number of cached transcodes kept before LRU eviction. */
 const MAX_CACHE_ENTRIES = 32;
 
-/** Content-identity + target-rate cache key: a transcode is uniquely determined by these. */
 export const computeCacheKey = (filePath: string, size: number, mtimeMs: number, targetSampleRate: number): string => {
 	const hash = crypto.createHash("sha256");
 
@@ -31,18 +29,9 @@ export const computeCacheKey = (filePath: string, size: number, mtimeMs: number,
 	return hash.digest("hex");
 };
 
-/**
- * A source passes through (streams directly, no transcode) when it is already
- * PCM WAV at the target rate. A non-null header means `parseWavHeader` accepted
- * it, which it only does for supported PCM int/float WAV.
- */
 export const shouldPassThrough = (header: WavHeader | null, targetSampleRate: number): boolean =>
 	header !== null && header.sampleRate === targetSampleRate;
 
-/**
- * Moves `hash` to most-recently-used and evicts the least-recently-used entries
- * beyond `maxEntries`, calling `onEvict` with each evicted file path.
- */
 export const touchLru = (
 	cache: Map<string, string>,
 	hash: string,
@@ -80,13 +69,6 @@ const buildPrepared = (pcmPath: string, header: WavHeader, nativeSampleRate: num
 	durationMs: (header.frameCount / header.sampleRate) * 1000,
 });
 
-/**
- * Prepares a source for streaming: a PCM WAV already at the canonical rate
- * passes through unchanged; anything else transcodes once via ffmpeg into a
- * bounded LRU cache under `<userData>/source-cache/`, keyed by content identity
- * plus target rate: hash-as-filename dedup, in-flight job tracking, atomic
- * `.partial`-then-rename writes, disposed on window close.
- */
 export class SourceCacheManager {
 	private readonly cacheDirectory: string;
 	private readonly cache = new Map<string, string>();
@@ -121,7 +103,6 @@ export class SourceCacheManager {
 		}
 	}
 
-	/** Aborts every in-flight transcode and removes the cache directory. */
 	dispose(): void {
 		this.disposed = true;
 
@@ -192,12 +173,6 @@ export class SourceCacheManager {
 		return promise;
 	}
 
-	/**
-	 * Transcodes to canonical-rate `pcm_f32le`, keeping the native channel count
-	 * (no `-ac`). Writes to a `.partial` temp path so an aborted run never strands
-	 * a truncated file, then atomically renames on a clean exit. `-f wav` is
-	 * required because the `.partial` extension gives ffmpeg no format to infer.
-	 */
 	private async runFfmpeg(
 		filePath: string,
 		targetSampleRate: number,

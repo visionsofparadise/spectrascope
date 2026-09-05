@@ -19,8 +19,6 @@ const DEFAULT_CURSOR: SourceRenderCursorReadout = {
 	amp: "— dB",
 };
 
-/** Local `#RRGGBB` → `[r, g, b]` helper. Duplicates the per-view copies in
- *  OverlayView / SliderView / DifferenceView / SumView. */
 function hexToRgb255(hex: string): [number, number, number] {
 	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
 	const expanded =
@@ -39,12 +37,6 @@ function hexToRgb255(hex: string): [number, number, number] {
 	return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 }
 
-/**
- * Inline `GridOverlay` — the vertical time-tick grid. The OverlayView /
- * SliderView / DifferenceView / SumView copies also draw horizontal
- * frequency/amplitude lines; TimelineView has no frequency or amplitude axis,
- * so it draws time lines only.
- */
 function GridOverlay({
 	startMs,
 	endMs,
@@ -85,26 +77,6 @@ function GridOverlay({
 	);
 }
 
-/**
- * One DAW-style track row — a `SourceRender` placed on the shared comparison
- * timeline at its `timelineOffsetMs`, draggable horizontally to re-place it.
- *
- * Purely presentational + interactive: the row reports a *new* offset out and
- * never owns the persisted `timelineOffsetMs` itself. The incoming `offsetMs`
- * prop is the source of truth — it is the stored offset between drags and the
- * live drag offset during one (the parent lifts the transient value so it can
- * grow the timeline extent under the drag). `onDragMove` reports each pointer
- * tick up; `onCommit` fires exactly once, on pointer-up (and once per arrow-key
- * nudge), so the consumer's store and undo history get one entry per gesture.
- *
- * Placement maps this clip's absolute-ms offset/duration through the committed
- * viewport window (`[windowStartMs, windowEndMs]`): `left` and `width` are
- * fractions of the window span, so panning/zooming the window re-lays the clip.
- * Drag math is plain pointer events against the track's own rect; the px→ms
- * mapping uses the *window* span (not the extent) so a growing extent under the
- * cursor does not accelerate the drag. Offsets are floored at `0` — the earliest
- * clip simply stops there; there is no upper bound (the extent follows).
- */
 function TimelineTrack({
 	source,
 	audioData,
@@ -129,24 +101,18 @@ function TimelineTrack({
 	/** This source's effective placement on the shared timeline, in ms (≥ 0) —
 	 *  the stored offset between drags, the live drag offset during one. */
 	readonly offsetMs: number;
-	/** Committed viewport window the row is laid out against, in absolute ms. */
 	readonly windowStartMs: number;
 	readonly windowEndMs: number;
-	/** Latest clip end across the timeline — the arrow-key `End` target / aria max. */
 	readonly extentEndMs: number;
 	readonly fftSize: number;
 	readonly hopOverlap: number;
 	readonly channelInput: ChannelInput;
 	readonly gridOpacity: number;
-	/** Per-layer opacity for the clip's `SourceRender` (from shared settings). */
 	readonly waveformOpacity: number;
 	readonly spectrogramOpacity: number;
-	/** Whether the clip can be dragged — false when no offset callback is wired. */
 	readonly draggable: boolean;
-	/** Whether this clip is the one currently being dragged (drives the accent). */
 	readonly dragging: boolean;
 	readonly onCursorMove: (readout: SourceRenderCursorReadout) => void;
-	/** Reports the live offset on every pointer tick during a drag (transient). */
 	readonly onDragMove: (offsetMs: number) => void;
 	/** Emits the final (floored ≥ 0) offset — once per drag (pointer-up) and once
 	 *  per arrow-key nudge. */
@@ -156,7 +122,6 @@ function TimelineTrack({
 
 	const durationMs = audioData.durationMs;
 
-	// Latest values captured for the global pointer listeners (drag gesture).
 	const onDragMoveRef = useRef(onDragMove);
 	const onCommitRef = useRef(onCommit);
 	const windowStartRef = useRef(windowStartMs);
@@ -188,15 +153,9 @@ function TimelineTrack({
 
 			if (rect.width <= 0) return;
 
-			// Pointer offset within the clip at grab time, in ms — keeps the grab
-			// point under the cursor for the whole drag (no jump-to-pointer).
 			const grabMs = windowStartRef.current + ((event.clientX - rect.left) / rect.width) * windowSpanRef.current;
 			const grabWithinClipMs = grabMs - offsetMs;
 
-			// Resolve a floored offset from a pointer x-coordinate. Pure — does not
-			// touch state or emit; the callers decide what to do with the result.
-			// The px→ms mapping reads the *window* span (which the extent-follow may
-			// grow mid-drag), never the extent, so the drag speed stays stable.
 			const offsetFromClientX = (clientX: number) => {
 				const pointerMs = windowStartRef.current + ((clientX - rect.left) / rect.width) * windowSpanRef.current;
 
@@ -204,15 +163,10 @@ function TimelineTrack({
 			};
 
 			const onMove = (moveEvent: PointerEvent) => {
-				// During the drag, report the transient offset up so the parent tracks
-				// the pointer and follows the extent — no commit here. Emitting a store
-				// mutation per `pointermove` would thrash disk and flood undo/redo.
 				onDragMoveRef.current(offsetFromClientX(moveEvent.clientX));
 			};
 
 			const onUp = (upEvent: PointerEvent) => {
-				// Commit exactly once, at drag-end — one state mutation (and one
-				// undo/redo entry) per completed drag gesture.
 				onCommitRef.current(offsetFromClientX(upEvent.clientX));
 				window.removeEventListener("pointermove", onMove);
 				window.removeEventListener("pointerup", onUp);
@@ -226,9 +180,6 @@ function TimelineTrack({
 		[draggable, offsetMs],
 	);
 
-	// Keyboard nudge — arrow keys move the clip by a coarse/fine step so the
-	// affordance is operable without a pointer. Floored at 0; `End` aligns the
-	// clip's end with the latest content (there is no upper placement bound).
 	const handleKeyDown = useCallback(
 		(event: React.KeyboardEvent<HTMLButtonElement>) => {
 			if (!draggable) return;
@@ -256,9 +207,6 @@ function TimelineTrack({
 
 	return (
 		<div ref={trackRef} className="relative min-h-0 flex-1 overflow-hidden">
-			{/* The clip — a `SourceRender` positioned on the shared timeline. The
-          render itself still shows its source's full content (0 → duration);
-          placement is this wrapper's left/width. */}
 			<div className="absolute inset-y-0" style={{ left: `${leftPct}%`, width: `${widthPct}%` }}>
 				<SourceRender
 					source={source}
@@ -272,20 +220,13 @@ function TimelineTrack({
 					spectrogramOpacity={spectrogramOpacity}
 					onCursorMove={onCursorMove}
 				/>
-				{/* Per-clip time grid — drawn over this clip's own content span. */}
 				<GridOverlay startMs={0} endMs={durationMs} opacity={gridOpacity} />
-				{/* A thin leading edge marks the clip's start on the timeline. While
-            dragging it brightens to the primary accent. */}
 				<div
 					aria-hidden
 					className={`pointer-events-none absolute inset-y-0 left-0 w-0.5 ${
 						dragging ? "bg-primary" : "bg-chrome-text/60"
 					}`}
 				/>
-				{/* Drag handle — a DAW-style clip header strip across the top of the
-            clip. The whole header is the grab target; the grip dots make the
-            draggable affordance read. Hidden entirely when no offset callback
-            is wired (the demo), so the view stays a pure display there. */}
 				{draggable && (
 					<button
 						type="button"
@@ -318,11 +259,8 @@ function TimelineTrack({
 
 interface TimelineViewProps {
 	readonly sources: ReadonlyArray<Source>;
-	/** Per-source PCM readers, keyed by `Source.id`. */
 	readonly sourceAudio: ReadonlyMap<string, AudioData>;
-	/** The global Mono/Mid/Side channel-input mode — passed to every strip. */
 	readonly channelInput: ChannelInput;
-	/** Shared display-control settings, owned by the comparison host. */
 	readonly settings: ViewControlSettings;
 	/**
 	 * Emitted when a source's clip is dragged (or keyboard-nudged) on the
@@ -336,38 +274,6 @@ interface TimelineViewProps {
 	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
-/**
- * TimelineView — DAW-style multi-track timeline. Layout:
- *   - A main grid: horizontal `TimeRuler` (top), N equal-flex track rows each
- *     carrying one `SourceRender` *placed on the shared comparison timeline*,
- *     and a horizontal overview `MinimapDisplay` (bottom).
- *
- * Display controls (grid opacity, layer opacities, FFT / hop) live in the
- * transport's left region and arrive via the shared `settings` prop.
- *
- * No frequency axis, no dB axis, no frequency minimap, no selection, no cursor
- * readout chip — those stay Overlay/Slider concerns. The per-clip grid is
- * time-only (vertical lines aligned to the `TimeRuler`).
- *
- * **Shared comparison timeline.** Unlike the other per-source views, the
- * Timeline lays its strips out on one shared timeline whose extent runs
- * earliest clip start → latest clip end (`min(timelineOffsetMs)` →
- * `max(timelineOffsetMs + durationMs)`). A per-view `useTimeViewport` over that
- * extent gives scroll-pan / ctrl-scroll-zoom; every clip, the `TimeRuler`, the
- * overview minimap bracket, and the playhead lay out against the committed
- * window. Dragging the latest clip rightward grows the extent live under the
- * drag (extent-follow) because the extent derives from *effective* offsets — a
- * transient `drag` the view lifts out of the dragged track. Offsets are floored
- * at `0` (the earliest clip stops there); there is no upper bound. A clip can be
- * dragged (or arrow-key nudged) to re-place it; the new offset is reported out
- * via `onSourceOffsetChange` once per gesture — the view owns no *persisted*
- * placement state (controlled, props-in / callbacks-out). Transport playback
- * drives `positionSec`, and the playhead maps through the committed window.
- *
- * Each track carries its own `AudioData` (resolved from the `sourceAudio` map
- * by id). Audibility (solo overrides mute) matches the other per-source views
- * so the DAW grammar carries through.
- */
 export function TimelineView({
 	sources,
 	sourceAudio,
@@ -379,18 +285,10 @@ export function TimelineView({
 	const [playing, setPlaying] = useState(false);
 	const [positionSec, setPositionSec] = useState(0);
 	const [cursorReadout, setCursorReadout] = useState<SourceRenderCursorReadout>(DEFAULT_CURSOR);
-	// Transient live drag lifted out of the dragged `TimelineTrack` so the extent
-	// can follow the drag. Neither persisted nor in undo history; cleared on
-	// pointer-up when the committed offset is emitted through `onSourceOffsetChange`.
 	const [drag, setDrag] = useState<TimelineDrag | null>(null);
 
-	// Visible sources that have decoded audio, paired with their `AudioData`.
 	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
-	// The shared timeline extent — earliest effective clip start → latest
-	// effective clip end. `drag` substitutes the dragged clip's live offset, so a
-	// drag grows/shrinks the extent live (extent-follow). `0/0` when nothing is
-	// renderable.
 	const extent = useMemo(
 		() =>
 			computeTimelineExtent(
@@ -404,9 +302,6 @@ export function TimelineView({
 		[renderableSources, drag],
 	);
 
-	// Transient time viewport over the extent — the committed window feeds the
-	// ruler / track placement / playhead; the live window drives the minimap
-	// bracket and the gesture transform.
 	const viewport = useTimeViewport(extent.startMs, extent.endMs);
 	const windowStartMs = viewport.committedStartMs;
 	const windowEndMs = viewport.committedEndMs;
@@ -424,22 +319,15 @@ export function TimelineView({
 		[extent.startMs, extentSpanMs, viewport],
 	);
 
-	// Minimap bracket = committed window over the full extent.
 	const viewStartFrac = extentSpanMs > 0 ? (windowStartMs - extent.startMs) / extentSpanMs : 0;
 	const viewEndFrac = extentSpanMs > 0 ? (windowEndMs - extent.startMs) / extentSpanMs : 1;
 
-	// The overview minimap renders the whole timeline as a single waveform; with
-	// N tracks placed at different offsets there is no one buffer that spans it,
-	// so the minimap shows the first renderable source's audio as a stand-in
-	// (its colour likewise). A neutral chrome pair when nothing is renderable.
 	const minimapAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
 	const minimapColor = renderableSources[0]?.source.layerColor ?? {
 		primary: "#B8B8C0",
 		secondary: "#44444C",
 	};
 
-	// Audibility — solo overrides mute. Reserved for future audio-pipeline
-	// wiring; the visual stack uses `visible === true` only.
 	const anySoloed = sources.some((source) => source.soloed);
 	const audibleSources = anySoloed
 		? sources.filter((source) => source.soloed)
@@ -466,8 +354,6 @@ export function TimelineView({
 			onPlayToggle,
 			onSeek,
 			cursorReadout,
-			// Demo selection range (0.25–0.45 of duration) — surfaces as the
-			// transport's In / Out columns.
 			selectionInSec: durationSec * 0.25,
 			selectionOutSec: durationSec * 0.45,
 			selectionInAmp: "-19.7 dB",
@@ -482,15 +368,12 @@ export function TimelineView({
 		}
 	}, [onTransportControlChange, transportControl]);
 
-	// Playhead — absolute timeline position mapped through the committed window;
-	// rendered only when it falls inside the window.
 	const windowSpanMs = windowEndMs - windowStartMs;
 	const playheadFrac = windowSpanMs > 0 ? (positionSec * 1000 - windowStartMs) / windowSpanMs : 0;
 	const playheadVisible = playheadFrac >= 0 && playheadFrac <= 1;
 
 	return (
 		<div className="flex h-full min-h-0 w-full overflow-hidden bg-void">
-			{/* Main grid — time ruler, track stack, overview minimap. */}
 			<div
 				className="min-h-0 min-w-0 flex-1 overflow-hidden"
 				style={{
@@ -499,11 +382,8 @@ export function TimelineView({
 					gridTemplateRows: "auto minmax(0, 1fr) auto",
 				}}
 			>
-				{/* Row 1 — time ruler across the committed window. */}
 				<TimeRuler startMs={windowStartMs} endMs={windowEndMs} />
 
-				{/* Row 2 — track stack + playhead. Scroll pans, ctrl+scroll zooms (the
-            viewport's non-passive wheel listener binds to this element's ref). */}
 				<div ref={viewport.wheelHandlers.ref} className="relative flex flex-col overflow-hidden bg-void">
 					{renderableSources.length === 0 ? (
 						<div className="flex h-full items-center justify-center">
@@ -511,8 +391,6 @@ export function TimelineView({
 						</div>
 					) : (
 						<>
-							{/* Track stack — the gesture `transform` maps the committed layout
-                  onto the live window during a scroll/zoom, reset on commit. */}
 							<div
 								className="absolute inset-0 flex flex-col"
 								style={{
@@ -563,8 +441,6 @@ export function TimelineView({
 					)}
 				</div>
 
-				{/* Row 3 — horizontal overview minimap; the bracket is the committed
-            window over the extent, and a scrub recentres the window. */}
 				<MinimapDisplay
 					audioData={minimapAudio}
 					viewStartFrac={viewStartFrac}

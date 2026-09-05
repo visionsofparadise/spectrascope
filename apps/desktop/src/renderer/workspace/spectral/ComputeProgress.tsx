@@ -6,11 +6,6 @@ export interface ComputeProgressProps {
 	readonly fraction?: number;
 }
 
-/**
- * First-compute affordance: a chrome-toned diagonal shimmer over the area that
- * will render, plus an optional centered progress bar. Decorative only —
- * `pointer-events-none`, so gestures pass through to the canvas beneath.
- */
 export function ComputeProgress({ fraction }: ComputeProgressProps) {
 	return (
 		<div className="pointer-events-none absolute inset-0 overflow-hidden">

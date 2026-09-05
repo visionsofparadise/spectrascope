@@ -6,9 +6,7 @@ import type { ComputeResult } from "./useSpectralCompute";
 interface SpectrogramCanvasProps {
 	computeResult: ComputeResult;
 	ref?: React.Ref<HTMLCanvasElement>;
-	/** Render canvas at this multiple of the compute resolution (default 1). Use window.devicePixelRatio for smooth upsampling. */
 	canvasScale?: number;
-	/** Fires after a successful draw submit — the swap signal for consumers double-buffering renders. */
 	onRendered?: () => void;
 }
 
@@ -43,7 +41,6 @@ export const SpectrogramCanvas: React.FC<SpectrogramCanvasProps> = ({
 		blitReference.current ??= new BlitRenderer(device, canvas);
 		blitDeviceRef.current = device;
 
-		// Resize canvas to scaled dimensions — linear sampler upsamples the texture
 		const canvasWidth = Math.round(width * canvasScale);
 		const canvasHeight = Math.round(height * canvasScale);
 

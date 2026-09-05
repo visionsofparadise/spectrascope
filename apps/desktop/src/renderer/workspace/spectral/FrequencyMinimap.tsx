@@ -8,9 +8,6 @@ import type { SpectralOptions } from "spectral-display";
 
 const STRIP_WIDTH = 36;
 
-// Static placeholder vertical viewport — visualises the "current view" box.
-// Vertical zoom isn't wired yet; these fractions just demonstrate the
-// affordance so the minimap reads as a draggable box rather than a flat strip.
 const VP_TOP_FRAC = 0.18;
 const VP_BOTTOM_FRAC = 0.78;
 
@@ -66,8 +63,6 @@ export function FrequencyMinimap({ audioData, startMs, endMs, layerColor }: Freq
 
 	const computeResult = useSpectralCompute(spectralOptions);
 
-	// The result whose spectrogram is drawn: the fresh `ready` result, else the
-	// last good one held through a recompute or error. Null only before any result.
 	const renderable =
 		computeResult.status === "ready"
 			? computeResult
@@ -85,17 +80,12 @@ export function FrequencyMinimap({ audioData, startMs, endMs, layerColor }: Freq
 					<SpectrogramCanvas computeResult={renderable} />
 				</div>
 			)}
-			{/* Shimmer only (no bar) while first-computing — the minimaps carry no
-          progress bar per the v1 language. */}
 			{computeResult.status === "computing" && computeResult.previous === null && <ComputeProgress />}
-			{/* Dimmed regions outside viewport */}
 			<div className="absolute inset-x-0 top-0 bg-black/65" style={{ height: `${vpTopPct}%` }} />
 			<div
 				className="absolute inset-x-0 bottom-0 bg-black/65"
 				style={{ height: `${(1 - VP_BOTTOM_FRAC) * 100}%` }}
 			/>
-			{/* Viewport bracket — the scroll-window indicator. No grab-handle chips;
-          the bracket box itself is the affordance. */}
 			<div
 				className="absolute inset-x-0 cursor-ns-resize border-2 border-data-selection-border"
 				style={{ top: `${vpTopPct}%`, height: `${vpHeightPct}%` }}

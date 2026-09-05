@@ -23,14 +23,6 @@ interface Props {
 const DRAG = { WebkitAppRegion: "drag" } as React.CSSProperties;
 const NO_DRAG = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
 
-/**
- * AppBar — the single 48px chrome bar replacing the old `TitleBar` + `TabBar`
- * pair (mockup lines 50–86). Hamburger app menu, divider, session tabs with a
- * trailing `+` (opens Home), then right-aligned undo / redo driven by the
- * active comparison's published history control. The bar is the OS drag region
- * on `bg-void`; interactive children opt out with `no-drag`, and the right
- * padding reserves the native `titleBarOverlay` window-control footprint.
- */
 export function AppBar({ context, historyControl }: Props) {
 	const { app, appStore } = context;
 
@@ -105,7 +97,6 @@ export function AppBar({ context, historyControl }: Props) {
 
 	return (
 		<div className="flex h-12 shrink-0 items-center gap-2 bg-void pl-3 pr-[138px]" style={DRAG}>
-			{/* App menu */}
 			<div className="relative shrink-0" style={NO_DRAG}>
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>
@@ -130,9 +121,6 @@ export function AppBar({ context, historyControl }: Props) {
 
 			<div className="h-6 w-px shrink-0 bg-chrome-border-subtle" />
 
-			{/* Session tabs + new-tab. The row background is the OS drag region
-			    (inherited from the bar); each interactive child opts back out with
-			    no-drag. A faint wordmark sits behind the chips. */}
 			<div className="relative isolate flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
 				<div
 					aria-hidden="true"
@@ -216,7 +204,6 @@ export function AppBar({ context, historyControl }: Props) {
 				</div>
 			</div>
 
-			{/* Undo / redo */}
 			<div className="flex shrink-0 items-center gap-1.5" style={NO_DRAG}>
 				<div className="h-6 w-px shrink-0 bg-chrome-border-subtle" />
 				<IconButton

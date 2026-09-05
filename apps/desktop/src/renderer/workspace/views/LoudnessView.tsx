@@ -16,8 +16,6 @@ import type { TransportControl, TransportCursorReadout } from "../Transport";
 import type { LoudnessMetric, MetricSpec, ViewControlSettings } from "../viewSettings";
 import type { LoudnessData, SpectralOptions } from "spectral-display";
 
-/** Local `#RRGGBB` → `[r, g, b]` helper. Duplicates the per-view copies in the
- *  SourceRender-based views. */
 function hexToRgb255(hex: string): [number, number, number] {
 	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
 	const expanded =
@@ -36,25 +34,10 @@ function hexToRgb255(hex: string): [number, number, number] {
 	return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 }
 
-/**
- * LoudnessView — plots one of six loudness metrics (True peak / Sample peak /
- * Integrated / Momentary / Short term / RMS), chosen via the transport's
- * Metric dropdown and supplied as `settings.loudnessMetric`. Momentary / Short
- * term / RMS render one polyline per visible source against a shared time axis,
- * drawn in `source.layerColor.primary`. True peak, Sample peak and Integrated
- * are *scalar* metrics — a single whole-clip value each — so they draw a flat
- * horizontal line per source plus a labeled readout at the right edge.
- *
- * Real loudness data comes from `useSpectralCompute` in the `spectral-display`
- * package, called per-source via the `<SourceLoudnessTrace>` sub-component (a
- * hook must be called from a render function — one per source per metric).
- */
 
 interface LoudnessViewProps {
 	readonly sources: ReadonlyArray<Source>;
-	/** Per-source PCM readers, keyed by `Source.id`. */
 	readonly sourceAudio: ReadonlyMap<string, AudioData>;
-	/** Shared display-control settings — supplies the active loudness metric. */
 	readonly settings: ViewControlSettings;
 	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
@@ -69,7 +52,6 @@ const DB_MAX = 0;
 const DB_TICKS_60: ReadonlyArray<number> = [0, -10, -20, -30, -40, -50, -60];
 const DB_TICKS_40: ReadonlyArray<number> = [0, -5, -10, -15, -20, -25, -30, -35, -40];
 
-/** Convert an amplitude (0..1) sample to dB, floored to keep -Infinity out. */
 function ampToDb(amp: number, floorDb: number): number {
 	if (amp <= 0 || !Number.isFinite(amp)) return floorDb;
 
@@ -102,14 +84,6 @@ function formatDbFs(db: number): string {
 	return `${db.toFixed(1)} dBFS`;
 }
 
-/**
- * True peak, Sample peak and Integrated are *scalar* metrics — a single value
- * for the whole clip, not a time series. True peak is the clip's maximum
- * inter-sample (oversampled) peak; Sample peak is the maximum raw-sample peak;
- * Integrated LUFS is the gated whole-programme loudness. Each renders as a flat
- * horizontal line plus a right-edge label, so they read as constant across the
- * source (they are). The other three metrics are genuine time series.
- */
 function isScalarMetric(metric: LoudnessMetric): boolean {
 	return metric === "truePeak" || metric === "samplePeak" || metric === "integrated";
 }
@@ -123,8 +97,6 @@ function scalarMetricValue(
 	}
 
 	if (metric === "truePeak") {
-		// Oversampled inter-sample peak; fall back to the sample peak when the
-		// engine didn't compute true-peak for this run.
 		const tp = data.truePeakDb ?? data.peakDb;
 
 		return { value: tp, text: formatDbTp(tp) };
@@ -137,18 +109,11 @@ function scalarMetricValue(
 	return null;
 }
 
-/**
- * Sub-component that runs `useSpectralCompute` for one source with the
- * loudness pipeline enabled, and renders the polyline(s) for the active
- * metric. Bubbles `LoudnessData` up to the parent (only used by the Integrated
- * tab, which renders a right-edge text label per source).
- */
 interface SourceLoudnessTraceProps {
 	readonly source: Source;
 	readonly audioData: AudioData;
 	readonly startMs: number;
 	readonly endMs: number;
-	/** The view's live (gesture-following) window, mapped onto the held render. */
 	readonly liveStartMs: number;
 	readonly liveEndMs: number;
 	readonly metric: MetricSpec;
@@ -174,10 +139,6 @@ function SourceLoudnessTrace({
 				sampleCount: audioData.totalSamples,
 				channelCount: audioData.channels,
 			},
-			// Width/height are required but the loudness pipeline doesn't draw a
-			// canvas — keep them minimal but non-zero so the engine still runs.
-			// The query is windowed to the committed viewport so the metric follows
-			// the zoom; loudness pins density at 500 pts/sec regardless.
 			query: { startMs, endMs, width: 64, height: 64 },
 			readSamples: audioData.readSamples,
 			config: {
@@ -191,8 +152,6 @@ function SourceLoudnessTrace({
 
 	const computeResult = useSpectralCompute(spectralOptions);
 
-	// The result whose data is drawn: the fresh `ready` result, else the last
-	// good one held through a recompute or error. Null only before any result.
 	const renderable =
 		computeResult.status === "ready"
 			? computeResult
@@ -216,8 +175,6 @@ function SourceLoudnessTrace({
 
 	const color = source.layerColor.primary;
 
-	// Map the held render's window onto the live one so the trace follows the
-	// gesture; SVG redraws synchronously with state, so no double-buffer needed.
 	const transformStyle = {
 		transform: computeWindowTransform(renderable.query, {
 			startMs: liveStartMs,
@@ -227,8 +184,6 @@ function SourceLoudnessTrace({
 	};
 
 	if (isScalarMetric(metric.id)) {
-		// Scalar metric (TP / Integrated) — a flat horizontal line at the
-		// whole-clip value.
 		const scalar = scalarMetricValue(loudnessData, metric.id);
 
 		if (!scalar) return null;
@@ -289,11 +244,6 @@ function pickSeriesForMetric(data: LoudnessData, metric: LoudnessMetric): Float3
 	}
 }
 
-/**
- * Map a raw series value to dB for each metric. The RMS envelope is a linear
- * amplitude in [0, 1] — convert via `20 * log10`. The LUFS series are already
- * in LUFS (dB-domain) — pass through, but clamp -Infinity to the floor.
- */
 function mapperForMetric(metric: LoudnessMetric, floorDb: number): (value: number) => number {
 	if (metric === "rms") {
 		return (value: number) => ampToDb(value, floorDb);
@@ -312,13 +262,6 @@ interface ScalarLabelsProps {
 	readonly metric: MetricSpec;
 }
 
-/**
- * Right-edge labels for the scalar tabs (True peak / Sample peak /
- * Integrated). One label per source, positioned at its whole-clip value, in
- * its `primary`
- * color. Labels are absolute-positioned over the chart so they ride alongside
- * the flat lines.
- */
 function ScalarLabels({ visibleSources, loudnessMap, metric }: ScalarLabelsProps) {
 	return (
 		<>
@@ -397,9 +340,6 @@ function ChartCanvas({
 					/>
 				);
 			})}
-			{/* Each trace carries its own gesture transform on its `<g>` (held
-			    render's window → live window), so they swap independently as each
-			    source's recompute lands. */}
 			<svg className="absolute inset-0 h-full w-full" viewBox="0 0 1 1" preserveAspectRatio="none">
 				{renderableSources.map(({ source, audioData }) => (
 					<SourceLoudnessTrace
@@ -428,19 +368,12 @@ function ChartCanvas({
 }
 
 export function LoudnessView({ sources, sourceAudio, settings, onTransportControlChange }: LoudnessViewProps) {
-	// Visible sources that have decoded audio, paired with their `AudioData`.
 	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
-	// Shared chrome (time ruler, minimap, duration) sizes against the first
-	// renderable source's audio; a zero-duration fallback when none.
 	const chromeAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
 
-	// Transient time viewport — the traces window their computes to the committed
-	// window, so the metric follows the zoom.
 	const viewport = useTimeViewport(0, chromeAudio.durationMs);
 
-	// First-compute progress aggregated across the traces — a shimmer + mean-
-	// fraction bar over the chart while any source is first-computing.
 	const progress = useFirstComputeProgress();
 
 	const setViewportToFraction = useCallback(
@@ -481,9 +414,6 @@ export function LoudnessView({ sources, sourceAudio, settings, onTransportContro
 		amp: "— dB",
 	});
 
-	// Cursor readout — time on X, dB on Y. Loudness has no frequency dimension,
-	// so the readout publishes only `time` and `amp`; the Transport renders just
-	// those two rows (its `Freq` row is suppressed when `freq` is absent).
 	const handleChartMouseMove = useCallback(
 		(ev: React.MouseEvent<HTMLDivElement>) => {
 			const rect = ev.currentTarget.getBoundingClientRect();
@@ -518,8 +448,6 @@ export function LoudnessView({ sources, sourceAudio, settings, onTransportContro
 			onPlayToggle,
 			onSeek,
 			cursorReadout,
-			// Demo selection range (0.25–0.45 of duration) — surfaces as the
-			// transport's In / Out columns.
 			selectionInSec: durationSec * 0.25,
 			selectionOutSec: durationSec * 0.45,
 			selectionInAmp: "-19.7 dB",
@@ -536,9 +464,6 @@ export function LoudnessView({ sources, sourceAudio, settings, onTransportContro
 
 	const dbTicks = metricSpec.axisMin === -60 ? DB_TICKS_60 : DB_TICKS_40;
 
-	// The overview minimap renders a single waveform; with N sources the colour
-	// choice is arbitrary, so use the first renderable source's primary (a
-	// neutral chrome pair when nothing is renderable).
 	const minimapColor = renderableSources[0]?.source.layerColor ?? {
 		primary: "#B8B8C0",
 		secondary: "#44444C",
@@ -546,14 +471,7 @@ export function LoudnessView({ sources, sourceAudio, settings, onTransportContro
 
 	return (
 		<div className="flex h-full min-h-0 w-full flex-col bg-void">
-			{/* The chart group runs flush to the pane's top, left and bottom
-			    edges — the time ruler, dB axis and overview minimap are the
-			    graph's own chrome there. Only the right edge keeps a `4`-unit
-			    inset. Bottom-flush keeps the minimap-to-Transport gap identical
-			    to the SourceStrip views. */}
 			<div className="flex min-h-0 flex-1 flex-col pr-4">
-				{/* Time ruler at the top — like the waveform views. Offset right
-				    by the dB-axis width so its ticks align with the plot's X. */}
 				<div className="flex shrink-0">
 					<div className="w-10 shrink-0 bg-void" />
 					<div className="min-w-0 flex-1">
@@ -587,10 +505,6 @@ export function LoudnessView({ sources, sourceAudio, settings, onTransportContro
 						)}
 					</div>
 				</div>
-				{/* Bottom horizontal minimap — overview scroll strip, offset
-				    right by the dB-axis width so it sits under the plot. Flush to
-				    the pane bottom so the gap to the Transport matches the other
-				    views. */}
 				<div className="flex shrink-0">
 					<div className="w-10 shrink-0 bg-void" />
 					<div className="min-w-0 flex-1">

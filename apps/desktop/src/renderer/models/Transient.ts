@@ -46,7 +46,6 @@ export class Transient<V> {
 		this.minimum = options?.minimum;
 		this.maximum = options?.maximum;
 
-		// Cache accessor objects
 		// eslint-disable-next-line @typescript-eslint/no-this-alias
 		const _this = this;
 

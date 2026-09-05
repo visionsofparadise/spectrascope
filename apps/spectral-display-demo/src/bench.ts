@@ -94,7 +94,6 @@ async function benchPipeline(
 
 	finalizeScan(scanContext);
 
-	// Wait for all FFT dispatches to actually complete on GPU
 	const gpuFftWaitStart = performance.now();
 
 	await device.queue.onSubmittedWorkDone();
@@ -181,7 +180,6 @@ async function main() {
 
 	const run = () => benchPipeline(device, engine, blit, readSamples, sampleRate, channels, totalSamples);
 
-	// Warmup
 	await run();
 
 	const runs = 3;

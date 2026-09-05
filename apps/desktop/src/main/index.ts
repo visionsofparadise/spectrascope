@@ -9,23 +9,14 @@ if (require("electron-squirrel-startup")) {
 	app.quit();
 }
 
-// `media` must be registered as a privileged scheme at module top level —
-// before `app.whenReady()` — so the renderer can `fetch()` `media://` URLs.
-// `supportFetchAPI` enables `fetch`; `stream` enables ranged streaming for
-// `<audio>` playback; `secure` lets it load under the renderer's origin.
 protocol.registerSchemesAsPrivileged([
 	{ scheme: "media", privileges: { stream: true, supportFetchAPI: true, secure: true } },
 ]);
 
-// One shared, app-level stream registry backs both the `registerStream` IPC and
-// the `media://stream/…` protocol routes; the protocol handler outlives any one
-// window, so it is disposed on `before-quit`, not window close.
 const streamManager = new StreamManager();
 
 app.whenReady()
 	.then(() => {
-		// `protocol.handle` registration must run after `app.whenReady()`
-		// resolves, before the first window is created.
 		registerMediaProtocol(streamManager);
 
 		return createWindow(logger, streamManager);

@@ -10,7 +10,6 @@ export interface StreamInfo {
 	readonly durationMs: number;
 }
 
-/** Largest number of resolved streams (open file handles) kept before LRU eviction. */
 const MAX_STREAM_ENTRIES = 32;
 
 const toStreamInfo = (key: string, resolved: ResolvedStream): StreamInfo => ({
@@ -27,13 +26,6 @@ const closeHandles = (resolved: ResolvedStream): void => {
 	}
 };
 
-/**
- * App-level registry mapping a content-identity key to a resolved stream (its
- * parsed headers + open file handles + DSP metadata). One shared instance backs
- * both the `registerStream` IPC and the `media://stream/…` protocol routes, so
- * `dispose()` is wired to `app.on("before-quit")` — the protocol handler outlives
- * any single window. Bounded LRU: evicting a stream closes its handles.
- */
 export class StreamManager {
 	private readonly cache = new Map<string, ResolvedStream>();
 	private readonly inFlight = new Map<string, Promise<ResolvedStream>>();
@@ -56,7 +48,6 @@ export class StreamManager {
 		return resolved;
 	}
 
-	/** Closes every open handle and clears the registry. Wired to `app.on("before-quit")`. */
 	dispose(): void {
 		this.disposed = true;
 

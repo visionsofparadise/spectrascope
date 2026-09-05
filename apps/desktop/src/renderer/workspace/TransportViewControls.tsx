@@ -13,7 +13,6 @@ interface TransportViewControlsProps {
 	readonly onSyncEnabledChange: (next: boolean) => void;
 }
 
-/** Chip-Select option lists — stable module-scope references. */
 const FFT_SELECT_OPTIONS = FFT_OPTIONS.map((value) => ({ value, label: value }));
 const HOP_SELECT_OPTIONS = HOP_OPTIONS.map((value, index) => ({
 	value,
@@ -27,7 +26,6 @@ const METRIC_SELECT_OPTIONS = METRICS.map((metric) => ({
 
 const noop = () => {};
 
-/** A knob with a glyph caption beneath it — the transport's opacity controls. */
 function KnobControl({
 	value,
 	icon,
@@ -45,18 +43,10 @@ function KnobControl({
 	);
 }
 
-/** Vertical divider between control groups. */
 function Divider() {
 	return <div className="h-10 w-px bg-chrome-border-subtle" />;
 }
 
-/**
- * Grid-mode toggle (freq / amp) — a chip-less, color-only icon button per the
- * v1 mockup (transport lines 375-376): the active mode reads `chrome-text`, the
- * inactive one `chrome-text-secondary` (brightening to `chrome-text` on hover).
- * No background chip — unlike `IconButton`, whose active state paints a
- * `chrome-raised` chip.
- */
 function GridModeToggle({
 	icon,
 	label,
@@ -83,14 +73,6 @@ function GridModeToggle({
 	);
 }
 
-/**
- * SyncToggle — cross-view sync toggle (link glyph + "Sync"), hosted in the
- * transport's Timeline controls. Renders only in Timeline's controls per
- * the v1 design. Controlled — `enabled` / `onEnabledChange` owned by the host;
- * the flag drives the `SyncProvider` mounted around the workspace. Button
- * grammar: the outer button owns the padding, the inner span owns the
- * active-state `bg-secondary` chip and hugs its content.
- */
 function SyncToggle({
 	enabled,
 	onEnabledChange,
@@ -116,23 +98,6 @@ function SyncToggle({
 	);
 }
 
-/**
- * TransportViewControls — the active view's display-control cluster, rendered
- * into the transport's left region. The comparison host owns the shared
- * `settings` object and the `syncEnabled` flag; this component is the visual
- * cluster, emitting the next settings / sync state out.
- *
- * Per-view layout (per the v1 mockup):
- * - **Spectral group** (Overlay / Slider / Difference / Sum): grid-opacity knob
- *   + freq/amp grid-mode toggles, waveform and spectrogram opacity knobs, the
- *   Mel (stub) / FFT-size / hop-overlap chip selects (stacking vertically below
- *   1400px), and the loudness-opacity knob (still unconsumed — `SourceStrip`
- *   has no loudness layer).
- * - **Timeline**: the Sync toggle plus grid / waveform / spectrogram knobs (no
- *   FFT / Mel / loudness — Timeline has no frequency axis).
- * - **Loudness**: a labelled Metric field select that opens upward.
- * - **Correlation / Frequency Distribution / Vectorscope**: no controls.
- */
 export function TransportViewControls({
 	activeView,
 	settings,
@@ -189,9 +154,7 @@ export function TransportViewControls({
 					}}
 				/>
 
-				{/* Mel / FFT / hop chip selects — stack vertically below 1400px. */}
 				<div className="flex flex-col items-stretch gap-0.5 min-[1400px]:flex-row min-[1400px]:items-center min-[1400px]:gap-1">
-					{/* Mel is a stub — `frequencyScale` stays hardcoded mel in SourceStrip. */}
 					<Select variant="chip" value="mel" options={MEL_SELECT_OPTIONS} onChange={noop} />
 					<Select
 						variant="chip"
@@ -273,6 +236,5 @@ export function TransportViewControls({
 		);
 	}
 
-	// Correlation, Frequency Distribution, Vectorscope — no display controls.
 	return null;
 }

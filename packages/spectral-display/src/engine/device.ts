@@ -50,10 +50,8 @@ async function createDevice(): Promise<GPUDevice> {
 export function getMaxFftSize(device: GPUDevice): number {
 	const maxStorage = device.limits.maxComputeWorkgroupStorageSize;
 
-	// FFT requires fftSize * 2 * 4 bytes (real + imaginary, float32)
 	const maxFft = Math.floor(maxStorage / (2 * 4));
 
-	// Round down to nearest power of 2
 	return Math.pow(2, Math.floor(Math.log2(maxFft)));
 }
 

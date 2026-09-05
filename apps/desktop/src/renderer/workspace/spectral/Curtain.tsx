@@ -2,29 +2,15 @@ import { useCallback, useEffect, useRef } from "react";
 import { cn } from "../../cn";
 
 interface CurtainProps {
-	/** Current curtain position as a fraction of the parent rect width, in [min, max]. */
 	readonly position: number;
 	readonly onPositionChange: (next: number) => void;
-	/** Lower bound for `position` (default 0). */
 	readonly min?: number;
-	/** Upper bound for `position` (default 1). */
 	readonly max?: number;
 	readonly className?: string;
 }
 
-/**
- * Visual Curtain primitive — a draggable vertical line that splits a layered
- * display along the time axis. The component is purely visual + interactive:
- * it reports its position in [min, max] as a fraction of the parent rect width,
- * and the consumer maps that to "which layer is active on each side."
- *
- * Audio-playback switching at the curtain is *not* wired in the first pass;
- * the consumer is responsible for any clip-path / blend-mode composition that
- * makes the split visually correct.
- */
 export function Curtain({ position, onPositionChange, min = 0, max = 1, className }: CurtainProps) {
 	const lineRef = useRef<HTMLDivElement>(null);
-	// Latest min/max/onChange captured for use inside global pointer listeners.
 	const minRef = useRef(min);
 	const maxRef = useRef(max);
 	const onChangeRef = useRef(onPositionChange);
@@ -75,7 +61,6 @@ export function Curtain({ position, onPositionChange, min = 0, max = 1, classNam
 			window.addEventListener("pointerup", onUp);
 			window.addEventListener("pointercancel", onUp);
 
-			// Snap to the click location immediately.
 			updateFromClientX(event.clientX);
 		},
 		[updateFromClientX],
@@ -90,11 +75,7 @@ export function Curtain({ position, onPositionChange, min = 0, max = 1, classNam
 			className={cn("pointer-events-none absolute inset-y-0", className)}
 			style={{ left: percent, transform: "translateX(-1px)" }}
 		>
-			{/* Vertical 2px line spanning the parent's full height */}
 			<div className="absolute inset-y-0 w-0.5 bg-chrome-text" aria-hidden />
-			{/* Draggable handle — centered vertically. The chip is the eye-catching
-          target; the two interior bars provide a grip motif so the affordance
-          reads as a draggable handle rather than a tooltip. */}
 			<button
 				type="button"
 				onPointerDown={handlePointerDown}

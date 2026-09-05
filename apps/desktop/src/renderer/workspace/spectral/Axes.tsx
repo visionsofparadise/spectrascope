@@ -1,4 +1,3 @@
-// --- Frequency Axis (left side, fixed) ---
 
 const FREQ_LABELS: ReadonlyArray<{ hz: number; label: string }> = [
 	{ hz: 100, label: "100" },
@@ -14,7 +13,6 @@ const FREQ_LABELS: ReadonlyArray<{ hz: number; label: string }> = [
 const FREQ_MIN = 20;
 const FREQ_MAX = 22050;
 
-// Mel scale -- matches spectral-display package
 function freqToMel(hz: number): number {
 	return 2595 * Math.log10(1 + hz / 700);
 }
@@ -54,10 +52,7 @@ export function FrequencyAxis() {
 	);
 }
 
-// --- dB Axis Labels (right side of display, no colormap) ---
 
-// Symmetric waveform amplitude axis: 0dB at top and bottom, -inf at center
-// Position by linear amplitude: amplitude = 10^(dB/20), so -6dB ~= 0.5, -12dB ~= 0.25, etc.
 const DB_HALF_LABELS = [0, -3, -6, -12, -24];
 
 function dbToLinear(db: number): number {
@@ -74,7 +69,6 @@ export function DbAxis() {
 				fontVariantNumeric: "tabular-nums",
 			}}
 		>
-			{/* Top half: 0dB near top -> approaching 50% center */}
 			{DB_HALF_LABELS.map((db) => {
 				const amp = db === 0 ? 1 : dbToLinear(db);
 				const yPct = (1 - amp) * 50;
@@ -93,12 +87,10 @@ export function DbAxis() {
 				);
 			})}
 
-			{/* Center: -inf */}
 			<div className="absolute left-0 flex items-center" style={{ top: "50%", transform: "translateY(-50%)" }}>
 				<span className="pl-1">−∞</span>
 			</div>
 
-			{/* Bottom half: mirror */}
 			{DB_HALF_LABELS.map((db) => {
 				const amp = db === 0 ? 1 : dbToLinear(db);
 				const yPct = 50 + amp * 50;
@@ -121,7 +113,6 @@ export function DbAxis() {
 	);
 }
 
-// --- Time Ruler (top of display area) ---
 
 interface TimeRulerProps {
 	readonly startMs: number;
@@ -140,7 +131,6 @@ function formatRulerTime(ms: number): string {
 export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
 	const spanMs = endMs - startMs;
 
-	// Major tick interval (labeled)
 	let majorMs = 5000;
 
 	if (spanMs < 2000) majorMs = 200;
@@ -150,10 +140,8 @@ export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
 	else if (spanMs < 60000) majorMs = 5000;
 	else majorMs = 10000;
 
-	// Minor tick interval (unlabeled) -- subdivide major by 5 or 4
 	const minorMs = majorMs <= 200 ? majorMs / 4 : majorMs / 5;
 
-	// Collect major ticks
 	const majorTicks: Array<{ timeMs: number; label: string }> = [];
 	const firstMajor = Math.ceil(startMs / majorMs) * majorMs;
 
@@ -161,7 +149,6 @@ export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
 		majorTicks.push({ timeMs: tick, label: formatRulerTime(tick) });
 	}
 
-	// Collect minor ticks (exclude positions that overlap with major)
 	const minorTicks: Array<number> = [];
 	const firstMinor = Math.ceil(startMs / minorMs) * minorMs;
 
@@ -180,9 +167,6 @@ export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
 				fontVariantNumeric: "tabular-nums",
 			}}
 		>
-			{/* Minor ticks — chrome-text-dim so they read on the void background.
-          `chrome-border` is a panel-divider value and is far too dark to be
-          visible against `bg-void`. */}
 			{minorTicks.map((timeMs) => {
 				const fraction = (timeMs - startMs) / spanMs;
 
@@ -195,8 +179,6 @@ export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
 				);
 			})}
 
-			{/* Major ticks with labels — chrome-text-secondary, matching the tick
-          labels so a labelled tick reads as one unit. */}
 			{majorTicks.map(({ timeMs, label }) => {
 				const fraction = (timeMs - startMs) / spanMs;
 
@@ -213,26 +195,12 @@ export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
 	);
 }
 
-// --- Linear dB Axis (left side, single-direction linear scale) ---
 
 interface LinearDbAxisProps {
-	/** dB tick values to label. Top = highest value, bottom = lowest. */
 	readonly ticks: ReadonlyArray<number>;
-	/** Width of the axis column. Defaults to `2.5rem` (matches FreqDist precedent). */
 	readonly width?: string;
 }
 
-/**
- * Single-direction linear dB axis. Top = first entry in `ticks`, bottom = last
- * entry. Used by chart views (FrequencyDistributionView, LoudnessView) where
- * the Y axis is a single signed dB range rather than the symmetric waveform-
- * amplitude axis the spectrogram `DbAxis` represents.
- *
- * Promoted to a shared helper in Phase 9 — second use of the same orientation.
- * Inline copies in `FrequencyDistributionView` previously; both views now
- * consume this. The tick values are caller-owned so each view picks its own
- * dB range (FreqDist: 0 → -90; Loudness: 0 → -60).
- */
 export function LinearDbAxis({ ticks, width = "2.5rem" }: LinearDbAxisProps) {
 	const dbMax = ticks[0] ?? 0;
 	const dbMin = ticks[ticks.length - 1] ?? -90;

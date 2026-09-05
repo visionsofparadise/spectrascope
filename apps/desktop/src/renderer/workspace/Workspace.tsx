@@ -13,11 +13,6 @@ import type { TransportControl } from "./Transport";
 import type { ViewControlSettings } from "./viewSettings";
 import type { ChannelInput } from "spectral-display";
 
-/**
- * The nine workspace views. The union values are the code's stable view ids;
- * their display labels (including "Freq Dist" for `frequency-distribution`)
- * live with the `Sidebar` View selector that renders them.
- */
 export type ViewId =
 	| "timeline"
 	| "overlay"
@@ -88,31 +83,6 @@ interface WorkspaceProps {
 	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
-/**
- * Workspace — the workspace pane composition. The active view and the
- * `channelInput` mode are both controlled props (owned by the comparison host,
- * selected from the `Sidebar`) so the host can resolve view-specific data and
- * persist channel input. There is no strip above the pane — `Workspace` renders
- * only the active view container.
- *
- * Cross-view sync: the Sync toggle now lives in the transport's Timeline
- * controls (host-owned), not here. The shared cursor / selection / time-range
- * state is NOT owned by `Workspace` — the host mounts a `<SyncProvider>`
- * around it, and the views consume it via `useViewSync`. When sync is off each
- * view uses its own local state.
- *
- * Transport-control plumbing: the active view publishes its `TransportControl`
- * up via the `onTransportControlChange` callback. Workspace forwards that
- * callback to the active view as a child prop — no context, no ref, no
- * render-prop. Switching tabs unmounts the old view and mounts the new one;
- * the new view's own mount effect publishes its control. No debounce step is
- * needed — every view publishes on mount, and React runs the newly-mounted
- * child's effect within the same commit.
- *
- * Audio resolution: the seven source/chart views receive the `sourceAudio`
- * map and look up per-source `AudioData` by id; the two derived views
- * (`SumView`, `DifferenceView`) receive the single `derivedAudio` reader.
- */
 export function Workspace({
 	sources,
 	sourceAudio,

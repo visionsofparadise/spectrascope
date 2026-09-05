@@ -7,10 +7,6 @@ import type { Source } from "./source";
 import type { AudioData } from "./spectral/types";
 import type { ChannelInput, ColormapDefinition, ComputeResultReady, SpectralOptions } from "spectral-display";
 
-/**
- * Cursor readout shape — `{ time, freq, amp }` strings the render publishes up
- * on mouse-move.
- */
 export interface SourceRenderCursorReadout {
 	readonly time: string;
 	readonly freq: string;
@@ -18,7 +14,6 @@ export interface SourceRenderCursorReadout {
 }
 
 export interface SourceRenderProps {
-	/** Source identity + per-source `layerColor`. */
 	readonly source: Source;
 	readonly audioData: AudioData;
 	readonly startMs: number;
@@ -87,10 +82,6 @@ function useContainerSize(ref: React.RefObject<HTMLDivElement | null>): {
 	return size;
 }
 
-/**
- * Parse `#RRGGBB` (or `#RGB`) into a `[r, g, b]` triple of integer 0..255
- * components. `WaveformCanvas` consumes 0..255 (its shader divides by 255).
- */
 function hexToRgb255(hex: string): [number, number, number] {
 	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
 	const expanded =
@@ -109,12 +100,6 @@ function hexToRgb255(hex: string): [number, number, number] {
 	return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 }
 
-/**
- * SourceRender — the atomic per-source render unit: spectrogram + waveform.
- * Holds its last painted result (transformed onto the live window) through a
- * recompute, swapping via an internal double-buffer once the new result's
- * canvases have both drawn; first computes show a shimmer + progress bar.
- */
 export function SourceRender({
 	source,
 	audioData,
@@ -231,8 +216,6 @@ export function SourceRender({
 	const drawCountRef = useRef(0);
 	const backResultRef = useRef<ComputeResultReady | null>(null);
 
-	// Reset the back layer's draw counter when `incoming` identity changes, so a
-	// superseded result never carries stale draw progress into the swap.
 	if (backResultRef.current !== incoming) {
 		backResultRef.current = incoming;
 		drawCountRef.current = 0;
@@ -246,13 +229,6 @@ export function SourceRender({
 		}
 	}, []);
 
-	// Stable per-result key so React preserves the *drawn* back-layer canvas
-	// instance across the swap: when `held` becomes `incoming`, the front layer's
-	// key matches the previous hidden back layer's key, so React reuses that DOM
-	// subtree (pixels intact) and only un-hides it + applies the transform in one
-	// commit — the atomic promotion the double-buffer requires. Rendering
-	// `incoming` into a fixed front slot instead would re-blit it in a post-paint
-	// effect, exposing a one-frame identity-transform-with-old-pixels flash.
 	const layerKeyCounterRef = useRef(0);
 	const layerKeysRef = useRef(new WeakMap<ComputeResultReady, number>());
 

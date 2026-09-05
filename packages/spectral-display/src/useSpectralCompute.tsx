@@ -32,7 +32,6 @@ export interface ComputeResultReady {
 	correlationEnvelope: Float32Array | null;
 	vectorscopeHistogram: Uint32Array | null;
 	options: ResolvedPipelineOptions;
-	/** The ms-domain query this result was computed for, echoed verbatim for held-result transforms. */
 	query: SpectralQuery;
 }
 

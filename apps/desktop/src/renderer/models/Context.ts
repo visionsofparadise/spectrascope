@@ -17,9 +17,7 @@ export interface AppContext {
 	readonly windowId: string;
 	readonly tabNames: Map<string, string>;
 	readonly renameCallbacks: Map<string, (name: string) => void>;
-	/** Open the audio-file dialog and create a comparison tab from the chosen files. */
 	readonly openComparison: () => Promise<void>;
-	/** Create an empty comparison tab (sources added afterwards via the panel). */
 	readonly newComparison: () => Promise<void>;
 	readonly renameTab: (tabId: string, newName: string) => void;
 }

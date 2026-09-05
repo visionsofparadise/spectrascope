@@ -1,4 +1,4 @@
-export const FFT_PIPELINE_SHADER = /* wgsl */ `
+export const FFT_PIPELINE_SHADER = `
 
 override WORKGROUP_SIZE: u32;
 override FFT_SIZE: u32;
@@ -142,7 +142,7 @@ fn main(
 }
 `;
 
-export const SPECTROGRAM_VISUALIZE_SHADER = /* wgsl */ `
+export const SPECTROGRAM_VISUALIZE_SHADER = `
 
 struct Uniforms {
   total_frames: u32,
@@ -225,7 +225,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `;
 
-export const LTAS_REDUCE_SHADER = /* wgsl */ `
+export const LTAS_REDUCE_SHADER = `
 
 struct Uniforms {
   total_frames: u32,
@@ -256,7 +256,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `;
 
-export const SPECTROGRAM_FOLD_SHADER = /* wgsl */ `
+export const SPECTROGRAM_FOLD_SHADER = `
 
 struct Uniforms {
   total_frames: u32,
@@ -301,7 +301,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `;
 
-export const LTAS_FOLD_SHADER = /* wgsl */ `
+export const LTAS_FOLD_SHADER = `
 
 struct Uniforms {
   total_frames: u32,
@@ -335,7 +335,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `;
 
-export const VECTORSCOPE_VISUALIZE_SHADER = /* wgsl */ `
+export const VECTORSCOPE_VISUALIZE_SHADER = `
 
 struct Uniforms {
   grid_size: u32,
@@ -393,7 +393,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `;
 
-export const WAVEFORM_VISUALIZE_SHADER = /* wgsl */ `
+export const WAVEFORM_VISUALIZE_SHADER = `
 
 struct Uniforms {
   total_points: u32,
@@ -453,7 +453,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `;
 
-export const BLIT_VERTEX_SHADER = /* wgsl */ `
+export const BLIT_VERTEX_SHADER = `
 
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
@@ -488,7 +488,7 @@ fn main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 }
 `;
 
-export const BLIT_FRAGMENT_SHADER = /* wgsl */ `
+export const BLIT_FRAGMENT_SHADER = `
 
 @group(0) @binding(0) var source_texture: texture_2d<f32>;
 @group(0) @binding(1) var source_sampler: sampler;

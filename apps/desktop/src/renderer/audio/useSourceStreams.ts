@@ -5,7 +5,6 @@ import type { PreparedSource } from "../../main/SourceCacheManager";
 import type { Source } from "../workspace/source";
 import type { AudioData } from "../workspace/spectral/types";
 
-/** Per-source stream-preparation status — `preparing` until the stream registers, then `ready` or `error`. */
 export type SourceStreamStatus = "preparing" | "ready" | "error";
 
 export interface UseSourceStreamsResult {
@@ -21,11 +20,9 @@ export interface UseSourceStreamsResult {
 	 * folds into the sum / diff specs. Present only for a `ready` source.
 	 */
 	readonly prepared: ReadonlyMap<string, PreparedSource>;
-	/** Preparation status keyed by `Source.id` — `preparing` while in flight, then `ready` / `error`. */
 	readonly status: ReadonlyMap<string, SourceStreamStatus>;
 }
 
-/** Internal cache entry for one prepared `(path, rate)` pair. */
 interface PathCacheEntry {
 	readonly status: SourceStreamStatus;
 	readonly audioData?: AudioData;
@@ -38,59 +35,26 @@ const EMPTY_RESULT: UseSourceStreamsResult = {
 	status: new Map<string, SourceStreamStatus>(),
 };
 
-/**
- * Cache key for a prepared source. Keyed by `(path, rate)` so a canonical-rate
- * change re-prepares every source (the main-process cache makes a re-prepare at
- * a rate already transcoded a cheap hit). `null` rate — the pre-capture state —
- * prepares at each file's native rate.
- */
 function cacheKey(path: string, rate: number | null): string {
 	return `${path}@${rate === null ? "native" : String(rate)}`;
 }
 
-/**
- * Resolve per-source stream-backed audio for a comparison's sources.
- *
- * Each distinct `(audioFilePath, canonicalSampleRate)` pair is prepared once via
- * `main.prepareSource` (import-time canonicalization in the main process) and its
- * single-input display stream registered via `main.registerStream` (offset-free
- * at `offsetMs: 0` — offset placement is a Timeline-layout concern of the derived
- * streams, not per-source display). The registered `StreamInfo` becomes an
- * `AudioData` whose `readSamples` Range-fetches the raw flavor. Results are
- * cached by key for the hook's lifetime, so adding/removing sources or a repeat
- * rate never re-prepares a pair already resolved.
- *
- * Capture: when `canonicalSampleRate` is `null` and the first source's file
- * resolves, `onCaptureRate` is called with its native rate — the host writes it
- * into the comparison as the sticky default. That write is an ordinary
- * history-participating edit; undoing it back to `null` simply re-triggers the
- * capture.
- */
 export function useSourceStreams(
 	sources: ReadonlyArray<Source>,
 	canonicalSampleRate: number | null,
 	onCaptureRate: (nativeSampleRate: number) => void,
 ): UseSourceStreamsResult {
-	// Prepared-stream cache, keyed by `(path, rate)`. A ref (not state) so the
-	// cache survives re-renders; a monotonically-bumped `version` triggers the
-	// render when an async prepare/register lands.
 	const cacheRef = useRef(new Map<string, PathCacheEntry>());
 	const [version, setVersion] = useState(0);
 
-	// Keep the capture callback in a ref so the capture effect does not re-run
-	// (and re-fire the capture) merely because the host passed a fresh closure.
 	const onCaptureRateRef = useRef(onCaptureRate);
 
 	useEffect(() => {
 		onCaptureRateRef.current = onCaptureRate;
 	}, [onCaptureRate]);
 
-	// Whether the null-rate capture has already fired for the current null
-	// window. Reset whenever a concrete rate is present, so an undo back to
-	// `null` re-arms the capture.
 	const captureFiredRef = useRef(false);
 
-	// The distinct, non-empty file paths the current sources reference.
 	const filePaths = useMemo(() => {
 		const set = new Set<string>();
 
@@ -112,8 +76,6 @@ export function useSourceStreams(
 
 			if (cache.has(key)) continue;
 
-			// Mark preparing immediately so a re-render before the async work
-			// resolves reports `preparing` rather than re-dispatching it.
 			cache.set(key, { status: "preparing" });
 
 			void main
@@ -140,8 +102,6 @@ export function useSourceStreams(
 		};
 	}, [filePaths, canonicalSampleRate]);
 
-	// Capture the sticky default rate from the first source once it resolves,
-	// while no canonical rate is set. Runs after each prepare lands (`version`).
 	useEffect(() => {
 		if (canonicalSampleRate !== null) {
 			captureFiredRef.current = false;
@@ -164,8 +124,6 @@ export function useSourceStreams(
 	}, [version, canonicalSampleRate, sources]);
 
 	return useMemo<UseSourceStreamsResult>(() => {
-		// `version` is read so the memo recomputes when an async prepare lands;
-		// the cache is a ref, so without this the memo would not see new entries.
 		void version;
 
 		if (sources.length === 0) return EMPTY_RESULT;
@@ -177,8 +135,6 @@ export function useSourceStreams(
 
 		for (const source of sources) {
 			if (source.audioFilePath.length === 0) {
-				// A file-less source has nothing to prepare — surface it as an error
-				// so a caller can distinguish it from a still-preparing source.
 				status.set(source.id, "error");
 
 				continue;

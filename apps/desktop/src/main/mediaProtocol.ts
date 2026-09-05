@@ -5,25 +5,6 @@ import { renderRange, type ResolvedStream } from "./audio/streamDsp";
 import { buildWavHeader } from "./audio/wavHeader";
 import type { StreamManager } from "./StreamManager";
 
-/**
- * Custom `media://` protocol with HTTP Range support. It serves two things:
- * real local files (`media:///` + `encodeURIComponent`-encoded absolute path)
- * with a content type resolved from the file extension, and registered stream
- * endpoints (`media://stream/<key>/…`) computed on demand by the `StreamManager`.
- *
- * The file form is `media:///` (triple slash — empty host) + the
- * `encodeURIComponent`-encoded absolute path. The path MUST be percent-encoded
- * and the host empty — a raw Windows path after `media://` parses with the
- * drive letter as the host (`:` lost), and an encoded path after `media://` (no
- * slashes) becomes the host wholesale. The triple slash keeps the host empty
- * so the encoded path lands in `pathname`; the handler strips the leading `/`
- * and `decodeURIComponent`s it back to the original absolute path.
- *
- * `protocol.registerSchemesAsPrivileged` for `media` must be called at the
- * main process's module top level (before `app.whenReady()`); the
- * `registerMediaProtocol()` call here must run after `app.whenReady()`
- * resolves. See `main/index.ts`.
- */
 
 const CONTENT_TYPE_BY_EXT: Readonly<Record<string, string>> = {
 	".wav": "audio/wav",
@@ -55,10 +36,8 @@ function parseRangeHeader(range: string, fileSize: number): { start: number; end
 	return { start, end };
 }
 
-/** Bytes per f32 sample — the on-the-wire width of both stream flavors. */
 const BYTES_PER_SAMPLE = 4;
 
-/** Frames rendered per pull of a no-Range streamed body. */
 const STREAM_SEGMENT_FRAMES = 65536;
 
 function deinterleaveChannel(
@@ -76,7 +55,6 @@ function deinterleaveChannel(
 	return channelData;
 }
 
-/** Copies a byte window of a Float32Array's backing store into an owned Buffer. */
 function bufferFromFloats(data: Float32Array, byteStart: number, byteLength: number): Buffer<ArrayBuffer> {
 	const source = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
 	const body = Buffer.alloc(byteLength);
@@ -256,10 +234,6 @@ async function handleStreamRequest(url: URL, request: Request, streamManager: St
 }
 
 async function handleFileRequest(url: URL, request: Request): Promise<Response> {
-	// The caller percent-encodes the whole absolute path into a single URL
-	// component; `pathname` carries it with a leading `/`. Decoding it back
-	// yields the original absolute path on every platform (Windows drive
-	// letters included).
 	const filePath = decodeURIComponent(url.pathname.replace(/^\//, ""));
 	const contentType = contentTypeForPath(filePath);
 
@@ -312,8 +286,6 @@ export function registerMediaProtocol(streamManager: StreamManager): void {
 	protocol.handle("media", async (request) => {
 		const url = new URL(request.url);
 
-		// Host `stream` routes to the virtual DSP endpoints; an empty host is the
-		// legacy real-file path (unchanged).
 		if (url.host === "stream") return handleStreamRequest(url, request, streamManager);
 
 		return handleFileRequest(url, request);

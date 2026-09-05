@@ -1,7 +1,3 @@
-// SumView renders a single `SourceRender` against the `derivedAudio` prop — the
-// summed signal, streamed on demand from the registered sum `media://`
-// endpoint. The summed strip carries a fixed neutral `layerColor` so it reads
-// as belonging to no individual source.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SourceRender } from "../SourceRender";
@@ -20,7 +16,6 @@ import type { TransportControl } from "../Transport";
 import type { GridMode, ViewControlSettings } from "../viewSettings";
 import type { ChannelInput } from "spectral-display";
 
-/** Local `#RRGGBB` → `[r,g,b]` helper. Duplicates OverlayView's hexToRgb255. */
 function hexToRgb255(hex: string): [number, number, number] {
 	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
 	const expanded =
@@ -46,14 +41,11 @@ interface SumViewProps {
 	 * registered sum `media://` stream (`EMPTY_DERIVED_AUDIO` until audible).
 	 */
 	readonly derivedAudio: AudioData;
-	/** The global Mono/Mid/Side channel-input mode — passed to the strip. */
 	readonly channelInput: ChannelInput;
-	/** Shared display-control settings, owned by the comparison host. */
 	readonly settings: ViewControlSettings;
 	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
-/** Empty sync state — no cursor / selection until the user interacts. */
 const EMPTY_VIEW_SYNC = {
 	cursor: null,
 	selection: null,
@@ -65,23 +57,11 @@ const DEFAULT_CURSOR: SourceRenderCursorReadout = {
 	amp: "— dB",
 };
 
-/**
- * Neutral chrome pair for the summed pseudo-source. The sum belongs to no
- * single source, so its `layerColor` is fixed rather than derived from any
- * one input. `#A3E635` (lime-400) + `#440154` (viridis dark violet) gives a
- * strong yet not-source-collisioned anchor against the demo's default
- * palette. Documented in the plan Notes as the chosen neutral.
- */
 const SUM_LAYER_COLOR: LayerColor = {
 	primary: "#A3E635",
 	secondary: "#440154",
 };
 
-/**
- * Inline `GridOverlay` — same body as OverlayView / TimelineView / SliderView
- * / DifferenceView. SumView is the fifth copy. Chrome extraction is now a
- * strong candidate; deferred per the plan Notes for Phase 7.
- */
 function GridOverlay({
 	startMs,
 	endMs,
@@ -157,44 +137,11 @@ function GridOverlay({
 	);
 }
 
-/**
- * SumView — one full-pane `<SourceRender>` rendering a "sum" pseudo-source
- * against the `derivedAudio` prop (the streamed sum-of-audible signal). The
- * strip carries a neutral `layerColor` (lime + viridis-dark) so it reads as
- * distinct from any individual source.
- *
- * Page-level chrome (grid template + TimeRuler + FrequencyAxis + DbAxis +
- * FrequencyMinimap + GridOverlay + Selection + playhead + cursor readout chip)
- * is identical to the other per-source views. Display controls (grid /
- * waveform / spectrogram opacity, FFT / hop) now live in the transport and
- * arrive via the shared `settings` prop. The **content cell** is one full-pane
- * `<SourceRender>` (mirroring
- * OverlayView's single-source case, but with no blend-mode wrapper since
- * there is only one strip).
- *
- * First-pass judgment calls (recorded in the plan):
- *   - **0 visible sources**: content cell shows a "No visible sources"
- *     message in `font-technical text-sm text-chrome-text-dim`. The rest of
- *     the page chrome stays mounted so the view remains navigable. Matches
- *     the empty-state convention used by OverlayView.
- *   - **Pseudo-source synthesis**: a single synthesised `Source` with
- *     `id = "sum"`, `name = "Σ all sources"` (U+03A3 GREEK CAPITAL LETTER
- *     SIGMA), `audioFilePath = "derived"`, `layerColor = SUM_LAYER_COLOR`, and
- *     default flags (`visible: true, muted: false, soloed: false`).
- *   - **Neutral color choice**: lime-400 + viridis-dark-violet. Picked
- *     because the sum belongs to no single source — anchoring it to one of
- *     the input colors would lie about the data's provenance. The lime/
- *     viridis pair reads as a "different family" from the default palette.
- *   - **TransportControl publish**: matches the other per-source views.
- */
 export function SumView({ sources, derivedAudio, channelInput, settings, onTransportControlChange }: SumViewProps) {
 	const [cursorReadout, setCursorReadout] = useState<SourceRenderCursorReadout>(DEFAULT_CURSOR);
 
-	// Cross-view sync — the inspection cursor / selection (shared when the
-	// global Sync toggle is on, local otherwise).
 	const viewSync = useViewSync("sum", EMPTY_VIEW_SYNC);
 
-	// Transient time viewport — extent is the derived (summed) signal's duration.
 	const viewport = useTimeViewport(0, derivedAudio.durationMs);
 	const startMs = viewport.committedStartMs;
 	const endMs = viewport.committedEndMs;
@@ -218,8 +165,6 @@ export function SumView({ sources, derivedAudio, channelInput, settings, onTrans
 
 	const visibleSources = useMemo(() => sources.filter((source) => source.visible), [sources]);
 
-	// Audibility — solo overrides mute. Reserved for future audio-pipeline
-	// wiring; the visual stack uses `visible === true` only.
 	const anySoloed = sources.some((source) => source.soloed);
 	const audibleSources = anySoloed
 		? sources.filter((source) => source.soloed)
@@ -227,12 +172,6 @@ export function SumView({ sources, derivedAudio, channelInput, settings, onTrans
 
 	void audibleSources;
 
-	/**
-	 * Build the synthesised "sum" pseudo-source. The strip is rendered against
-	 * the `derivedAudio` reader; the pseudo-source carries the neutral
-	 * `SUM_LAYER_COLOR` so the rendered strip reads as not-belonging-to any
-	 * individual source.
-	 */
 	const sumSource = useMemo<Source>(
 		() => ({
 			id: "sum",
@@ -258,7 +197,6 @@ export function SumView({ sources, derivedAudio, channelInput, settings, onTrans
 		[durationSec],
 	);
 
-	// Place the inspection cursor at the clicked time (sync-aware).
 	const handleCursorClick = useCallback(
 		(event: React.MouseEvent<HTMLDivElement>) => {
 			const time = eventToTime(event, startMs, endMs);
@@ -276,8 +214,6 @@ export function SumView({ sources, derivedAudio, channelInput, settings, onTrans
 			onPlayToggle,
 			onSeek,
 			cursorReadout,
-			// Selection range — driven by the (sync-aware) selection; `—` columns
-			// when nothing is selected.
 			selectionInSec: viewSync.selection !== null ? viewSync.selection.start / 1000 : undefined,
 			selectionOutSec: viewSync.selection !== null ? viewSync.selection.end / 1000 : undefined,
 		}),
@@ -290,13 +226,10 @@ export function SumView({ sources, derivedAudio, channelInput, settings, onTrans
 		}
 	}, [onTransportControlChange, transportControl]);
 
-	// Cursor / selection display fractions within the content window.
 	const cursorFrac = timeToFraction(viewSync.cursor, startMs, endMs);
 	const selectionStartFrac = timeToFraction(viewSync.selection?.start ?? null, startMs, endMs);
 	const selectionEndFrac = timeToFraction(viewSync.selection?.end ?? null, startMs, endMs);
 
-	// Frequency minimap — for the sum view, the strip's own (neutral) color is
-	// the natural choice. Matches the visual anchor of the content cell.
 	const minimapLayerColor = SUM_LAYER_COLOR;
 
 	return (
@@ -309,19 +242,13 @@ export function SumView({ sources, derivedAudio, channelInput, settings, onTrans
 					gridTemplateRows: "2rem minmax(0, 1fr) 2rem",
 				}}
 			>
-				{/* Row 1: blank | ruler | blank | blank */}
 				<div className="bg-void" />
 				<TimeRuler startMs={startMs} endMs={endMs} />
 				<div className="bg-void" />
 				<div className="bg-void" />
 
-				{/* Row 2: freq axis | content cell | freq minimap | dB axis */}
 				<FrequencyAxis />
 
-				{/* Content cell — one full-pane SourceRender of the sum pseudo-source.
-            No blend-mode wrapper (single strip); the strip's `absolute inset-0`
-            positioning fills the cell. Clicking places the inspection cursor
-            (sync-aware). */}
 				<div
 					ref={viewport.wheelHandlers.ref}
 					className="relative cursor-crosshair overflow-hidden bg-void"
@@ -333,8 +260,6 @@ export function SumView({ sources, derivedAudio, channelInput, settings, onTrans
 						</div>
 					) : (
 						<>
-							{/* Render — `SourceRender` maps its own held render onto the live
-                  window. */}
 							<div className="absolute inset-0">
 								<SourceRender
 									source={sumSource}
@@ -366,8 +291,6 @@ export function SumView({ sources, derivedAudio, channelInput, settings, onTrans
 									style={{ left: `${cursorFrac * 100}%` }}
 								/>
 							)}
-							{/* The cursor readout is published up to the Transport (see
-                  `transportControl.cursorReadout`); no in-pane readout chip. */}
 						</>
 					)}
 				</div>
@@ -375,8 +298,6 @@ export function SumView({ sources, derivedAudio, channelInput, settings, onTrans
 				<FrequencyMinimap audioData={derivedAudio} startMs={startMs} endMs={endMs} layerColor={minimapLayerColor} />
 				<DbAxis />
 
-				{/* Row 3: blank | horizontal MinimapDisplay | blank | blank. Pairs
-            with the vertical FrequencyMinimap to give a 2D zoom/pan overview. */}
 				<div className="bg-void" />
 				<MinimapDisplay
 					audioData={derivedAudio}

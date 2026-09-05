@@ -17,10 +17,6 @@ import type { TransportControl } from "../Transport";
 import type { GridMode, ViewControlSettings } from "../viewSettings";
 import type { ChannelInput } from "spectral-display";
 
-/**
- * Local `#RRGGBB` → `[r, g, b]` helper. Duplicates the one in OverlayView /
- * SourceRender; lift to a shared util when a fourth caller appears.
- */
 function hexToRgb255(hex: string): [number, number, number] {
 	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
 	const expanded =
@@ -41,16 +37,12 @@ function hexToRgb255(hex: string): [number, number, number] {
 
 interface SliderViewProps {
 	readonly sources: ReadonlyArray<Source>;
-	/** Per-source PCM readers, keyed by `Source.id`. */
 	readonly sourceAudio: ReadonlyMap<string, AudioData>;
-	/** The global Mono/Mid/Side channel-input mode — passed to every strip. */
 	readonly channelInput: ChannelInput;
-	/** Shared display-control settings, owned by the comparison host. */
 	readonly settings: ViewControlSettings;
 	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
-/** Empty sync state — no cursor / selection until the user interacts. */
 const EMPTY_VIEW_SYNC = {
 	cursor: null,
 	selection: null,
@@ -62,14 +54,6 @@ const DEFAULT_CURSOR: SourceRenderCursorReadout = {
 	amp: "— dB",
 };
 
-/**
- * Inline `GridOverlay` — same body as OverlayView / TimelineView. Per the
- * Phase 5 judgment call (carried into Phase 6), the shared view-level chrome
- * is **copied** between the per-source views rather than extracted into a
- * `ViewChrome` render-prop helper. SliderView is the third copy. With three
- * concrete instances landed, extraction is now a real candidate — flagged in
- * the plan Notes for Phase 6 as a follow-up rather than landed here.
- */
 function GridOverlay({
 	startMs,
 	endMs,
@@ -145,32 +129,6 @@ function GridOverlay({
 	);
 }
 
-/**
- * SliderView — wipe-compare across N sources. Each renderable source's
- * `<SourceRender>` is z-stacked at full opacity and clipped two-sided to the
- * band between its neighbouring curtains (`sliderClip.stripClipPath`), so strip
- * `k` shows only in `[positions[k−1], positions[k]]`. `N−1` `<Curtain>` handles
- * sit between adjacent sources; each clamps between its neighbours
- * (`sliderClip.curtainBounds`) so handles cannot cross, and earlier handles
- * stack above later ones. Positions start all at the right edge (source 1 fills
- * the view) and reset when the renderable-source id list changes.
- *
- * Page-level chrome (grid template + TimeRuler + FrequencyAxis + DbAxis +
- * FrequencyMinimap + GridOverlay + Selection + playhead + cursor readout chip)
- * is identical to OverlayView and TimelineView. Display controls live in the
- * transport's left region and arrive via the shared `settings` prop.
- *
- * Judgment calls (recorded in the plan):
- *   - **<2 renderable sources**: content cell shows a "Need at least two
- *     visible sources" message in `font-technical text-sm text-chrome-text-dim`.
- *     The rest of the page chrome stays mounted so the view remains navigable.
- *     A source is renderable when it is visible *and* has decoded audio.
- *   - **Audio-playback switching at the handle is out of scope.** The published
- *     `TransportControl` mirrors OverlayView/TimelineView — visual-only.
- *   - **Curtain positions are transient view-local state** — not persisted, not
- *     in undo history (like layer opacity); `Curtain`'s continuous
- *     `onPositionChange` is fine.
- */
 export function SliderView({
 	sources,
 	sourceAudio,
@@ -180,19 +138,12 @@ export function SliderView({
 }: SliderViewProps) {
 	const [cursorReadout, setCursorReadout] = useState<SourceRenderCursorReadout>(DEFAULT_CURSOR);
 
-	// Cross-view sync — the inspection cursor / selection (shared when the
-	// global Sync toggle is on, local otherwise).
 	const viewSync = useViewSync("slider", EMPTY_VIEW_SYNC);
 
-	// Visible sources that have decoded audio, paired with their `AudioData`.
 	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
 	const sourceCount = renderableSources.length;
 
-	// Curtain positions — `N−1` fractions, one per adjacent-source boundary,
-	// transient view-local state. Reset to the right edge (source 1 full-width)
-	// whenever the renderable-source id list changes; keyed off the id list so an
-	// unrelated re-render (audio recompute, chrome resize) does not thrash them.
 	const idsKey = useMemo(() => renderableSources.map((entry) => entry.source.id).join("|"), [renderableSources]);
 
 	const [positions, setPositions] = useState<Array<number>>(() => defaultCurtainPositions(sourceCount));
@@ -213,11 +164,8 @@ export function SliderView({
 		});
 	}, []);
 
-	// Shared chrome (time ruler, minimaps, duration) sizes against the first
-	// renderable source's audio; a zero-duration fallback when none.
 	const chromeAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
 
-	// Transient time viewport — extent is the first renderable source's duration.
 	const viewport = useTimeViewport(0, chromeAudio.durationMs);
 	const startMs = viewport.committedStartMs;
 	const endMs = viewport.committedEndMs;
@@ -239,8 +187,6 @@ export function SliderView({
 	const [positionSec, setPositionSec] = useState(0);
 	const durationSec = chromeAudio.durationMs / 1000;
 
-	// Audibility — solo overrides mute. Reserved for future audio-pipeline
-	// wiring; the visual stack uses `visible === true` only.
 	const anySoloed = sources.some((source) => source.soloed);
 	const audibleSources = anySoloed
 		? sources.filter((source) => source.soloed)
@@ -259,7 +205,6 @@ export function SliderView({
 		[durationSec],
 	);
 
-	// Place the inspection cursor at the clicked time (sync-aware).
 	const handleCursorClick = useCallback(
 		(event: React.MouseEvent<HTMLDivElement>) => {
 			const time = eventToTime(event, startMs, endMs);
@@ -277,8 +222,6 @@ export function SliderView({
 			onPlayToggle,
 			onSeek,
 			cursorReadout,
-			// Selection range — driven by the (sync-aware) selection; `—` columns
-			// when nothing is selected.
 			selectionInSec: viewSync.selection !== null ? viewSync.selection.start / 1000 : undefined,
 			selectionOutSec: viewSync.selection !== null ? viewSync.selection.end / 1000 : undefined,
 		}),
@@ -291,16 +234,12 @@ export function SliderView({
 		}
 	}, [onTransportControlChange, transportControl]);
 
-	// Cursor / selection display fractions within the content window.
 	const cursorFrac = timeToFraction(viewSync.cursor, startMs, endMs);
 	const selectionStartFrac = timeToFraction(viewSync.selection?.start ?? null, startMs, endMs);
 	const selectionEndFrac = timeToFraction(viewSync.selection?.end ?? null, startMs, endMs);
 
 	const hasSources = sourceCount >= 2;
 
-	// Frequency minimap is a single-source overview. With a wipe across N sources
-	// the choice is arbitrary — pick the first (leftmost) source's color, falling
-	// back to a neutral chrome pair when none.
 	const minimapLayerColor = renderableSources[0]?.source.layerColor ?? {
 		primary: "#B8B8C0",
 		secondary: "#44444C",
@@ -316,18 +255,13 @@ export function SliderView({
 					gridTemplateRows: "2rem minmax(0, 1fr) 2rem",
 				}}
 			>
-				{/* Row 1: blank | ruler | blank | blank */}
 				<div className="bg-void" />
 				<TimeRuler startMs={startMs} endMs={endMs} />
 				<div className="bg-void" />
 				<div className="bg-void" />
 
-				{/* Row 2: freq axis | content cell | freq minimap | dB axis */}
 				<FrequencyAxis />
 
-				{/* Content cell — wipe-compare. N SourceRenders z-stacked, each clipped
-            two-sided to its band; N−1 Curtains render the draggable boundaries.
-            Clicking places the inspection cursor (sync-aware). */}
 				<div
 					ref={viewport.wheelHandlers.ref}
 					className="relative cursor-crosshair overflow-hidden bg-void"
@@ -335,10 +269,6 @@ export function SliderView({
 				>
 					{hasSources ? (
 						<>
-							{/* Render stack — each `SourceRender` maps its own held render onto
-                  the live window. The Curtain handles and shared chrome stay in
-                  container space. Each render is clipped two-sided to its band;
-                  visibility is geometric (the clip), not paint order. */}
 							<div className="absolute inset-0">
 								{renderableSources.map((entry, index) => (
 									<SourceRender
@@ -359,12 +289,6 @@ export function SliderView({
 									/>
 								))}
 							</div>
-							{/* N−1 draggable handles, one per adjacent-source boundary. Each
-                  Curtain reads its parent rect for dragging, so it sits in a
-                  full-size wrapper that is a direct child of this
-                  `position: relative` content cell. Wrappers carry a descending
-                  z-index (earlier handles on top) so overlapping handles resolve
-                  to the earlier source. */}
 							{positions.map((position, index) => {
 								const bounds = curtainBounds(index, positions);
 
@@ -385,8 +309,6 @@ export function SliderView({
 									</div>
 								);
 							})}
-							{/* Shared chrome — overlays the entire content cell, above the
-                  clip-pathed strips. */}
 							<GridOverlay
 								startMs={startMs}
 								endMs={endMs}
@@ -402,8 +324,6 @@ export function SliderView({
 									style={{ left: `${cursorFrac * 100}%` }}
 								/>
 							)}
-							{/* The cursor readout is published up to the Transport (see
-                  `transportControl.cursorReadout`); no in-pane readout chip. */}
 						</>
 					) : (
 						<div className="flex h-full items-center justify-center">
@@ -415,10 +335,6 @@ export function SliderView({
 				<FrequencyMinimap audioData={chromeAudio} startMs={startMs} endMs={endMs} layerColor={minimapLayerColor} />
 				<DbAxis />
 
-				{/* Row 3: blank | horizontal MinimapDisplay | blank | blank.
-            Top (foreground) source's color drives the waveform; falls back to
-            chrome neutral when no pair (the bracket still gives navigational
-            context even with no strips). */}
 				<div className="bg-void" />
 				<MinimapDisplay
 					audioData={chromeAudio}

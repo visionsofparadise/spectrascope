@@ -33,30 +33,13 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 	const tabNamesRef = useRef(new Map<string, string>());
 	const renameCallbacksRef = useRef(new Map<string, (name: string) => void>());
 
-	// The active comparison's undo/redo control, published up from `ComparisonTab`
-	// (the `TransportControl` publishing pattern) so the app bar can drive it. Reset
-	// to `null` when no tab is active (Home) — the publisher only lives inside a
-	// mounted `ComparisonTab`, so Home would otherwise keep the last tab's stale
-	// control.
 	const [historyControl, setHistoryControl] = useState<HistoryControl | null>(null);
 
-	/**
-	 * The tab label for a comparison — the first source's name (its file name),
-	 * or "New Comparison" when the comparison has no sources yet. Tab labels
-	 * live in the renderer-only `tabNames` map (not persisted state); a
-	 * comparison opened from saved state has no entry until something repopulates
-	 * it, so the tab bar falls back to "Comparison".
-	 */
 	const labelForComparison = useCallback(
 		(comparison: Comparison): string => comparison.sources[0]?.name ?? "New Comparison",
 		[],
 	);
 
-	/**
-	 * Append a comparison to the store, open a tab referencing it, activate that
-	 * tab, and register the tab's display label. A single `appStore.mutate`
-	 * keeps the comparison + tab + active-id change one atomic autosave step.
-	 */
 	const openComparisonTab = useCallback(
 		(comparison: Comparison): void => {
 			const tabId = createTabId();
@@ -72,10 +55,6 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 		[app, appStore, labelForComparison],
 	);
 
-	/**
-	 * Open the audio-file dialog and create a comparison from the chosen files.
-	 * A cancelled dialog (`undefined`) or an empty selection opens nothing.
-	 */
 	const openComparison = useCallback(async (): Promise<void> => {
 		const filePaths = await main.showOpenDialog({
 			filters: [{ name: "Audio", extensions: [...AUDIO_FILE_EXTENSIONS] }],
@@ -87,11 +66,6 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 		openComparisonTab(createComparison(filePaths));
 	}, [openComparisonTab]);
 
-	/**
-	 * Create an empty comparison (no sources). Sources are added afterwards via
-	 * the sources panel's add affordance. Synchronous; returns a resolved promise
-	 * to satisfy the shared `() => Promise<void>` context contract.
-	 */
 	const newComparison = useCallback((): Promise<void> => {
 		openComparisonTab(createComparison([]));
 

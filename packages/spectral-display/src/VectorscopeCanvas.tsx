@@ -15,18 +15,9 @@ export interface VectorscopeCanvasProps {
 	 * `VectorscopeCanvas`es composite cleanly.
 	 */
 	tint: [number, number, number];
-	/** Render canvas at this multiple of the histogram grid resolution (default 1). */
 	canvasScale?: number;
 }
 
-/**
- * Renders the whole-clip vectorscope histogram (a `(Side, Mid)` density grid)
- * as a single-hue tinted density cloud on a transparent background. Mirrors
- * `SpectrogramCanvas`: a `VectorscopeRenderer` dispatches the visualize compute
- * shader to a texture, which `BlitRenderer` blits to the canvas. Requires a
- * `"ready"` `ComputeResult` with a non-null `vectorscopeHistogram` (produced
- * when `stereo: true`).
- */
 export const VectorscopeCanvas: React.FC<VectorscopeCanvasProps> = ({ computeResult, ref, tint, canvasScale = 1 }) => {
 	const [internalCanvasReference, canvasCallback] = useCanvasRef(ref);
 	const blitReference = useRef<BlitRenderer | null>(null);
@@ -44,7 +35,6 @@ export const VectorscopeCanvas: React.FC<VectorscopeCanvasProps> = ({ computeRes
 		const { vectorscopeHistogram } = computeResult;
 		const size = Math.round(VECTORSCOPE_GRID_SIZE * canvasScale);
 
-		// Rebuild GPU resources when the device changes.
 		if (deviceReference.current !== device) {
 			blitReference.current?.destroy();
 			blitReference.current = null;

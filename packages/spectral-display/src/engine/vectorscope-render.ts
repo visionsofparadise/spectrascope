@@ -1,15 +1,5 @@
 import { VECTORSCOPE_VISUALIZE_SHADER } from "./shaders";
 
-/**
- * Renders the whole-clip vectorscope histogram to an `rgba8unorm` GPU texture.
- *
- * A small, self-contained GPU render path — deliberately not part of
- * `SpectralEngine`, which is FFT-specific. Each source's density cloud renders
- * as a single-hue cloud in that source's tint color on a transparent
- * background (premultiplied alpha), so stacked vectorscope canvases composite
- * cleanly. The resulting texture is blitted to a canvas by `BlitRenderer`,
- * exactly as the spectrogram and waveform textures are.
- */
 export class VectorscopeRenderer {
 	private readonly device: GPUDevice;
 	private readonly pipeline: GPUComputePipeline;
@@ -50,7 +40,6 @@ export class VectorscopeRenderer {
 		height: number,
 		tint: readonly [number, number, number],
 	): GPUTexture {
-		// (Re)allocate the storage buffer when the histogram size changes.
 		if (!this.histogramBuffer || this.histogramByteLength !== histogram.byteLength) {
 			this.histogramBuffer?.destroy();
 			this.histogramBuffer = this.device.createBuffer({
@@ -68,7 +57,6 @@ export class VectorscopeRenderer {
 			histogram.byteLength,
 		);
 
-		// (Re)allocate the output texture when the dimensions change.
 		if (!this.outputTexture || this.outputWidth !== width || this.outputHeight !== height) {
 			this.outputTexture?.destroy();
 			this.outputTexture = this.device.createTexture({
@@ -88,8 +76,6 @@ export class VectorscopeRenderer {
 			if (count > maxCount) maxCount = count;
 		}
 
-		// Uniform layout (8 x 4 bytes): grid_size, output_width, output_height,
-		// max_count (u32) then tint_r, tint_g, tint_b, _pad (f32).
 		const uniformData = new ArrayBuffer(32);
 		const uniformU32 = new Uint32Array(uniformData, 0, 4);
 		const uniformF32 = new Float32Array(uniformData, 16, 4);

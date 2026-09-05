@@ -7,12 +7,6 @@ void main() {
 }
 `;
 
-// Phase 1: terrain gradient locked to the viridis chrome accent.
-// Three-stop ramp void -> secondary (#440154 viridis purple) -> primary (#A3E635 neon lime):
-//   - valleys/low recede into the void background
-//   - mid-elevation reads as viridis purple
-//   - peaks pop in neon lime
-// Phase 2+ may swap this for a layer-driven gradient if HomePage gains layer awareness.
 const FRAG = `#version 300 es
 precision mediump float;
 

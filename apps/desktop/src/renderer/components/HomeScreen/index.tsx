@@ -6,16 +6,6 @@ interface Props {
 	readonly context: AppContext;
 }
 
-/**
- * The home screen — shown when no comparison tab is active. Two affordances:
- * "New Session" creates an empty comparison; "Open Session" picks audio files
- * and creates a comparison populated with one source per file.
- *
- * There is no recent-files list: a comparison is autosaved in-app state, not a
- * user-facing project document, so there is no path-addressable recent item to
- * reopen (see `design-desktop-application.md` — comparison project files are a
- * deferred future addition, not part of this migration).
- */
 export function HomeScreen({ context }: Props) {
 	return (
 		<div className="relative flex flex-1 flex-col overflow-hidden bg-void">

@@ -15,7 +15,6 @@ export interface Dimensions {
 	height: number;
 }
 
-/** Which derived channel signal feeds the spectrogram FFT. */
 export type ChannelInput = "mono" | "mid" | "side";
 
 export interface SpectralConfig {
@@ -27,15 +26,11 @@ export interface SpectralConfig {
 	device: GPUDevice;
 	signal: AbortSignal;
 	spectrogram: boolean;
-	/** Opt-in flag gating the long-term average spectrum reduction. Default false. */
 	ltas: boolean;
 	loudness: boolean;
 	truePeak: boolean;
-	/** Opt-in flag gating the stereo scan products (correlation envelope, vectorscope histogram). Default false. */
 	stereo: boolean;
-	/** Which derived channel signal feeds the spectrogram FFT. Default "mono". */
 	channelInput: ChannelInput;
-	/** Hop overlap factor — higher = more time resolution. Default 4. */
 	hopOverlap: number;
 }
 
@@ -94,12 +89,6 @@ export function computeNumBands(height: number, fftSize: number, isLinear: boole
 	return Math.min(Math.max(2 * height, 64), fftSize / 2 + 1);
 }
 
-/**
- * Conservative superset of the display columns whose frame partition intersects a batch's frame
- * window [batchBase, batchBase + batchFrames). The ±1 slack absorbs f32/f64 rounding differences
- * between this range and the visualize/fold shaders' f32 partition; folding empty intersections is
- * a no-op, so a superset is safe.
- */
 export function computeColumnRange(
 	batchBase: number,
 	batchFrames: number,
@@ -310,7 +299,6 @@ export class SpectralEngine {
 		const { foldUniformBuffer, spectrogramAccumulator, ltasAccumulator, spectrogramFoldPipeline, ltasFoldPipeline } =
 			context;
 
-		// Prepend overlap from previous chunk
 		const totalSamples = context.overlapCount + chunkLength;
 		const combined = new Float32Array(totalSamples);
 
@@ -320,7 +308,6 @@ export class SpectralEngine {
 
 		combined.set(monoSamples.subarray(0, chunkLength), context.overlapCount);
 
-		// How many hops fit in this combined buffer
 		let localOffset = 0;
 
 		while (localOffset + fftSize <= totalSamples && context.hopOffset < totalFrames) {
@@ -348,7 +335,6 @@ export class SpectralEngine {
 			const uniformData = new Uint32Array(8);
 
 			uniformData[0] = fftSize;
-			// Fold mode writes tile-local frames (chunk_offset 0); direct mode writes at the global cursor.
 			uniformData[1] = foldMode ? 0 : context.hopOffset;
 			uniformData[2] = numBands;
 			uniformData[3] = context.isLinear ? 0 : 1;
@@ -425,7 +411,6 @@ export class SpectralEngine {
 			context.hopOffset += hopsInBatch;
 		}
 
-		// Save remaining samples as overlap for next chunk
 		const consumed = localOffset;
 		const remaining = totalSamples - consumed;
 
@@ -442,8 +427,6 @@ export class SpectralEngine {
 		let spectrogramTexture: GPUTexture | null = null;
 
 		if (config.spectrogram) {
-			// Fold mode feeds the width × numBands accumulator to the visualize shader at stride 1.0
-			// (total_frames = width); direct mode feeds the full magnitude buffer at its own stride.
 			const magnitudeSource = context.foldMode ? context.spectrogramAccumulator : context.magnitudeBuffer;
 
 			if (!magnitudeSource) {

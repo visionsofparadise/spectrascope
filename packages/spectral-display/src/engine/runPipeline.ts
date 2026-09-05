@@ -33,19 +33,12 @@ export interface PipelineResult {
 	waveformPointCount: number;
 	loudnessData: LoudnessData | null;
 	spectrogramTexture: GPUTexture | null;
-	/** Mean magnitude per band across the query window; null unless `ltas` was set. */
 	ltas: Float32Array | null;
-	/** Per-point inter-channel correlation envelope; null unless `stereo` was set. */
 	correlationEnvelope: Float32Array | null;
-	/** Whole-clip (Side, Mid) density histogram; null unless `stereo` was set. */
 	vectorscopeHistogram: Uint32Array | null;
 	options: ResolvedPipelineOptions;
 }
 
-/**
- * Waveform scan density. Loudness pins 500 pts/sec (LUFS window math assumes it);
- * otherwise density is query-derived at ~2 points per output pixel column.
- */
 export function computeSamplesPerPoint(
 	windowSamples: number,
 	width: number,
@@ -125,8 +118,6 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 			scanSamples(channelBuffers, chunkFrames, scanContext);
 
 			if (spectralContext) {
-				// "mono" feeds the FFT the cross-channel mono mix; "mid"/"side"
-				// feed the derived signal scanSamples wrote into channelInputBuffer.
 				const fftInput = channelInput === "mono" ? scanContext.monoBuffer : scanContext.channelInputBuffer;
 
 				engine.submitChunk(fftInput, chunkFrames, spectralContext);

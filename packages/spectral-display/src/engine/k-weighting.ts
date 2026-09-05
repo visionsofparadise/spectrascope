@@ -38,6 +38,7 @@ export function processBiquad(sample: number, coefficients: BiquadCoefficients, 
 	return out;
 }
 
+// eslint-disable-next-line comment-rules/no-restricted-comments
 // BS.1770-4 Table 1 — pre-filter (high shelf)
 function computeHighShelfCoefficients(sampleRate: number): BiquadCoefficients {
 	const freq = 1681.974450955533;
@@ -60,6 +61,7 @@ function computeHighShelfCoefficients(sampleRate: number): BiquadCoefficients {
 	};
 }
 
+// eslint-disable-next-line comment-rules/no-restricted-comments
 // BS.1770-4 Table 2 — RLB weighting (high pass)
 function computeHighPassCoefficients(sampleRate: number): BiquadCoefficients {
 	const freq = 38.13547087602444;

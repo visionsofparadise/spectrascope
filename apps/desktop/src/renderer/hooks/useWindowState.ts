@@ -12,7 +12,6 @@ export function useWindowState(
 	mainEvents: MainEvents,
 ): void {
 	useEffect(() => {
-		// Restore saved window bounds on mount
 		if (app.windowBounds) {
 			const { x, y, width, height } = app.windowBounds;
 

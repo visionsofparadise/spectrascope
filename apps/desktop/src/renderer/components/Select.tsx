@@ -8,7 +8,6 @@ interface SelectOption {
 }
 
 interface SelectProps {
-	/** Optional caption rendered above the trigger (field variant). */
 	readonly label?: string;
 	readonly value: string;
 	readonly options: ReadonlyArray<SelectOption>;
@@ -19,18 +18,10 @@ interface SelectProps {
 	 * transport's FFT / hop / Mel controls).
 	 */
 	readonly variant?: "field" | "chip";
-	/** Whether the menu opens below (`"down"`, default) or above (`"up"`). */
 	readonly direction?: "down" | "up";
 	readonly className?: string;
 }
 
-/**
- * Select — the v1 dropdown-select. A trigger (bordered field or raised chip)
- * over a shadowed menu whose active option is drawn in `primary`. Closes on
- * select, on an outside pointerdown, and on Escape. Not a menu of actions
- * (that is `DropdownMenu`); it picks one value from a fixed option list, so it
- * carries `role="listbox"` / `role="option"` and no animation.
- */
 export function Select({
 	label,
 	value,
@@ -133,8 +124,6 @@ export function Select({
 				}}
 				className="flex items-center px-1 py-0.5 font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text"
 			>
-				{/* Chip grammar — the outer button owns the padding; the inner
-				    span carries the `chrome-raised` chip and hugs its content. */}
 				<span className="flex items-center gap-0.5 bg-chrome-raised">
 					<span>{displayLabel}</span>
 					<Icon icon="lucide:chevron-down" width={10} height={10} />

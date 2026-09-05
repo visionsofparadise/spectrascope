@@ -22,12 +22,6 @@ interface SourceRowProps {
 	readonly onActivate?: () => void;
 }
 
-/**
- * Derive the display label from a file path — sources are identified by their
- * filename, not a user-assigned name. Returns the trailing path segment;
- * falls back to the source's `name` when no path is set (e.g. a freshly added
- * source with no file yet).
- */
 function fileNameOf(source: Source): string {
 	const segment = source.audioFilePath
 		.replace(/[/\\]+$/, "")
@@ -37,24 +31,6 @@ function fileNameOf(source: Source): string {
 	return segment && segment.length > 0 ? segment : source.name;
 }
 
-/**
- * One row in the sources panel — a track-header-style block with breathable
- * spacing. Photoshop layers-panel grammar (color chip as the visual anchor)
- * meets DAW track-header grammar (eye / mute / solo / menu on the bottom line).
- *
- *   ┌─ p-3 ─────────────────────────────────────────────────────┐
- *   │  [28×28 chip]   source-a.wav                              │
- *   │       │         demo/source-a.wav  (path, dim)            │
- *   │       │         [eye] [M] [S] [⋯]                         │
- *   └───────┴───────────────────────────────────────────────────┘
- *           gap-3
- *
- * Sources are identified by filename — there is no editable name. Mute and
- * solo are icon toggles; their engaged state is a `bg-primary` chip on the
- * inner span (button grammar — the outer button owns the padding, the span
- * owns the background). The ⋯ actions menu sits at the end of the utility
- * row, after Solo.
- */
 export function SourceRow({ source, status, onChange, onRemove, active, onActivate }: SourceRowProps) {
 	const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -97,8 +73,6 @@ export function SourceRow({ source, status, onChange, onRemove, active, onActiva
 			role={onActivate ? "button" : undefined}
 			tabIndex={onActivate ? 0 : undefined}
 		>
-			{/* Color chip — 28×28 square, primary fill with a thick secondary
-			    stripe down its right edge. Click opens LayerColorPicker. */}
 			<div className="relative shrink-0">
 				<button
 					type="button"
@@ -135,11 +109,7 @@ export function SourceRow({ source, status, onChange, onRemove, active, onActiva
 				)}
 			</div>
 
-			{/* Right column — filename / path / controls. */}
 			<div className="flex min-w-0 flex-1 flex-col gap-1">
-				{/* Filename — the source's identity. Not editable. A trailing
-				    spinner marks a preparing source; an error icon + error tone
-				    marks a failed one, with the reason on the filename's `title`. */}
 				<div className="flex min-w-0 items-center gap-1.5">
 					<span
 						className={cn(
@@ -170,8 +140,6 @@ export function SourceRow({ source, status, onChange, onRemove, active, onActiva
 					)}
 				</div>
 
-				{/* File path — RTL-truncated so the filename tail survives, even
-				    dimmer than chrome-text-secondary so it never competes. */}
 				<div className="min-w-0">
 					<span
 						className="block min-w-0 overflow-hidden truncate font-body text-xs text-chrome-text-dim"
@@ -182,13 +150,6 @@ export function SourceRow({ source, status, onChange, onRemove, active, onActiva
 					</span>
 				</div>
 
-				{/* Utility row — visibility, mute, solo, actions menu. Every
-				    control uses the design system's `IconButton` grammar: a
-				    padded transparent outer button (the click target) wrapping
-				    an inner span that carries the background chip. Each toggle's
-				    ON state — visible / unmuted / soloed — lights the chip
-				    `bg-secondary`; the OFF state is the neutral `bg-chrome-raised`
-				    chip. */}
 				<div className="flex items-center gap-1 pt-1">
 					<IconButton
 						icon={source.visible ? "lucide:eye" : "lucide:eye-off"}
@@ -231,9 +192,6 @@ export function SourceRow({ source, status, onChange, onRemove, active, onActiva
 
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
-							{/* Raw button (not `IconButton`) because Radix's
-							    `asChild` needs a ref-forwarding child — but the
-							    classes mirror `IconButton`'s grammar exactly. */}
 							<button
 								type="button"
 								onClick={(event) => event.stopPropagation()}

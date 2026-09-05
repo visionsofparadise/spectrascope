@@ -1,25 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-/** A time window in milliseconds. */
 export interface TimeWindow {
 	readonly startMs: number;
 	readonly endMs: number;
 }
 
-/** The smallest window a zoom-in can reach — 10 ms of audio. */
 const MIN_WINDOW_MS = 10;
 
-/** Idle time after the last gesture tick before the viewport commits a recompute. */
 const COMMIT_DEBOUNCE_MS = 150;
 
-/** Wheel deltaY → zoom factor sensitivity (ctrl/meta + wheel). */
 const ZOOM_SENSITIVITY = 0.002;
 
-/**
- * Place a window inside an extent while preserving its span: a window that
- * overhangs an edge is shifted back in, and a window wider than the extent is
- * shrunk to the full extent. An empty extent yields the extent itself.
- */
 export function clampWindowToExtent(window: TimeWindow, extent: TimeWindow): TimeWindow {
 	const extentSpan = extent.endMs - extent.startMs;
 
@@ -44,10 +35,6 @@ export function clampWindowToExtent(window: TimeWindow, extent: TimeWindow): Tim
 	return { startMs: start, endMs: end };
 }
 
-/**
- * Shift a window along the time axis by `deltaFrac` of its own span, clamped to
- * the extent (panning past an edge stops there with the span preserved).
- */
 export function panWindow(window: TimeWindow, deltaFrac: number, extent: TimeWindow): TimeWindow {
 	const span = window.endMs - window.startMs;
 	const shift = deltaFrac * span;
@@ -55,12 +42,6 @@ export function panWindow(window: TimeWindow, deltaFrac: number, extent: TimeWin
 	return clampWindowToExtent({ startMs: window.startMs + shift, endMs: window.endMs + shift }, extent);
 }
 
-/**
- * Scale a window's span by `factor` about the cursor — the time under
- * `cursorFrac` (a `[0, 1]` position within the window) stays at `cursorFrac`.
- * The new span is floored at `minWindowMs` and capped at the extent span, then
- * the result is clamped into the extent.
- */
 export function zoomWindow(
 	window: TimeWindow,
 	factor: number,
@@ -78,11 +59,6 @@ export function zoomWindow(
 	return clampWindowToExtent({ startMs: start, endMs: start + newSpan }, extent);
 }
 
-/**
- * Reconcile an existing window with a changed extent: a window that covered the
- * whole previous extent (or is degenerate) follows to the full new extent;
- * otherwise it is clamped into the new extent.
- */
 function reconcileToExtent(current: TimeWindow, previousExtent: TimeWindow, nextExtent: TimeWindow): TimeWindow {
 	const wasFull = current.startMs <= previousExtent.startMs && current.endMs >= previousExtent.endMs;
 
@@ -93,13 +69,6 @@ function reconcileToExtent(current: TimeWindow, previousExtent: TimeWindow, next
 	return clampWindowToExtent(current, nextExtent);
 }
 
-/**
- * CSS `translateX`/`scaleX` string mapping a `rendered` window onto the `live`
- * one for a canvas-wrapping div with `transform-origin: left`: the rendered
- * window's pixels are scaled and shifted so the time under each live-window
- * position lands where it belongs. Identity when the windows match; identity
- * fallback when the live span is degenerate.
- */
 export function computeWindowTransform(rendered: TimeWindow, live: TimeWindow): string {
 	const liveSpan = live.endMs - live.startMs;
 
@@ -113,32 +82,19 @@ export function computeWindowTransform(rendered: TimeWindow, live: TimeWindow): 
 }
 
 export interface TimeViewport {
-	/** Live window start — updates immediately on every gesture tick. */
 	readonly startMs: number;
-	/** Live window end — updates immediately on every gesture tick. */
 	readonly endMs: number;
-	/** Committed window start — follows the live window after a 150 ms idle. */
 	readonly committedStartMs: number;
-	/** Committed window end — follows the live window after a 150 ms idle. */
 	readonly committedEndMs: number;
 	/**
 	 * CSS `translateX`/`scaleX` mapping the committed window onto the live one,
 	 * for a canvas-wrapping div (`transform-origin: left`). Identity when settled.
 	 */
 	readonly transform: string;
-	/** Attach `ref` to the gesture surface (a non-passive wheel listener binds here). */
 	readonly wheelHandlers: { readonly ref: React.RefObject<HTMLDivElement | null> };
-	/** Set the window directly (minimap click/drag); live updates now, commit debounces. */
 	readonly setViewport: (window: TimeWindow) => void;
 }
 
-/**
- * Transient per-view time viewport with scroll-pan / ctrl-scroll-zoom. Live
- * `{ startMs, endMs }` track the gesture; `committed*` follow after a 150 ms
- * idle and are what feed `SpectralQuery`. `transform` shows the live window by
- * CSS-transforming the committed-rendered canvas during the gesture. Neither
- * persisted nor pushed to undo history.
- */
 export function useTimeViewport(extentStartMs: number, extentEndMs: number): TimeViewport {
 	const [live, setLive] = useState<TimeWindow>({ startMs: extentStartMs, endMs: extentEndMs });
 	const [committed, setCommitted] = useState<TimeWindow>({
@@ -166,8 +122,6 @@ export function useTimeViewport(extentStartMs: number, extentEndMs: number): Tim
 		}, COMMIT_DEBOUNCE_MS);
 	}, []);
 
-	// Follow the extent when it changes (e.g. audio finishes loading): a full or
-	// degenerate window snaps to the new extent, a zoomed one clamps into it.
 	useEffect(() => {
 		const previous = previousExtentRef.current;
 
@@ -180,8 +134,6 @@ export function useTimeViewport(extentStartMs: number, extentEndMs: number): Tim
 		setCommitted((current) => reconcileToExtent(current, previous, nextExtent));
 	}, [extentStartMs, extentEndMs]);
 
-	// Non-passive wheel listener — a React `onWheel` prop is passive and cannot
-	// `preventDefault`, so the browser would page-zoom on ctrl+wheel.
 	useEffect(() => {
 		const element = wheelTargetRef.current;
 

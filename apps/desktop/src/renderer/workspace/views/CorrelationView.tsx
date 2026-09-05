@@ -14,8 +14,6 @@ import type { AudioData } from "../spectral/types";
 import type { TransportControl, TransportCursorReadout } from "../Transport";
 import type { SpectralOptions } from "spectral-display";
 
-/** Local `#RRGGBB` → `[r, g, b]` helper. Duplicates the per-view copies in the
- *  SourceRender-based views and `LoudnessView`. */
 function hexToRgb255(hex: string): [number, number, number] {
 	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
 	const expanded =
@@ -34,54 +32,28 @@ function hexToRgb255(hex: string): [number, number, number] {
 	return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 }
 
-/**
- * CorrelationView — per-source inter-channel correlation traces over time. One
- * polyline per visible source, drawn in `source.layerColor.primary`, against a
- * shared time axis. The Y axis is the fixed correlation range `+1 … -1`: `+1` =
- * mono-like (perfectly correlated), `0` = decorrelated / wide, `-1` = inverted
- * (mono-incompatible).
- *
- * The correlation envelope is a real `spectral-display` scan product — computed
- * by `useSpectralCompute` with `config.stereo: true`, surfaced on the `"ready"`
- * `ComputeResult` as `correlationEnvelope` (one value per visualization point,
- * 500 points/sec). The hook is called per-source via the `<SourceCorrelationTrace>`
- * sub-component (a hook must be called from a render function — one per source).
- *
- * The envelope is a static precomputed whole-clip curve, so this view carries
- * the normal transport (the playhead scrubs the static curve), like Loudness.
- */
 
 interface CorrelationViewProps {
 	readonly sources: ReadonlyArray<Source>;
-	/** Per-source PCM readers, keyed by `Source.id`. */
 	readonly sourceAudio: ReadonlyMap<string, AudioData>;
 	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
-/** Y axis runs the fixed correlation range, `+1` at the top, `-1` at the bottom. */
 const CORR_MAX = 1;
 const CORR_MIN = -1;
 const CORR_TICKS: ReadonlyArray<number> = [1, 0.5, 0, -0.5, -1];
 
-/** Map a correlation coefficient to a `[0, 1]` Y fraction (top = +1). */
 function corrToY(corr: number): number {
 	const clamped = Math.max(CORR_MIN, Math.min(CORR_MAX, corr));
 
 	return (CORR_MAX - clamped) / (CORR_MAX - CORR_MIN);
 }
 
-/**
- * Sub-component that runs `useSpectralCompute` for one source with the stereo
- * scan products enabled, and renders the correlation polyline(s). The
- * spectrogram / loudness / true-peak pipelines are disabled — only the stereo
- * scan products are wanted, so the hook does the minimum work.
- */
 interface SourceCorrelationTraceProps {
 	readonly source: Source;
 	readonly audioData: AudioData;
 	readonly startMs: number;
 	readonly endMs: number;
-	/** The view's live (gesture-following) window, mapped onto the held render. */
 	readonly liveStartMs: number;
 	readonly liveEndMs: number;
 	readonly onComputeState?: (sourceId: string, state: ComputeState | null) => void;
@@ -103,10 +75,6 @@ function SourceCorrelationTrace({
 				sampleCount: audioData.totalSamples,
 				channelCount: audioData.channels,
 			},
-			// Width/height are required but the correlation scan doesn't draw a
-			// canvas — keep them minimal but non-zero so the engine still runs.
-			// The query is windowed to the committed viewport so the envelope
-			// follows the zoom.
 			query: { startMs, endMs, width: 64, height: 64 },
 			readSamples: audioData.readSamples,
 			config: {
@@ -121,8 +89,6 @@ function SourceCorrelationTrace({
 
 	const computeResult = useSpectralCompute(spectralOptions);
 
-	// The result whose data is drawn: the fresh `ready` result, else the last
-	// good one held through a recompute or error. Null only before any result.
 	const renderable =
 		computeResult.status === "ready"
 			? computeResult
@@ -140,10 +106,6 @@ function SourceCorrelationTrace({
 
 	const color = source.layerColor.primary;
 
-	// Map the held render's window onto the live one so the trace follows the
-	// gesture; SVG redraws synchronously with state, so no double-buffer is
-	// needed. `transform-origin: left` matches the `computeWindowTransform`
-	// scale/translate reference (viewBox left edge under `transform-box: view-box`).
 	return (
 		<g
 			style={{
@@ -180,9 +142,6 @@ interface ChartCanvasProps {
 function ChartCanvas({ renderableSources, startMs, endMs, liveStartMs, liveEndMs, onComputeState }: ChartCanvasProps) {
 	return (
 		<div className="relative h-full w-full overflow-hidden bg-void">
-			{/* Correlation gridlines — one horizontal rule per tick, all
-			    `chrome-border-subtle` per the v1 mockup (uniform, no heavier
-			    zero reference). */}
 			{CORR_TICKS.map((corr) => {
 				const yPct = corrToY(corr) * 100;
 
@@ -194,9 +153,6 @@ function ChartCanvas({ renderableSources, startMs, endMs, liveStartMs, liveEndMs
 					/>
 				);
 			})}
-			{/* Each trace carries its own gesture transform on its `<g>` (held
-			    render's window → live window), so they swap independently as each
-			    source's recompute lands. */}
 			<svg className="absolute inset-0 h-full w-full" viewBox="0 0 1 1" preserveAspectRatio="none">
 				{renderableSources.map(({ source, audioData }) => (
 					<SourceCorrelationTrace
@@ -216,19 +172,12 @@ function ChartCanvas({ renderableSources, startMs, endMs, liveStartMs, liveEndMs
 }
 
 export function CorrelationView({ sources, sourceAudio, onTransportControlChange }: CorrelationViewProps) {
-	// Visible sources that have decoded audio, paired with their `AudioData`.
 	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
-	// Shared chrome (time ruler, minimap, duration) sizes against the first
-	// renderable source's audio; a zero-duration fallback when none.
 	const chromeAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
 
-	// Transient time viewport — the traces window their computes to the committed
-	// window, so the envelope follows the zoom.
 	const viewport = useTimeViewport(0, chromeAudio.durationMs);
 
-	// First-compute progress aggregated across the traces — a shimmer + mean-
-	// fraction bar over the chart while any source is first-computing.
 	const progress = useFirstComputeProgress();
 
 	const setViewportToFraction = useCallback(
@@ -264,9 +213,6 @@ export function CorrelationView({ sources, sourceAudio, onTransportControlChange
 		amp: "— r",
 	});
 
-	// Cursor readout — time on X, correlation on Y. No frequency dimension, so
-	// the readout publishes only `time` and `amp` (used here for the
-	// correlation coefficient); the Transport renders just those two rows.
 	const handleChartMouseMove = useCallback(
 		(ev: React.MouseEvent<HTMLDivElement>) => {
 			const rect = ev.currentTarget.getBoundingClientRect();
@@ -311,9 +257,6 @@ export function CorrelationView({ sources, sourceAudio, onTransportControlChange
 		}
 	}, [control, onTransportControlChange]);
 
-	// The overview minimap renders a single waveform; with N sources the colour
-	// choice is arbitrary, so use the first renderable source's primary (a
-	// neutral chrome pair when nothing is renderable).
 	const minimapColor = renderableSources[0]?.source.layerColor ?? {
 		primary: "#B8B8C0",
 		secondary: "#44444C",
@@ -321,13 +264,7 @@ export function CorrelationView({ sources, sourceAudio, onTransportControlChange
 
 	return (
 		<div className="flex h-full min-h-0 w-full flex-col bg-void">
-			{/* The chart group runs flush to the pane's top, left and bottom
-			    edges — the time ruler, correlation axis and overview minimap are
-			    the graph's own chrome there. Only the right edge keeps a `4`-unit
-			    inset, matching LoudnessView. */}
 			<div className="flex min-h-0 flex-1 flex-col pr-4">
-				{/* Time ruler at the top — offset right by the axis width so its
-				    ticks align with the plot's X. */}
 				<div className="flex shrink-0">
 					<div className="w-10 shrink-0 bg-void" />
 					<div className="min-w-0 flex-1">
@@ -360,9 +297,6 @@ export function CorrelationView({ sources, sourceAudio, onTransportControlChange
 						)}
 					</div>
 				</div>
-				{/* Bottom horizontal minimap — overview scroll strip, offset right
-				    by the axis width so it sits under the plot. Flush to the pane
-				    bottom so the gap to the Transport matches the other views. */}
 				<div className="flex shrink-0">
 					<div className="w-10 shrink-0 bg-void" />
 					<div className="min-w-0 flex-1">

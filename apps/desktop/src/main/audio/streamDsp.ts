@@ -34,13 +34,6 @@ export interface ResolvedStream {
 
 const BS775_SURROUND_COEF = Math.SQRT1_2;
 
-/**
- * Per-channel fold coefficients mapping `channelCount` native channels to a
- * stereo pair, mirroring the package's `deriveChannelFoldCoefficients`
- * (`packages/spectral-display/src/engine/sample-scan.ts`): mono → both channels,
- * SMPTE 5.1 → ITU-R BS.775 Lo/Ro with LFE excluded, any other count → first pair.
- * Laid out interleaved: index `ch * 2` is the L coefficient, `ch * 2 + 1` the R.
- */
 const deriveFoldCoefficients = (channelCount: number): Float32Array => {
 	const coefficients = new Float32Array(channelCount * 2);
 
@@ -48,27 +41,20 @@ const deriveFoldCoefficients = (channelCount: number): Float32Array => {
 		coefficients[0] = 1;
 		coefficients[1] = 1;
 	} else if (channelCount === 6) {
-		// SMPTE 5.1 order L R C LFE Ls Rs → BS.775 Lo/Ro; LFE (ch3) excluded.
-		coefficients[0] = 1; // L → L
-		coefficients[4] = BS775_SURROUND_COEF; // C → L
-		coefficients[8] = BS775_SURROUND_COEF; // Ls → L
-		coefficients[3] = 1; // R → R
-		coefficients[5] = BS775_SURROUND_COEF; // C → R
-		coefficients[11] = BS775_SURROUND_COEF; // Rs → R
+		coefficients[0] = 1;
+		coefficients[4] = BS775_SURROUND_COEF;
+		coefficients[8] = BS775_SURROUND_COEF;
+		coefficients[3] = 1;
+		coefficients[5] = BS775_SURROUND_COEF;
+		coefficients[11] = BS775_SURROUND_COEF;
 	} else {
-		coefficients[0] = 1; // first channel → L
-		coefficients[3] = 1; // second channel → R
+		coefficients[0] = 1;
+		coefficients[3] = 1;
 	}
 
 	return coefficients;
 };
 
-/**
- * Opens and parses every input, validating a shared sample rate (canonicalization
- * guarantees it — a mismatch is a thrown invariant, not a resampling task). The
- * caller owns the returned handles' lifecycle; on any failure this closes the
- * handles it opened so a rejected resolve never leaks descriptors.
- */
 export const resolveStream = async (
 	spec: StreamSpec,
 	openHandle: (pcmPath: string) => Promise<fs.FileHandle>,
@@ -171,14 +157,6 @@ const accumulateInput = (
 	}
 };
 
-/**
- * Renders `[frameOffset, frameOffset + frameCount)` of the resolved stream as an
- * interleaved `outputChannels` f32 buffer, zeroed then accumulated per input over
- * the overlap of the requested window with each input's placed extent
- * `[offsetFrames, offsetFrames + frameCount)`. Reads only the overlapping frames
- * (no reliance on `readFrames` zero-padding beyond the file); the sum is not
- * normalized.
- */
 export const renderRange = async (
 	resolved: ResolvedStream,
 	frameOffset: number,

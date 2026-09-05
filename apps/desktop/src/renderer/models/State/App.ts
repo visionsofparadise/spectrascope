@@ -4,7 +4,6 @@ import type { State } from ".";
 import type { ProxyStore } from "../ProxyStore/ProxyStore";
 import type { Snapshot } from "valtio/vanilla";
 
-/** Each tab is one comparison; it references its comparison by id. */
 const TabEntrySchema = z.object({
 	id: z.string(),
 	comparisonId: z.string(),
@@ -17,17 +16,11 @@ const WindowBoundsSchema = z.object({
 	height: z.number(),
 });
 
-/** A layer's user-assignable color pair — mirrors `LayerColor` from the design-system. */
 const LayerColorSchema = z.object({
 	primary: z.string(),
 	secondary: z.string(),
 });
 
-/**
- * Serializable mirror of the design-system `Source`. Carries no PCM and no
- * functions — only the persisted fields. `AudioData` is resolved at runtime
- * from `audioFilePath`.
- */
 const SourceSchema = z.object({
 	id: z.string(),
 	name: z.string(),
@@ -39,7 +32,6 @@ const SourceSchema = z.object({
 	soloed: z.boolean(),
 });
 
-/** The set of view tabs the workspace exposes — mirrors the design-system `ViewId`. */
 const ViewIdSchema = z.enum([
 	"timeline",
 	"overlay",
@@ -52,10 +44,8 @@ const ViewIdSchema = z.enum([
 	"vectorscope",
 ]);
 
-/** The channel-collapse mode passed to `spectral-display` — mirrors its `ChannelInput`. */
 const ChannelInputSchema = z.enum(["mono", "mid", "side"]);
 
-/** A time-range selection in milliseconds, or `null` when nothing is selected. */
 const SelectionSchema = z
 	.object({
 		start: z.number(),
@@ -63,11 +53,6 @@ const SelectionSchema = z
 	})
 	.nullable();
 
-/**
- * A comparison — the contents of one tab. Sources placed on a shared timeline,
- * the active view, the channel input, and transport/selection state. Fully
- * serializable; the autosaved `state.json` carries it verbatim.
- */
 const ComparisonSchema = z.object({
 	id: z.string(),
 	sources: z.array(SourceSchema).default([]),
@@ -81,9 +66,7 @@ const ComparisonSchema = z.object({
 	 * sticky thereafter and user-settable from the sidebar Rate dropdown.
 	 */
 	canonicalSampleRate: z.number().nullable().default(null),
-	/** Source id of the Difference view's A input, or `null` (defaults to the first source). */
 	differenceA: z.string().nullable().default(null),
-	/** Source id of the Difference view's B input, or `null` (defaults to the second source). */
 	differenceB: z.string().nullable().default(null),
 });
 
@@ -126,14 +109,10 @@ export async function loadAppState(main: {
 			saved = result.data;
 		}
 	} catch {
-		// no saved state
 	}
 
 	const comparisons = saved.comparisons ?? [];
 
-	// Reconcile each tab against the loaded comparisons — drop tabs whose
-	// referenced comparison no longer exists so a dangling `comparisonId` can
-	// never reach the renderer.
 	const comparisonIds = new Set(comparisons.map((comparison) => comparison.id));
 	const tabs = (saved.tabs ?? []).filter((tab) => comparisonIds.has(tab.comparisonId));
 

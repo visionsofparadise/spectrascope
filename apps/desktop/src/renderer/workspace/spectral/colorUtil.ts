@@ -1,9 +1,3 @@
-/**
- * `#RRGGBB` / `#RGB` → `[r, g, b]` (0–255 integers). Shared by the view
- * containers that pass a layer color into a `spectral-display` canvas
- * (`WaveformCanvas`'s `color`, `VectorscopeCanvas`'s `tint`, `MinimapDisplay`'s
- * `waveformColor`). Returns a neutral chrome gray when the input is malformed.
- */
 export function hexToRgb255(hex: string): [number, number, number] {
 	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
 	const expanded =

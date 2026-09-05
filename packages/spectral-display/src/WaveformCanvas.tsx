@@ -8,7 +8,6 @@ interface WaveformCanvasProps {
 	computeResult: ComputeResult;
 	ref?: React.Ref<HTMLCanvasElement>;
 	color?: [number, number, number];
-	/** Fires after a successful draw submit — the swap signal for consumers double-buffering renders. */
 	onRendered?: () => void;
 }
 

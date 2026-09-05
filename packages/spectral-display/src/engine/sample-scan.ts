@@ -8,14 +8,8 @@ import { createTruePeakState, truePeakMaxAbs, type TruePeakState } from "./true-
 import type { SpectralMetadata } from "./runPipeline";
 import type { ChannelInput } from "./SpectralEngine";
 
-/** Side length of the square whole-clip vectorscope histogram grid (Side→X, Mid→Y). */
 export const VECTORSCOPE_GRID_SIZE = 256;
 
-/**
- * Channel energy floor below which a point's correlation coefficient is
- * reported as NaN (a silence gap). Compared against the per-point ΣL² / ΣR²
- * accumulators.
- */
 const CORRELATION_SILENCE_FLOOR = 1e-12;
 
 interface ScanState {
@@ -49,7 +43,6 @@ export interface ScanContext {
 	state: ScanState;
 	monoBuffer: Float32Array;
 	kwBuffer: Float32Array;
-	/** Per-chunk folded left/right scratch buffers — reused per chunk like monoBuffer. Zero-length when no stereo work is needed. */
 	lBuffer: Float32Array;
 	rBuffer: Float32Array;
 	/**
@@ -62,9 +55,7 @@ export interface ScanContext {
 	rmsEnvelope: Float32Array;
 	peakEnvelope: Float32Array;
 	kWeightedMeanSquare: Float32Array;
-	/** Per-point inter-channel correlation coefficient r ∈ [−1, +1], or NaN for silence. Zero-length when computeStereo is false. */
 	correlationEnvelope: Float32Array;
-	/** Whole-clip 2-D (Side, Mid) density histogram, VECTORSCOPE_GRID_SIZE². Zero-length when computeStereo is false. */
 	vectorscopeHistogram: Uint32Array;
 }
 
@@ -100,12 +91,8 @@ export function createScanContext(
 		channelWeights.fill(1);
 	}
 
-	// The L/R fold runs when stereo analysis is requested OR a non-mono spectrogram
-	// input is selected (Phase 2 feeds Mid/Side from these buffers).
 	const needsLrBuffers = computeStereo || channelInput !== "mono";
 	const lrBufferSize = needsLrBuffers ? chunkSize : 0;
-	// The derived FFT input buffer only exists for non-mono inputs; the mono path
-	// feeds monoBuffer directly to the FFT.
 	const channelInputBufferSize = channelInput !== "mono" ? chunkSize : 0;
 
 	return {
@@ -161,11 +148,6 @@ export function finalizeScan(context: ScanContext): { overallPeak: number; overa
 
 const BS775_SURROUND_COEF = Math.SQRT1_2;
 
-/**
- * Derives the per-channel mix coefficients that fold an arbitrary channel
- * layout to an (L, R) stereo pair (ITU-R BS.775 Lo/Ro for 6-channel SMPTE 5.1).
- * See design-stereo-analysis.md "Channel Model".
- */
 function deriveChannelFoldCoefficients(channelCount: number): {
 	lCoef: Float32Array;
 	rCoef: Float32Array;
@@ -174,11 +156,9 @@ function deriveChannelFoldCoefficients(channelCount: number): {
 	const rCoef = new Float32Array(channelCount);
 
 	if (channelCount === 1) {
-		// Mono: L = R = the single channel.
 		lCoef[0] = 1;
 		rCoef[0] = 1;
 	} else if (channelCount === 6) {
-		// SMPTE 5.1 order L R C LFE Ls Rs → ITU-R BS.775 Lo/Ro; LFE (ch3) excluded.
 		lCoef[0] = 1;
 		lCoef[2] = BS775_SURROUND_COEF;
 		lCoef[4] = BS775_SURROUND_COEF;
@@ -186,7 +166,6 @@ function deriveChannelFoldCoefficients(channelCount: number): {
 		rCoef[2] = BS775_SURROUND_COEF;
 		rCoef[5] = BS775_SURROUND_COEF;
 	} else {
-		// 2 channels — and any other count — take the first pair as L/R; the rest ignored.
 		lCoef[0] = 1;
 		rCoef[1] = 1;
 	}
@@ -227,16 +206,11 @@ export function scanSamples(
 	const lastChannel = channelCount - 1;
 	const pointCount = Math.ceil(waveformBuffer.length / 2);
 
-	// The L/R fold runs when stereo analysis is requested OR a non-mono spectrogram
-	// input is selected (Phase 2 derives Mid/Side from these buffers).
 	const foldChannels = computeStereo || channelInput !== "mono";
 
 	monoBuffer.fill(0, 0, samplesPerChannel);
 	kwBuffer.fill(0, 0, samplesPerChannel);
 
-	// Fold the raw channel buffers to an (L, R) pair. Reads the already-in-memory
-	// chunk — no extra audio I/O. L/R come from the raw channelBuffers, NOT from
-	// monoBuffer (which holds a running cross-channel sum, not L).
 	if (foldChannels) {
 		const { lCoef, rCoef } = deriveChannelFoldCoefficients(channelCount);
 
@@ -260,11 +234,6 @@ export function scanSamples(
 		}
 	}
 
-	// Derive the spectrogram FFT input signal when a non-mono channelInput is
-	// selected. mid = (l+r)/2, side = (l-r)/2. The FFT pipeline is input-agnostic,
-	// so feeding it this buffer instead of monoBuffer needs no shader change.
-	// (For 1- and 2-channel sources `mid` equals `monoBuffer`; it is produced
-	// explicitly here so surround sources are correct too.)
 	if (channelInput !== "mono") {
 		const sideSign = channelInput === "side" ? -1 : 1;
 
@@ -273,7 +242,6 @@ export function scanSamples(
 		}
 	}
 
-	// Vectorscope histogram is whole-clip: bin every sample's (Side, Mid) pair.
 	if (computeStereo) {
 		const gridSize = VECTORSCOPE_GRID_SIZE;
 		const gridMax = gridSize - 1;
@@ -285,7 +253,6 @@ export function scanSamples(
 			const mid = (lSample + rSample) * 0.5;
 			const side = (lSample - rSample) * 0.5;
 
-			// Map Side→X, Mid→Y. Signal in [-1, +1] maps across the grid; clamp outliers.
 			let xBin = Math.floor((side + 1) * halfGrid);
 			let yBin = Math.floor((mid + 1) * halfGrid);
 
@@ -437,10 +404,6 @@ export function scanSamples(
 					kWeightedMeanSquare[pointIndex] = kWeightedPointSum * invSamples;
 
 					if (computeStereo) {
-						// Pearson correlation r = ΣLR / sqrt(ΣL²·ΣR²), clamped to [−1, +1].
-						// Below the silence floor (either channel near-silent) report NaN —
-						// the design-system trace builder breaks the polyline on non-finite
-						// samples, rendering a gap.
 						if (pointSumL2 < CORRELATION_SILENCE_FLOOR || pointSumR2 < CORRELATION_SILENCE_FLOOR) {
 							correlationEnvelope[pointIndex] = NaN;
 						} else {

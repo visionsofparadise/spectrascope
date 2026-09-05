@@ -1,22 +1,5 @@
 import type { Player } from "./Player";
 
-/**
- * PlaybackEngine — the single player for every audible view, pointed at a
- * registered `media://stream/<key>/audio.wav` playback body.
- *
- * The engine owns its own state (`playing`, `positionSec`, the loop region) and
- * emits changes through listener callbacks; the desktop host subscribes and
- * feeds the Transport (the `Player` interface). It is pointed at a stream via
- * `setSourceUrl` with a full `media://` URL — the caller (the derived-stream
- * hook) builds the URL from the registered stream key, so the engine no longer
- * constructs it.
- *
- * The audio graph is `HTMLAudioElement` → `MediaElementAudioSourceNode` →
- * `GainNode` → `destination`; the `AudioContext` runs at the browser default
- * rate and the media-element graph resamples the canonical-rate stream body
- * transparently. The `requestAnimationFrame` position loop with
- * selection-region looping is kept.
- */
 export class PlaybackEngine implements Player {
 	private readonly audio: HTMLAudioElement;
 	private readonly audioContext: AudioContext;
@@ -46,25 +29,12 @@ export class PlaybackEngine implements Player {
 		this.sourceNode.connect(this.gainNode);
 		this.gainNode.connect(this.audioContext.destination);
 
-		// `ended` covers a non-looping clip reaching its natural end (the rAF
-		// loop also catches it, but the element event is the reliable source).
 		this.audio.addEventListener("ended", this.handleEnded);
 
-		// `<audio>` reports its duration asynchronously once metadata loads.
-		// `durationchange` / `loadedmetadata` are the element's own events for
-		// that — subscribing to them is reliable regardless of how long the
-		// decode takes (vs a fixed-window poll, which gives up too early on a
-		// slow load and leaves the Transport showing `00:00.000` total).
 		this.audio.addEventListener("durationchange", this.handleDurationChange);
 		this.audio.addEventListener("loadedmetadata", this.handleDurationChange);
 	}
 
-	/**
-	 * Point the engine at a stream. A change of URL resets the `<audio>` `src`;
-	 * the same URL is a no-op so a re-render with an unchanged source does not
-	 * reload the element (which would drop the playhead). Returns whether the
-	 * source actually changed.
-	 */
 	setSourceUrl(url: string): boolean {
 		if (this.audio.src === url) return false;
 
@@ -117,12 +87,6 @@ export class PlaybackEngine implements Player {
 		const target = Math.max(0, sec);
 		const duration = this.durationSec;
 
-		// `durationSec` is `0` until `<audio>` metadata has loaded — the
-		// `|| sec` form of the old clamp degenerated to a no-op there and could
-		// publish an out-of-range timecode to the Transport. When the duration
-		// is known, clamp to it; when it is not, assign the target and emit the
-		// element's *actual* `currentTime` (the element clamps the assignment
-		// to its own loaded range itself).
 		if (duration > 0) {
 			const clamped = Math.min(duration, target);
 
@@ -161,12 +125,6 @@ export class PlaybackEngine implements Player {
 		return () => this.playingListeners.delete(listener);
 	}
 
-	/**
-	 * Subscribe to duration updates (seconds). The `<audio>` element reports its
-	 * duration asynchronously once metadata loads; this fires on every
-	 * `durationchange` / `loadedmetadata` with the current `durationSec`.
-	 * Returns an unsubscribe function.
-	 */
 	onDurationChange(listener: (durationSec: number) => void): () => void {
 		this.durationListeners.add(listener);
 
@@ -192,14 +150,12 @@ export class PlaybackEngine implements Player {
 		this.durationListeners.clear();
 	}
 
-	/** Start of the loop region (seconds) — `0` when no region or not looping. */
 	private loopStartSec(): number {
 		if (!this.looping || !this.loopRegion) return 0;
 
 		return this.loopRegion.startSec;
 	}
 
-	/** End of the loop region (seconds) — the clip duration when not looping. */
 	private loopEndSec(): number {
 		if (this.looping && this.loopRegion) return this.loopRegion.endSec;
 
@@ -210,8 +166,6 @@ export class PlaybackEngine implements Player {
 		this.stopRafLoop();
 
 		if (this.looping && this.loopRegion) {
-			// A non-region loop of the whole file is handled in the rAF tick;
-			// `ended` only fires for a clip played to its natural end.
 			this.audio.currentTime = this.loopStartSec();
 			void this.play();
 
