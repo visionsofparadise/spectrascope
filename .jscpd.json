@@ -4,6 +4,7 @@
 	"gitignore": true,
 	"absolute": true,
 	"threshold": 0,
+	"format": ["javascript", "typescript", "jsx", "tsx"],
 	"reporters": ["console"],
 	"ignore": [
 		"**/.*/**",
