@@ -1,3 +1,4 @@
+import { hexToRgb255 } from "./spectral/colorUtil";
 import type { ColormapDefinition } from "spectral-display";
 
 export interface LayerColor {
@@ -14,29 +15,16 @@ export const DEFAULT_LAYER_PALETTE: ReadonlyArray<LayerColor> = [
 
 const VOID_RGB: readonly [number, number, number] = [2, 2, 4];
 
-function hexToRgb(hex: string): [number, number, number] {
-	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
-	const expanded =
-		cleaned.length === 3
-			? cleaned
-					.split("")
-					.map((char) => `${char}${char}`)
-					.join("")
-			: cleaned;
-	const value = Number.parseInt(expanded, 16);
-
-	if (Number.isNaN(value) || expanded.length !== 6) {
-		return [0, 0, 0];
-	}
-
-	return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
-}
+export const NEUTRAL_LAYER_COLOR: LayerColor = {
+	primary: "#B8B8C0",
+	secondary: "#44444C",
+};
 
 export function buildLayerColormap(layer: LayerColor): ColormapDefinition {
 	return {
 		colors: [
 			{ position: 0, color: VOID_RGB },
-			{ position: 1, color: hexToRgb(layer.secondary) },
+			{ position: 1, color: hexToRgb255(layer.secondary, [0, 0, 0]) },
 		],
 	};
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { cn } from "../../cn";
+import { trackPointerDrag } from "./pointerDrag";
 
 interface CurtainProps {
 	readonly position: number;
@@ -47,19 +48,7 @@ export function Curtain({ position, onPositionChange, min = 0, max = 1, classNam
 			event.preventDefault();
 			event.stopPropagation();
 
-			const onMove = (moveEvent: PointerEvent) => {
-				updateFromClientX(moveEvent.clientX);
-			};
-
-			const onUp = () => {
-				window.removeEventListener("pointermove", onMove);
-				window.removeEventListener("pointerup", onUp);
-				window.removeEventListener("pointercancel", onUp);
-			};
-
-			window.addEventListener("pointermove", onMove);
-			window.addEventListener("pointerup", onUp);
-			window.addEventListener("pointercancel", onUp);
+			trackPointerDrag(updateFromClientX);
 
 			updateFromClientX(event.clientX);
 		},

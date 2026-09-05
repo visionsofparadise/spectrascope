@@ -11,7 +11,7 @@ const COMMIT_DEBOUNCE_MS = 150;
 
 const ZOOM_SENSITIVITY = 0.002;
 
-export function clampWindowToExtent(window: TimeWindow, extent: TimeWindow): TimeWindow {
+function clampWindowToExtent(window: TimeWindow, extent: TimeWindow): TimeWindow {
 	const extentSpan = extent.endMs - extent.startMs;
 
 	if (extentSpan <= 0) {

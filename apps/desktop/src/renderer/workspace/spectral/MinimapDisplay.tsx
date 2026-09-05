@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { WaveformCanvas, useSpectralCompute } from "spectral-display";
 import { ComputeProgress } from "./ComputeProgress";
+import { heldComputeResult } from "./computeResult";
+import { useContainerSize } from "./useContainerSize";
 import type { AudioData } from "./types";
 import type { SpectralOptions } from "spectral-display";
 
@@ -17,38 +19,6 @@ interface MinimapDisplayProps {
 	readonly onScrubToFraction?: (fraction: number) => void;
 }
 
-function useContainerSize(ref: React.RefObject<HTMLDivElement | null>): {
-	width: number;
-	height: number;
-} {
-	const [size, setSize] = useState({ width: 800, height: 48 });
-
-	useEffect(() => {
-		const element = ref.current;
-
-		if (!element) return;
-
-		const observer = new ResizeObserver((entries) => {
-			const entry = entries[0];
-
-			if (!entry) return;
-
-			setSize({
-				width: Math.round(entry.contentRect.width),
-				height: Math.round(entry.contentRect.height),
-			});
-		});
-
-		observer.observe(element);
-
-		return () => {
-			observer.disconnect();
-		};
-	}, [ref]);
-
-	return size;
-}
-
 export function MinimapDisplay({
 	audioData,
 	viewStartFrac,
@@ -57,7 +27,7 @@ export function MinimapDisplay({
 	onScrubToFraction,
 }: MinimapDisplayProps) {
 	const minimapRef = useRef<HTMLDivElement>(null);
-	const { width, height } = useContainerSize(minimapRef);
+	const { width, height } = useContainerSize(minimapRef, { width: 800, height: 48 });
 
 	const handlePointerDown = useCallback(
 		(event: React.PointerEvent<HTMLDivElement>) => {
@@ -115,12 +85,7 @@ export function MinimapDisplay({
 
 	const computeResult = useSpectralCompute(spectralOptions);
 
-	const renderable =
-		computeResult.status === "ready"
-			? computeResult
-			: computeResult.status === "computing" || computeResult.status === "error"
-				? computeResult.previous
-				: null;
+	const renderable = heldComputeResult(computeResult);
 
 	const vpStartPct = viewStartFrac * 100;
 	const vpWidthPct = (viewEndFrac - viewStartFrac) * 100;

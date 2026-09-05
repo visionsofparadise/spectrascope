@@ -112,7 +112,9 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 			const chunkFrames = Math.min(DEFAULT_CHUNK_SIZE, sampleCount - offset);
 
 			const channelBuffers = await Promise.all(
-				Array.from({ length: channelCount }, (_, ch) => readSamples(ch, startSample + offset, chunkFrames)),
+				Array.from({ length: channelCount }, (_, channel) =>
+					readSamples(channel, startSample + offset, chunkFrames),
+				),
 			);
 
 			scanSamples(channelBuffers, chunkFrames, scanContext);

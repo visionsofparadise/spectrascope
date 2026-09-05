@@ -2,11 +2,11 @@ export function defaultCurtainPositions(count: number): Array<number> {
 	return Array.from({ length: Math.max(0, count - 1) }, () => 1);
 }
 
-export function stripLeft(stripIndex: number, positions: ReadonlyArray<number>): number {
+function stripLeft(stripIndex: number, positions: ReadonlyArray<number>): number {
 	return stripIndex === 0 ? 0 : (positions[stripIndex - 1] ?? 0);
 }
 
-export function stripRight(stripIndex: number, positions: ReadonlyArray<number>, count: number): number {
+function stripRight(stripIndex: number, positions: ReadonlyArray<number>, count: number): number {
 	return stripIndex === count - 1 ? 1 : (positions[stripIndex] ?? 1);
 }
 

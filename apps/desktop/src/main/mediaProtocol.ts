@@ -86,22 +86,28 @@ function rawChannelStream(resolved: ResolvedStream, channel: number): ReadableSt
 	});
 }
 
+function wholeBodyResponse(body: ReadableStream<Uint8Array>, contentType: string, total: number): Response {
+	return new Response(body, {
+		headers: {
+			"Content-Type": contentType,
+			"Content-Length": String(total),
+			"Accept-Ranges": "bytes",
+		},
+	});
+}
+
+function resolveRange(rangeHeader: string, total: number): { start: number; end: number } {
+	const parsed = parseRangeHeader(rangeHeader, total);
+
+	return { start: parsed.start, end: Math.min(parsed.end, total - 1) };
+}
+
 async function serveRaw(resolved: ResolvedStream, channel: number, rangeHeader: string | null): Promise<Response> {
 	const total = resolved.totalFrames * BYTES_PER_SAMPLE;
 
-	if (!rangeHeader) {
-		return new Response(rawChannelStream(resolved, channel), {
-			headers: {
-				"Content-Type": "application/octet-stream",
-				"Content-Length": String(total),
-				"Accept-Ranges": "bytes",
-			},
-		});
-	}
+	if (!rangeHeader) return wholeBodyResponse(rawChannelStream(resolved, channel), "application/octet-stream", total);
 
-	const parsed = parseRangeHeader(rangeHeader, total);
-	const start = parsed.start;
-	const end = Math.min(parsed.end, total - 1);
+	const { start, end } = resolveRange(rangeHeader, total);
 
 	const frameStart = Math.floor(start / BYTES_PER_SAMPLE);
 	const lastFrame = Math.floor(end / BYTES_PER_SAMPLE);
@@ -159,19 +165,9 @@ async function serveWav(resolved: ResolvedStream, rangeHeader: string | null): P
 	const dataBytes = resolved.totalFrames * blockAlign;
 	const total = header.length + dataBytes;
 
-	if (!rangeHeader) {
-		return new Response(wavBodyStream(resolved, header), {
-			headers: {
-				"Content-Type": "audio/wav",
-				"Content-Length": String(total),
-				"Accept-Ranges": "bytes",
-			},
-		});
-	}
+	if (!rangeHeader) return wholeBodyResponse(wavBodyStream(resolved, header), "audio/wav", total);
 
-	const parsed = parseRangeHeader(rangeHeader, total);
-	const start = parsed.start;
-	const end = Math.min(parsed.end, total - 1);
+	const { start, end } = resolveRange(rangeHeader, total);
 	const parts: Array<Buffer> = [];
 
 	if (start < header.length) {

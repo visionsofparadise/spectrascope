@@ -1,8 +1,12 @@
-import { useEffect, useMemo } from "react";
-import { getBandFrequencies, useSpectralCompute } from "spectral-display";
+import { useMemo } from "react";
+import { getBandFrequencies } from "spectral-display";
 import { LinearDbAxis } from "../spectral/Axes";
+import { ChartSvg, HorizontalGridlines, TracePolylines, VerticalGridlines } from "../spectral/chartMarks";
 import { ComputeProgress } from "../spectral/ComputeProgress";
 import { useFirstComputeProgress, useReportComputeState } from "../spectral/firstComputeProgress";
+import { FREQUENCY_TICK_LABELS } from "../spectral/timeTicks";
+import { useTraceCompute } from "../spectral/traceCompute";
+import { useDisabledTransport } from "../spectral/viewScaffold";
 import { buildPolylineSegments } from "./chartTrace";
 import { resolveVisibleSourceAudio } from "./viewAudio";
 import type { Source } from "../source";
@@ -26,29 +30,9 @@ const FREQ_MAX_HZ = 20000;
 const DB_MIN = -90;
 const DB_MAX = 0;
 
-const FREQ_TICKS: ReadonlyArray<{ hz: number; label: string }> = [
-	{ hz: 20, label: "20" },
-	{ hz: 50, label: "50" },
-	{ hz: 100, label: "100" },
-	{ hz: 200, label: "200" },
-	{ hz: 500, label: "500" },
-	{ hz: 1000, label: "1k" },
-	{ hz: 2000, label: "2k" },
-	{ hz: 5000, label: "5k" },
-	{ hz: 10000, label: "10k" },
-	{ hz: 20000, label: "20k" },
-];
+const FREQ_TICKS = FREQUENCY_TICK_LABELS;
 
 const DB_TICKS: ReadonlyArray<number> = [0, -10, -20, -30, -40, -50, -60, -70, -80, -90];
-
-const DISABLED_CONTROL: TransportControl = {
-	disabled: true,
-	playing: false,
-	positionSec: 0,
-	durationSec: 0,
-	onPlayToggle: () => {},
-	onSeek: () => {},
-};
 
 export function magnitudeToDb(magnitude: number): number {
 	return 20 * Math.log10(Math.max(magnitude, 1e-10));
@@ -84,46 +68,21 @@ function SourceLtasTrace({
 	channelInput,
 	onComputeState,
 }: SourceLtasTraceProps) {
-	const spectralOptions = useMemo<SpectralOptions>(
+	const ltasConfig = useMemo<SpectralOptions["config"]>(
 		() => ({
-			metadata: {
-				sampleRate: audioData.sampleRate,
-				sampleCount: audioData.totalSamples,
-				channelCount: audioData.channels,
-			},
-			query: { startMs: 0, endMs: audioData.durationMs, width: 64, height: 64 },
-			readSamples: audioData.readSamples,
-			config: {
-				ltas: true,
-				spectrogram: false,
-				loudness: false,
-				truePeak: false,
-				fftSize,
-				hopOverlap,
-				frequencyScale: "log",
-				channelInput,
-			},
-		}),
-		[
-			audioData.sampleRate,
-			audioData.totalSamples,
-			audioData.channels,
-			audioData.durationMs,
-			audioData.readSamples,
+			ltas: true,
+			spectrogram: false,
+			loudness: false,
+			truePeak: false,
 			fftSize,
 			hopOverlap,
+			frequencyScale: "log",
 			channelInput,
-		],
+		}),
+		[fftSize, hopOverlap, channelInput],
 	);
 
-	const computeResult = useSpectralCompute(spectralOptions);
-
-	const renderable =
-		computeResult.status === "ready"
-			? computeResult
-			: computeResult.status === "computing" || computeResult.status === "error"
-				? computeResult.previous
-				: null;
+	const { computeResult, renderable } = useTraceCompute(audioData, 0, audioData.durationMs, ltasConfig);
 
 	const ltas = renderable ? renderable.ltas : null;
 	const sampleRate = audioData.sampleRate;
@@ -148,16 +107,7 @@ function SourceLtasTrace({
 
 	return (
 		<g>
-			{segments.map((points, index) => (
-				<polyline
-					key={index}
-					points={points}
-					fill="none"
-					stroke={color}
-					strokeWidth={1.5}
-					vectorEffect="non-scaling-stroke"
-				/>
-			))}
+			<TracePolylines segments={segments} color={color} />
 		</g>
 	);
 }
@@ -170,32 +120,15 @@ interface ChartCanvasProps {
 	readonly onComputeState: (sourceId: string, state: ComputeState | null) => void;
 }
 
+const FREQ_GRID_FRACTIONS: ReadonlyArray<number> = FREQ_TICKS.map((tick) => freqToX(tick.hz));
+const DB_GRID_FRACTIONS: ReadonlyArray<number> = DB_TICKS.map((db) => dbToY(db));
+
 function ChartCanvas({ renderableSources, fftSize, hopOverlap, channelInput, onComputeState }: ChartCanvasProps) {
 	return (
 		<div className="relative h-full w-full overflow-hidden bg-void">
-			{FREQ_TICKS.map((tick) => {
-				const xPct = freqToX(tick.hz) * 100;
-
-				return (
-					<div
-						key={`v${tick.hz}`}
-						className="pointer-events-none absolute top-0 bottom-0 w-px bg-chrome-border-subtle"
-						style={{ left: `${xPct}%` }}
-					/>
-				);
-			})}
-			{DB_TICKS.map((db) => {
-				const yPct = dbToY(db) * 100;
-
-				return (
-					<div
-						key={`h${db}`}
-						className="pointer-events-none absolute left-0 right-0 h-px bg-chrome-border-subtle"
-						style={{ top: `${yPct}%` }}
-					/>
-				);
-			})}
-			<svg className="absolute inset-0 h-full w-full" viewBox="0 0 1 1" preserveAspectRatio="none">
+			<VerticalGridlines fractions={FREQ_GRID_FRACTIONS} />
+			<HorizontalGridlines fractions={DB_GRID_FRACTIONS} />
+			<ChartSvg>
 				{renderableSources.map(({ source, audioData }) => (
 					<SourceLtasTrace
 						key={source.id}
@@ -207,7 +140,7 @@ function ChartCanvas({ renderableSources, fftSize, hopOverlap, channelInput, onC
 						onComputeState={onComputeState}
 					/>
 				))}
-			</svg>
+			</ChartSvg>
 		</div>
 	);
 }
@@ -252,11 +185,7 @@ export function FrequencyDistributionView({
 
 	const progress = useFirstComputeProgress();
 
-	useEffect(() => {
-		if (onTransportControlChange) {
-			onTransportControlChange(DISABLED_CONTROL);
-		}
-	}, [onTransportControlChange]);
+	useDisabledTransport(onTransportControlChange);
 
 	return (
 		<div className="flex h-full min-h-0 w-full flex-col bg-void">

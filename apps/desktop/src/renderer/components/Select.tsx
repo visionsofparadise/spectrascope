@@ -107,7 +107,7 @@ export function Select({
 				aria-haspopup="listbox"
 				aria-expanded={open}
 				onClick={() => {
-					setOpen((prev) => !prev);
+					setOpen((previous) => !previous);
 				}}
 				className="flex w-full items-center justify-between gap-2 border border-chrome-border bg-void px-2 py-1.5 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text hover:border-chrome-text-dim"
 			>
@@ -120,7 +120,7 @@ export function Select({
 				aria-haspopup="listbox"
 				aria-expanded={open}
 				onClick={() => {
-					setOpen((prev) => !prev);
+					setOpen((previous) => !previous);
 				}}
 				className="flex items-center px-1 py-0.5 font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text"
 			>

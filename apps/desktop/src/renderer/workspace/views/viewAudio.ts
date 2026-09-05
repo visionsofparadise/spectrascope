@@ -1,3 +1,5 @@
+import { useMemo } from "react";
+import { NEUTRAL_LAYER_COLOR } from "../layers";
 import type { Source } from "../source";
 import type { AudioData } from "../spectral/types";
 
@@ -31,4 +33,14 @@ export function resolveVisibleSourceAudio(
 	}
 
 	return resolved;
+}
+
+export function useChromeSources(sources: ReadonlyArray<Source>, sourceAudio: ReadonlyMap<string, AudioData>) {
+	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
+
+	return {
+		renderableSources,
+		chromeAudio: renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA,
+		layerColor: renderableSources[0]?.source.layerColor ?? NEUTRAL_LAYER_COLOR,
+	};
 }

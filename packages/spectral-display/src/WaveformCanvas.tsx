@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { BlitRenderer } from "./engine/blit";
 import { WAVEFORM_VISUALIZE_SHADER } from "./engine/shaders";
 import { useCanvasRef } from "./useCanvasRef";
@@ -34,6 +34,19 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 	const lastComputeResultRef = useRef<ComputeResult | null>(null);
 	const lastDimensionsRef = useRef<{ width: number; height: number } | null>(null);
 
+	const releaseGpuResources = useCallback(() => {
+		blitReference.current?.destroy();
+		blitReference.current = null;
+		pipelineReference.current = null;
+		waveformGpuBufferRef.current?.destroy();
+		waveformGpuBufferRef.current = null;
+		outputTextureRef.current?.destroy();
+		outputTextureRef.current = null;
+		uniformBufferRef.current?.destroy();
+		uniformBufferRef.current = null;
+		bindGroupRef.current = null;
+	}, []);
+
 	useEffect(() => {
 		const canvas = internalCanvasReference.current;
 
@@ -51,16 +64,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 		const { waveformBuffer, waveformPointCount } = computeResult;
 
 		if (blitReference.current && blitDeviceRef.current !== device) {
-			blitReference.current.destroy();
-			blitReference.current = null;
-			pipelineReference.current = null;
-			waveformGpuBufferRef.current?.destroy();
-			waveformGpuBufferRef.current = null;
-			outputTextureRef.current?.destroy();
-			outputTextureRef.current = null;
-			uniformBufferRef.current?.destroy();
-			uniformBufferRef.current = null;
-			bindGroupRef.current = null;
+			releaseGpuResources();
 			lastComputeResultRef.current = null;
 			lastDimensionsRef.current = null;
 		}
@@ -152,23 +156,9 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 		blitReference.current.render(outputTextureRef.current!);
 
 		onRenderedRef.current?.();
-	}, [computeResult, color[0], color[1], color[2]]);
+	}, [computeResult, color[0], color[1], color[2], releaseGpuResources]);
 
-	useEffect(
-		() => () => {
-			blitReference.current?.destroy();
-			blitReference.current = null;
-			pipelineReference.current = null;
-			waveformGpuBufferRef.current?.destroy();
-			waveformGpuBufferRef.current = null;
-			outputTextureRef.current?.destroy();
-			outputTextureRef.current = null;
-			uniformBufferRef.current?.destroy();
-			uniformBufferRef.current = null;
-			bindGroupRef.current = null;
-		},
-		[],
-	);
+	useEffect(() => releaseGpuResources, [releaseGpuResources]);
 
 	const { width, height } =
 		computeResult.status === "ready" ? computeResult.options.sampleQuery : { width: 0, height: 0 };

@@ -1,8 +1,10 @@
-import { useEffect, useMemo } from "react";
-import { useSpectralCompute, VectorscopeCanvas } from "spectral-display";
+import { useMemo } from "react";
+import { VectorscopeCanvas } from "spectral-display";
 import { hexToRgb255 } from "../spectral/colorUtil";
 import { ComputeProgress } from "../spectral/ComputeProgress";
 import { useFirstComputeProgress, useReportComputeState } from "../spectral/firstComputeProgress";
+import { useTraceCompute } from "../spectral/traceCompute";
+import { useDisabledTransport } from "../spectral/viewScaffold";
 import { resolveVisibleSourceAudio } from "./viewAudio";
 import type { Source } from "../source";
 import type { ComputeState } from "../spectral/firstComputeProgress";
@@ -10,20 +12,18 @@ import type { AudioData } from "../spectral/types";
 import type { TransportControl } from "../Transport";
 import type { SpectralOptions } from "spectral-display";
 
+const VECTORSCOPE_CONFIG: SpectralOptions["config"] = {
+	spectrogram: false,
+	loudness: false,
+	truePeak: false,
+	stereo: true,
+};
+
 interface VectorscopeViewProps {
 	readonly sources: ReadonlyArray<Source>;
 	readonly sourceAudio: ReadonlyMap<string, AudioData>;
 	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
-
-const DISABLED_CONTROL: TransportControl = {
-	disabled: true,
-	playing: false,
-	positionSec: 0,
-	durationSec: 0,
-	onPlayToggle: () => {},
-	onSeek: () => {},
-};
 
 function FullBleedAxes() {
 	return (
@@ -92,33 +92,7 @@ interface SourceCloudProps {
 }
 
 function SourceCloud({ source, audioData, onComputeState }: SourceCloudProps) {
-	const spectralOptions = useMemo<SpectralOptions>(
-		() => ({
-			metadata: {
-				sampleRate: audioData.sampleRate,
-				sampleCount: audioData.totalSamples,
-				channelCount: audioData.channels,
-			},
-			query: { startMs: 0, endMs: audioData.durationMs, width: 64, height: 64 },
-			readSamples: audioData.readSamples,
-			config: {
-				spectrogram: false,
-				loudness: false,
-				truePeak: false,
-				stereo: true,
-			},
-		}),
-		[audioData.sampleRate, audioData.totalSamples, audioData.channels, audioData.durationMs, audioData.readSamples],
-	);
-
-	const computeResult = useSpectralCompute(spectralOptions);
-
-	const renderable =
-		computeResult.status === "ready"
-			? computeResult
-			: computeResult.status === "computing" || computeResult.status === "error"
-				? computeResult.previous
-				: null;
+	const { computeResult, renderable } = useTraceCompute(audioData, 0, audioData.durationMs, VECTORSCOPE_CONFIG);
 
 	useReportComputeState(source.id, computeResult, onComputeState);
 
@@ -136,11 +110,7 @@ export function VectorscopeView({ sources, sourceAudio, onTransportControlChange
 
 	const progress = useFirstComputeProgress();
 
-	useEffect(() => {
-		if (onTransportControlChange) {
-			onTransportControlChange(DISABLED_CONTROL);
-		}
-	}, [onTransportControlChange]);
+	useDisabledTransport(onTransportControlChange);
 
 	return (
 		<div className="flex h-full min-h-0 w-full flex-col bg-void p-4">

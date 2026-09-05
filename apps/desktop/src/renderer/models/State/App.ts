@@ -70,7 +70,7 @@ const ComparisonSchema = z.object({
 	differenceB: z.string().nullable().default(null),
 });
 
-export const AppStateSchema = z.object({
+const AppStateSchema = z.object({
 	tabs: z.array(TabEntrySchema).default([]),
 	activeTabId: z.string().nullable().default(null),
 	theme: z.enum(["lava", "viridis"]).default("lava"),
@@ -78,7 +78,6 @@ export const AppStateSchema = z.object({
 	comparisons: z.array(ComparisonSchema).default([]),
 });
 
-export type TabEntry = z.infer<typeof TabEntrySchema>;
 export type WindowBounds = z.infer<typeof WindowBoundsSchema>;
 export type SourceState = z.infer<typeof SourceSchema>;
 export type Comparison = z.infer<typeof ComparisonSchema>;
@@ -108,7 +107,9 @@ export async function loadAppState(main: {
 		if (result.success) {
 			saved = result.data;
 		}
-	} catch {}
+	} catch {
+		saved = {};
+	}
 
 	const comparisons = saved.comparisons ?? [];
 

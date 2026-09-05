@@ -98,6 +98,34 @@ function SyncToggle({
 	);
 }
 
+interface LayerOpacityKnobsProps {
+	readonly settings: ViewControlSettings;
+	readonly onSettingsChange: (next: ViewControlSettings) => void;
+}
+
+function LayerOpacityKnobs({ settings, onSettingsChange }: LayerOpacityKnobsProps) {
+	return (
+		<>
+			<Divider />
+			<KnobControl
+				value={settings.waveformOpacity}
+				icon="lucide:audio-waveform"
+				onChange={(waveformOpacity) => {
+					onSettingsChange({ ...settings, waveformOpacity });
+				}}
+			/>
+			<Divider />
+			<KnobControl
+				value={settings.spectrogramOpacity}
+				icon="lucide:flame"
+				onChange={(spectrogramOpacity) => {
+					onSettingsChange({ ...settings, spectrogramOpacity });
+				}}
+			/>
+		</>
+	);
+}
+
 export function TransportViewControls({
 	activeView,
 	settings,
@@ -137,22 +165,7 @@ export function TransportViewControls({
 					/>
 				</div>
 
-				<Divider />
-				<KnobControl
-					value={settings.waveformOpacity}
-					icon="lucide:audio-waveform"
-					onChange={(waveformOpacity) => {
-						onSettingsChange({ ...settings, waveformOpacity });
-					}}
-				/>
-				<Divider />
-				<KnobControl
-					value={settings.spectrogramOpacity}
-					icon="lucide:flame"
-					onChange={(spectrogramOpacity) => {
-						onSettingsChange({ ...settings, spectrogramOpacity });
-					}}
-				/>
+				<LayerOpacityKnobs settings={settings} onSettingsChange={onSettingsChange} />
 
 				<div className="flex flex-col items-stretch gap-0.5 min-[1400px]:flex-row min-[1400px]:items-center min-[1400px]:gap-1">
 					<Select variant="chip" value="mel" options={MEL_SELECT_OPTIONS} onChange={noop} />
@@ -198,22 +211,7 @@ export function TransportViewControls({
 						onSettingsChange({ ...settings, gridOpacity });
 					}}
 				/>
-				<Divider />
-				<KnobControl
-					value={settings.waveformOpacity}
-					icon="lucide:audio-waveform"
-					onChange={(waveformOpacity) => {
-						onSettingsChange({ ...settings, waveformOpacity });
-					}}
-				/>
-				<Divider />
-				<KnobControl
-					value={settings.spectrogramOpacity}
-					icon="lucide:flame"
-					onChange={(spectrogramOpacity) => {
-						onSettingsChange({ ...settings, spectrogramOpacity });
-					}}
-				/>
+				<LayerOpacityKnobs settings={settings} onSettingsChange={onSettingsChange} />
 			</div>
 		);
 	}

@@ -35,6 +35,21 @@ function lufsToY(lufs: number, canvasHeight: number): number {
 	return canvasHeight / 2 - amplitude * (canvasHeight / 2);
 }
 
+function columnPeak(envelope: Float32Array, column: number, stride: number, pointCount: number): number {
+	const pointStart = Math.floor(column * stride);
+	const pointEnd = Math.min(Math.floor((column + 1) * stride), pointCount - 1);
+
+	let peak = 0;
+
+	for (let point = pointStart; point <= pointEnd; point++) {
+		const value = envelope[point]!;
+
+		if (value > peak) peak = value;
+	}
+
+	return peak;
+}
+
 function drawRmsEnvelope(
 	loudness: LoudnessData,
 	color: string,
@@ -54,31 +69,13 @@ function drawRmsEnvelope(
 	context.moveTo(0, centerY);
 
 	for (let px = 0; px < width; px++) {
-		const ptStart = Math.floor(px * stride);
-		const ptEnd = Math.min(Math.floor((px + 1) * stride), pointCount - 1);
-
-		let maxRms = 0;
-
-		for (let pt = ptStart; pt <= ptEnd; pt++) {
-			const rms = rmsEnvelope[pt]!;
-
-			if (rms > maxRms) maxRms = rms;
-		}
+		const maxRms = columnPeak(rmsEnvelope, px, stride, pointCount);
 
 		context.lineTo(px, centerY - maxRms * halfHeight);
 	}
 
 	for (let px = width - 1; px >= 0; px--) {
-		const ptStart = Math.floor(px * stride);
-		const ptEnd = Math.min(Math.floor((px + 1) * stride), pointCount - 1);
-
-		let maxRms = 0;
-
-		for (let pt = ptStart; pt <= ptEnd; pt++) {
-			const rms = rmsEnvelope[pt]!;
-
-			if (rms > maxRms) maxRms = rms;
-		}
+		const maxRms = columnPeak(rmsEnvelope, px, stride, pointCount);
 
 		context.lineTo(px, centerY + maxRms * halfHeight);
 	}
@@ -115,6 +112,17 @@ function drawLufsLine(
 	context.stroke();
 }
 
+function drawDashedRule(py: number, width: number, color: string, context: CanvasRenderingContext2D): void {
+	context.beginPath();
+	context.setLineDash([6, 4]);
+	context.moveTo(0, py);
+	context.lineTo(width, py);
+	context.strokeStyle = color;
+	context.lineWidth = 1.5;
+	context.stroke();
+	context.setLineDash([]);
+}
+
 function drawAmplitudeLine(
 	amplitude: number,
 	color: string,
@@ -127,14 +135,7 @@ function drawAmplitudeLine(
 
 	const py = height / 2 - amplitude * (height / 2);
 
-	context.beginPath();
-	context.setLineDash([6, 4]);
-	context.moveTo(0, py);
-	context.lineTo(width, py);
-	context.strokeStyle = color;
-	context.lineWidth = 1.5;
-	context.stroke();
-	context.setLineDash([]);
+	drawDashedRule(py, width, color, context);
 }
 
 function drawIntegratedLine(
@@ -149,14 +150,7 @@ function drawIntegratedLine(
 
 	const py = lufsToY(integratedLufs, height);
 
-	context.beginPath();
-	context.setLineDash([6, 4]);
-	context.moveTo(0, py);
-	context.lineTo(width, py);
-	context.strokeStyle = color;
-	context.lineWidth = 1.5;
-	context.stroke();
-	context.setLineDash([]);
+	drawDashedRule(py, width, color, context);
 }
 
 export const LoudnessCanvas: React.FC<LoudnessCanvasProps> = ({

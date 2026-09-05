@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AUDIO_FILE_EXTENSIONS, createComparison, createTabId } from "../comparison/createComparison";
+import { createComparison, createTabId } from "../comparison/createComparison";
+import { pickAudioFiles } from "../comparison/pickAudioFiles";
 import { useAutosave } from "../hooks/useAutosave";
 import { useWindowState } from "../hooks/useWindowState";
 import { main } from "../models/Main";
@@ -56,14 +57,9 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 	);
 
 	const openComparison = useCallback(async (): Promise<void> => {
-		const filePaths = await main.showOpenDialog({
-			filters: [{ name: "Audio", extensions: [...AUDIO_FILE_EXTENSIONS] }],
-			properties: ["openFile", "multiSelections"],
-		});
+		const filePaths = await pickAudioFiles();
 
-		if (!filePaths || filePaths.length === 0) return;
-
-		openComparisonTab(createComparison(filePaths));
+		if (filePaths) openComparisonTab(createComparison(filePaths));
 	}, [openComparisonTab]);
 
 	const newComparison = useCallback((): Promise<void> => {

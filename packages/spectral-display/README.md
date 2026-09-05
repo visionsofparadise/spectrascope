@@ -17,7 +17,7 @@ WebGPU-accelerated audio visualization for React. Renders spectrograms, waveform
 
 ## Install
 
-```
+```sh
 npm install spectral-display
 ```
 

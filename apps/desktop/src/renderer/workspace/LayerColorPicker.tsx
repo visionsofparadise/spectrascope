@@ -1,5 +1,5 @@
 import { Icon } from "@iconify/react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { cn } from "../cn";
 import { DEFAULT_LAYER_PALETTE } from "./layers";
 import type { LayerColor } from "./layers";
@@ -51,6 +51,8 @@ function CustomSwatch({ active, value, onApply }: CustomSwatchProps) {
 	const [open, setOpen] = useState(false);
 	const [primary, setPrimary] = useState(value.primary);
 	const [secondary, setSecondary] = useState(value.secondary);
+	const primaryFieldId = useId();
+	const secondaryFieldId = useId();
 
 	return (
 		<div className="relative">
@@ -59,7 +61,7 @@ function CustomSwatch({ active, value, onApply }: CustomSwatchProps) {
 				onClick={() => {
 					setPrimary(value.primary);
 					setSecondary(value.secondary);
-					setOpen((prev) => !prev);
+					setOpen((previous) => !previous);
 				}}
 				aria-label="Custom layer color"
 				className={cn(
@@ -72,10 +74,14 @@ function CustomSwatch({ active, value, onApply }: CustomSwatchProps) {
 			{open && (
 				<div className="absolute left-0 top-full z-50 mt-1 flex flex-col gap-2 bg-chrome-raised p-3">
 					<div className="flex flex-col gap-1">
-						<label className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-secondary">
+						<label
+							htmlFor={primaryFieldId}
+							className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-secondary"
+						>
 							Primary
 						</label>
 						<input
+							id={primaryFieldId}
 							type="color"
 							value={primary}
 							onChange={(event) => setPrimary(event.target.value)}
@@ -83,10 +89,14 @@ function CustomSwatch({ active, value, onApply }: CustomSwatchProps) {
 						/>
 					</div>
 					<div className="flex flex-col gap-1">
-						<label className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-secondary">
+						<label
+							htmlFor={secondaryFieldId}
+							className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-secondary"
+						>
 							Secondary
 						</label>
 						<input
+							id={secondaryFieldId}
 							type="color"
 							value={secondary}
 							onChange={(event) => setSecondary(event.target.value)}

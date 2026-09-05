@@ -23,22 +23,26 @@ function fileNameOf(filePath: string): string {
 	return segment && segment.length > 0 ? segment : filePath;
 }
 
-export function createSourceFromFile(filePath: string, index: number): SourceState {
-	const source = createDefaultSource(index, {
-		name: fileNameOf(filePath),
-		audioFilePath: filePath,
-	});
-
+export function toSourceState(source: Source): SourceState {
 	return {
 		id: source.id,
 		name: source.name,
 		audioFilePath: source.audioFilePath,
-		timelineOffsetMs: source.timelineOffsetMs,
+		timelineOffsetMs: Math.max(0, source.timelineOffsetMs),
 		layerColor: { primary: source.layerColor.primary, secondary: source.layerColor.secondary },
 		visible: source.visible,
 		muted: source.muted,
 		soloed: source.soloed,
 	};
+}
+
+export function createSourceFromFile(filePath: string, index: number): SourceState {
+	return toSourceState(
+		createDefaultSource(index, {
+			name: fileNameOf(filePath),
+			audioFilePath: filePath,
+		}),
+	);
 }
 
 export function createComparison(filePaths: ReadonlyArray<string>): Comparison {

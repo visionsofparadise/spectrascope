@@ -77,8 +77,8 @@ async function benchPipeline(
 
 		let t0 = performance.now();
 
-		for (let ch = 0; ch < channels; ch++) {
-			channelBuffers.push(await readSamples(ch, offset, chunkFrames));
+		for (let channel = 0; channel < channels; channel++) {
+			channelBuffers.push(await readSamples(channel, offset, chunkFrames));
 		}
 
 		readTime += performance.now() - t0;
@@ -116,7 +116,7 @@ async function benchPipeline(
 		let sum = 0;
 
 		for (let pt = start; pt < start + blockPoints; pt++) {
-			sum += scanContext.kWeightedMeanSquare[pt]!;
+			sum += scanContext.kWeightedMeanSquare[pt] ?? 0;
 		}
 
 		blockLoudnessValues.push(meanSquareToLufs(sum / blockPoints));

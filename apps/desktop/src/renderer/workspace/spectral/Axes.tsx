@@ -1,13 +1,6 @@
-const FREQ_LABELS: ReadonlyArray<{ hz: number; label: string }> = [
-	{ hz: 100, label: "100" },
-	{ hz: 200, label: "200" },
-	{ hz: 500, label: "500" },
-	{ hz: 1000, label: "1k" },
-	{ hz: 2000, label: "2k" },
-	{ hz: 5000, label: "5k" },
-	{ hz: 10000, label: "10k" },
-	{ hz: 20000, label: "20k" },
-];
+import { FREQUENCY_TICK_LABELS, majorTickIntervalMs } from "./timeTicks";
+
+const FREQ_LABELS = FREQUENCY_TICK_LABELS.filter((tick) => tick.hz >= 100);
 
 const FREQ_MIN = 20;
 const FREQ_MAX = 22050;
@@ -128,14 +121,7 @@ function formatRulerTime(ms: number): string {
 export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
 	const spanMs = endMs - startMs;
 
-	let majorMs = 5000;
-
-	if (spanMs < 2000) majorMs = 200;
-	else if (spanMs < 5000) majorMs = 500;
-	else if (spanMs < 10000) majorMs = 1000;
-	else if (spanMs < 30000) majorMs = 2000;
-	else if (spanMs < 60000) majorMs = 5000;
-	else majorMs = 10000;
+	const majorMs = majorTickIntervalMs(spanMs);
 
 	const minorMs = majorMs <= 200 ? majorMs / 4 : majorMs / 5;
 

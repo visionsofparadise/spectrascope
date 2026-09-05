@@ -40,6 +40,7 @@ export class PlaybackEngine implements Player {
 
 		const wasPlaying = !this.audio.paused;
 
+		// eslint-disable-next-line id-denylist
 		this.audio.src = url;
 
 		if (wasPlaying) {

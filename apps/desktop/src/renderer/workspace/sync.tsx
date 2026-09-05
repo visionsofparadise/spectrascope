@@ -43,11 +43,11 @@ export function SyncProvider({ enabled, initial, children }: SyncProviderProps) 
 	const [state, setState] = useState<SyncState>(initial);
 
 	const setCursor = useCallback((next: number | null) => {
-		setState((prev) => ({ ...prev, cursor: next }));
+		setState((previous) => ({ ...previous, cursor: next }));
 	}, []);
 
 	const setSelection = useCallback((next: { start: number; end: number } | null) => {
-		setState((prev) => ({ ...prev, selection: next }));
+		setState((previous) => ({ ...previous, selection: next }));
 	}, []);
 
 	const value = useMemo<SyncContextValue>(
@@ -66,7 +66,7 @@ export function SyncProvider({ enabled, initial, children }: SyncProviderProps) 
  *   for future per-view permissioning / detach scoping. Pass any stable
  *   string ("spectrogram", "histogram", "minimap-a", …).
  */
-export function useSync(viewId: string): SyncContextValue {
+function useSync(viewId: string): SyncContextValue {
 	void viewId;
 
 	const value = useContext(SyncContext);
@@ -91,11 +91,11 @@ export function useViewSync(viewId: string, localInitial: SyncState): ViewSync {
 	const [local, setLocal] = useState<SyncState>(localInitial);
 
 	const setLocalCursor = useCallback((next: number | null) => {
-		setLocal((prev) => ({ ...prev, cursor: next }));
+		setLocal((previous) => ({ ...previous, cursor: next }));
 	}, []);
 
 	const setLocalSelection = useCallback((next: { start: number; end: number } | null) => {
-		setLocal((prev) => ({ ...prev, selection: next }));
+		setLocal((previous) => ({ ...previous, selection: next }));
 	}, []);
 
 	if (shared.enabled) {

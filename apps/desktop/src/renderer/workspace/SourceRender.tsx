@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { SpectrogramCanvas, WaveformCanvas, useSpectralCompute } from "spectral-display";
 import { buildLayerColormap } from "./layers";
+import { hexToRgb255 } from "./spectral/colorUtil";
 import { ComputeProgress } from "./spectral/ComputeProgress";
+import { useContainerSize } from "./spectral/useContainerSize";
 import { computeWindowTransform } from "./useTimeViewport";
 import type { Source } from "./source";
 import type { AudioData } from "./spectral/types";
@@ -50,56 +52,6 @@ export interface SourceRenderProps {
 	readonly onCursorMove?: (readout: SourceRenderCursorReadout) => void;
 }
 
-function useContainerSize(ref: React.RefObject<HTMLDivElement | null>): {
-	width: number;
-	height: number;
-} {
-	const [size, setSize] = useState({ width: 800, height: 400 });
-
-	useEffect(() => {
-		const element = ref.current;
-
-		if (!element) return;
-
-		const observer = new ResizeObserver((entries) => {
-			const entry = entries[0];
-
-			if (!entry) return;
-
-			setSize({
-				width: Math.round(entry.contentRect.width),
-				height: Math.round(entry.contentRect.height),
-			});
-		});
-
-		observer.observe(element);
-
-		return () => {
-			observer.disconnect();
-		};
-	}, [ref]);
-
-	return size;
-}
-
-function hexToRgb255(hex: string): [number, number, number] {
-	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
-	const expanded =
-		cleaned.length === 3
-			? cleaned
-					.split("")
-					.map((char) => `${char}${char}`)
-					.join("")
-			: cleaned;
-	const value = Number.parseInt(expanded, 16);
-
-	if (Number.isNaN(value) || expanded.length !== 6) {
-		return [255, 255, 255];
-	}
-
-	return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
-}
-
 export function SourceRender({
 	source,
 	audioData,
@@ -117,27 +69,12 @@ export function SourceRender({
 	onCursorMove,
 }: SourceRenderProps) {
 	const displayRef = useRef<HTMLDivElement>(null);
-	const { width, height } = useContainerSize(displayRef);
-
-	useEffect(() => {
-		console.log(
-			"[SR container]",
-			source.id.slice(0, 4),
-			"width",
-			width,
-			"height",
-			height,
-			"| committed",
-			Math.round(startMs),
-			Math.round(endMs),
-			width > 4000 ? "  <<< HUGE WIDTH" : "",
-		);
-	}, [width, height, startMs, endMs, source.id]);
+	const { width, height } = useContainerSize(displayRef, { width: 800, height: 400 });
 
 	const colormap = useMemo<ColormapDefinition>(() => buildLayerColormap(source.layerColor), [source.layerColor]);
 
 	const waveformColor = useMemo<[number, number, number]>(
-		() => hexToRgb255(source.layerColor.primary),
+		() => hexToRgb255(source.layerColor.primary, [255, 255, 255]),
 		[source.layerColor.primary],
 	);
 

@@ -7,7 +7,7 @@ import type { StreamInfo } from "../../main/StreamManager";
 import type { Source } from "../workspace/source";
 import type { AudioData } from "../workspace/spectral/types";
 
-export const EMPTY_DERIVED_AUDIO: AudioData = {
+const EMPTY_DERIVED_AUDIO: AudioData = {
 	sampleRate: 48000,
 	channels: 1,
 	totalSamples: 0,
@@ -39,6 +39,37 @@ export function resolveAudibleSources(sources: ReadonlyArray<Source>): ReadonlyA
 
 function specKey(role: string, inputs: ReadonlyArray<StreamInput>): string {
 	return `${role}|${inputs.map((input) => `${input.pcmPath}@${String(input.offsetMs)}:${String(input.gain)}`).join("|")}`;
+}
+
+function useRegisteredDerivedStream(
+	cacheRef: React.RefObject<Map<string, DerivedEntry>>,
+	setVersion: React.Dispatch<React.SetStateAction<number>>,
+	key: string | null,
+	inputs: ReadonlyArray<StreamInput> | null,
+): void {
+	useEffect(() => {
+		if (key === null || inputs === null) return;
+
+		const cache = cacheRef.current;
+
+		if (cache.has(key)) return;
+
+		let cancelled = false;
+
+		void main
+			.registerStream({ inputs } satisfies StreamSpec)
+			.then((info) => {
+				cache.set(key, { info, audioData: createStreamAudioData(info) });
+			})
+			.catch(() => undefined)
+			.finally(() => {
+				if (!cancelled) setVersion((current) => current + 1);
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [cacheRef, setVersion, key, inputs]);
 }
 
 export function useDerivedStreams(
@@ -116,53 +147,8 @@ export function useDerivedStreams(
 		onDefaultDifferenceRef.current(first.id, second.id);
 	}, [differenceA, differenceB, sources]);
 
-	useEffect(() => {
-		if (sumKey === null) return;
-
-		const cache = cacheRef.current;
-
-		if (cache.has(sumKey)) return;
-
-		let cancelled = false;
-
-		void main
-			.registerStream({ inputs: sumInputs } satisfies StreamSpec)
-			.then((info) => {
-				cache.set(sumKey, { info, audioData: createStreamAudioData(info) });
-			})
-			.catch(() => undefined)
-			.finally(() => {
-				if (!cancelled) setVersion((current) => current + 1);
-			});
-
-		return () => {
-			cancelled = true;
-		};
-	}, [sumKey, sumInputs]);
-
-	useEffect(() => {
-		if (diffKey === null || diffInputs === null) return;
-
-		const cache = cacheRef.current;
-
-		if (cache.has(diffKey)) return;
-
-		let cancelled = false;
-
-		void main
-			.registerStream({ inputs: diffInputs } satisfies StreamSpec)
-			.then((info) => {
-				cache.set(diffKey, { info, audioData: createStreamAudioData(info) });
-			})
-			.catch(() => undefined)
-			.finally(() => {
-				if (!cancelled) setVersion((current) => current + 1);
-			});
-
-		return () => {
-			cancelled = true;
-		};
-	}, [diffKey, diffInputs]);
+	useRegisteredDerivedStream(cacheRef, setVersion, sumKey, sumInputs);
+	useRegisteredDerivedStream(cacheRef, setVersion, diffKey, diffInputs);
 
 	return useMemo<UseDerivedStreamsResult>(() => {
 		void version;

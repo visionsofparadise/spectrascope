@@ -3,23 +3,23 @@ import { streamUrl } from "../../audio/streamAudioData";
 import { resolveAudibleSources, useDerivedStreams } from "../../audio/useDerivedStreams";
 import { usePlayer } from "../../audio/usePlayer";
 import { useSourceStreams } from "../../audio/useSourceStreams";
-import { AUDIO_FILE_EXTENSIONS, createSourceFromFile, isBareAddSource } from "../../comparison/createComparison";
-import { main } from "../../models/Main";
+import { createSourceFromFile, isBareAddSource, toSourceState } from "../../comparison/createComparison";
+import { pickAudioFiles } from "../../comparison/pickAudioFiles";
 import { useComparisonHistory } from "../../state/useComparisonHistory";
 import { AppShell } from "../../workspace/AppShell";
 import { Sidebar } from "../../workspace/Sidebar";
 import { SyncProvider } from "../../workspace/sync";
 import { Transport } from "../../workspace/Transport";
-import type { TransportControl } from "../../workspace/Transport";
-import { Workspace } from "../../workspace/Workspace";
 import { TransportViewControls } from "../../workspace/TransportViewControls";
 import { INITIAL_VIEW_CONTROL_SETTINGS } from "../../workspace/viewSettings";
-import type { ViewId } from "../../workspace/Workspace";
-import type { Source } from "../../workspace/source";
-import type { HistoryControl } from "../../state/useComparisonHistory";
+import { Workspace } from "../../workspace/Workspace";
 import type { AppContext } from "../../models/Context";
-import type { Comparison, SourceState } from "../../models/State/App";
+import type { Comparison } from "../../models/State/App";
+import type { HistoryControl } from "../../state/useComparisonHistory";
+import type { Source } from "../../workspace/source";
 import type { SyncState } from "../../workspace/sync";
+import type { TransportControl } from "../../workspace/Transport";
+import type { ViewId } from "../../workspace/Workspace";
 import type { ChannelInput } from "spectral-display";
 import type { Snapshot } from "valtio/vanilla";
 
@@ -54,19 +54,6 @@ const INITIAL_TRANSPORT_CONTROL: TransportControl = {
 	onPlayToggle: () => {},
 	onSeek: () => {},
 };
-
-function toSourceState(source: Source): SourceState {
-	return {
-		id: source.id,
-		name: source.name,
-		audioFilePath: source.audioFilePath,
-		timelineOffsetMs: Math.max(0, source.timelineOffsetMs),
-		layerColor: { primary: source.layerColor.primary, secondary: source.layerColor.secondary },
-		visible: source.visible,
-		muted: source.muted,
-		soloed: source.soloed,
-	};
-}
 
 export function ComparisonTab({ context, comparison, onHistoryControlChange }: Props) {
 	const { app, appStore } = context;
@@ -220,14 +207,9 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 	);
 
 	const addSourcesFromDialog = useCallback(async () => {
-		const filePaths = await main.showOpenDialog({
-			filters: [{ name: "Audio", extensions: [...AUDIO_FILE_EXTENSIONS] }],
-			properties: ["openFile", "multiSelections"],
-		});
+		const filePaths = await pickAudioFiles();
 
-		if (!filePaths || filePaths.length === 0) return;
-
-		appendSources(filePaths);
+		if (filePaths) appendSources(filePaths);
 	}, [appendSources]);
 
 	const handleSourceOffsetChange = useCallback(

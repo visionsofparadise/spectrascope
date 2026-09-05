@@ -35,6 +35,7 @@ export function SourceRow({ source, status, onChange, onRemove, active, onActiva
 	const [pickerOpen, setPickerOpen] = useState(false);
 
 	const rowRef = useRef<HTMLDivElement | null>(null);
+	const pickerRef = useRef<HTMLDivElement | null>(null);
 
 	useEffect(() => {
 		if (!pickerOpen) return;
@@ -69,7 +70,19 @@ export function SourceRow({ source, status, onChange, onRemove, active, onActiva
 				active === true &&
 					"before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 before:bg-data-cursor",
 			)}
-			onClick={() => onActivate?.()}
+			onClick={(event) => {
+				if (pickerRef.current?.contains(event.target as Node)) return;
+
+				onActivate?.();
+			}}
+			onKeyDown={(event) => {
+				if (!onActivate) return;
+
+				if (event.key === "Enter" || event.key === " ") {
+					event.preventDefault();
+					onActivate();
+				}
+			}}
 			role={onActivate ? "button" : undefined}
 			tabIndex={onActivate ? 0 : undefined}
 		>
@@ -78,7 +91,7 @@ export function SourceRow({ source, status, onChange, onRemove, active, onActiva
 					type="button"
 					onClick={(event) => {
 						event.stopPropagation();
-						setPickerOpen((prev) => !prev);
+						setPickerOpen((previous) => !previous);
 					}}
 					aria-label="Edit layer color"
 					aria-haspopup="dialog"
@@ -94,9 +107,10 @@ export function SourceRow({ source, status, onChange, onRemove, active, onActiva
 				</button>
 				{pickerOpen && (
 					<div
+						ref={pickerRef}
 						className="absolute left-0 top-full z-50 mt-1 bg-chrome-raised p-2"
-						onClick={(event) => event.stopPropagation()}
 						role="dialog"
+						aria-label="Layer color"
 					>
 						<LayerColorPicker
 							value={source.layerColor}

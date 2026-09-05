@@ -1,4 +1,4 @@
-export interface WindowBounds {
+interface WindowBounds {
 	readonly x: number;
 	readonly y: number;
 	readonly width: number;
@@ -14,5 +14,3 @@ export interface MainEventMap {
 	windowBoundsChanged: [windowBounds: WindowBounds];
 	"file:changed": [payload: FileChangedPayload];
 }
-
-export interface RendererEventMap {}

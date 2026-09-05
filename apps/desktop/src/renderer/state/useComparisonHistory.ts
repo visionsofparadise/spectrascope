@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toSourceState } from "../comparison/createComparison";
 import { ComparisonHistory, classifyEdit, toHistoryState } from "./comparisonHistory";
 import type { ProxyStore } from "../models/ProxyStore/ProxyStore";
 import type { AppState, Comparison } from "../models/State/App";
@@ -55,16 +56,7 @@ export function useComparisonHistory(
 
 				if (!target) return;
 
-				target.sources = state.sources.map((source) => ({
-					id: source.id,
-					name: source.name,
-					audioFilePath: source.audioFilePath,
-					timelineOffsetMs: source.timelineOffsetMs,
-					layerColor: { primary: source.layerColor.primary, secondary: source.layerColor.secondary },
-					visible: source.visible,
-					muted: source.muted,
-					soloed: source.soloed,
-				}));
+				target.sources = state.sources.map((source) => toSourceState(source));
 				target.activeView = state.activeView;
 				target.channelInput = state.channelInput;
 				target.selection =

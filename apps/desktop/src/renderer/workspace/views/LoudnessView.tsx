@@ -1,38 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSpectralCompute } from "spectral-display";
-import { LinearDbAxis, TimeRuler } from "../spectral/Axes";
-import { ComputeProgress } from "../spectral/ComputeProgress";
-import { useFirstComputeProgress, useReportComputeState } from "../spectral/firstComputeProgress";
-import { MinimapDisplay } from "../spectral/MinimapDisplay";
-import { computeWindowTransform, useTimeViewport } from "../useTimeViewport";
+import { ChartSvg, HorizontalGridlines, TracePolylines } from "../spectral/chartMarks";
+import { ChartLayout, useChartView, type ChartAxis, type ChartCanvasBaseProps } from "../spectral/chartView";
+import { useReportComputeState, type ComputeState } from "../spectral/firstComputeProgress";
+import { useTraceCompute } from "../spectral/traceCompute";
+import { computeWindowTransform } from "../useTimeViewport";
 import { METRICS } from "../viewSettings";
 import { buildPolylineSegments } from "./chartTrace";
-import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
+import { useChromeSources } from "./viewAudio";
 import type { Source } from "../source";
-import type { SourceWithAudio } from "./viewAudio";
-import type { ComputeState } from "../spectral/firstComputeProgress";
 import type { AudioData } from "../spectral/types";
-import type { TransportControl, TransportCursorReadout } from "../Transport";
+import type { TransportControl } from "../Transport";
 import type { LoudnessMetric, MetricSpec, ViewControlSettings } from "../viewSettings";
 import type { LoudnessData, SpectralOptions } from "spectral-display";
 
-function hexToRgb255(hex: string): [number, number, number] {
-	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
-	const expanded =
-		cleaned.length === 3
-			? cleaned
-					.split("")
-					.map((char) => `${char}${char}`)
-					.join("")
-			: cleaned;
-	const value = Number.parseInt(expanded, 16);
-
-	if (Number.isNaN(value) || expanded.length !== 6) {
-		return [184, 184, 192];
-	}
-
-	return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
-}
+const LOUDNESS_CONFIG: SpectralOptions["config"] = {
+	spectrogram: false,
+	loudness: true,
+	truePeak: true,
+};
 
 interface LoudnessViewProps {
 	readonly sources: ReadonlyArray<Source>;
@@ -131,32 +116,7 @@ function SourceLoudnessTrace({
 	onLoudnessData,
 	onComputeState,
 }: SourceLoudnessTraceProps) {
-	const spectralOptions = useMemo<SpectralOptions>(
-		() => ({
-			metadata: {
-				sampleRate: audioData.sampleRate,
-				sampleCount: audioData.totalSamples,
-				channelCount: audioData.channels,
-			},
-			query: { startMs, endMs, width: 64, height: 64 },
-			readSamples: audioData.readSamples,
-			config: {
-				spectrogram: false,
-				loudness: true,
-				truePeak: true,
-			},
-		}),
-		[audioData.sampleRate, audioData.totalSamples, audioData.channels, audioData.readSamples, startMs, endMs],
-	);
-
-	const computeResult = useSpectralCompute(spectralOptions);
-
-	const renderable =
-		computeResult.status === "ready"
-			? computeResult
-			: computeResult.status === "computing" || computeResult.status === "error"
-				? computeResult.previous
-				: null;
+	const { computeResult, renderable } = useTraceCompute(audioData, startMs, endMs, LOUDNESS_CONFIG);
 
 	const loudnessData = renderable ? renderable.loudnessData : null;
 
@@ -213,16 +173,7 @@ function SourceLoudnessTrace({
 
 	return (
 		<g style={transformStyle}>
-			{segments.map((points, index) => (
-				<polyline
-					key={index}
-					points={points}
-					fill="none"
-					stroke={color}
-					strokeWidth={1.5}
-					vectorEffect="non-scaling-stroke"
-				/>
-			))}
+			<TracePolylines segments={segments} color={color} />
 		</g>
 	);
 }
@@ -289,30 +240,17 @@ function ScalarLabels({ visibleSources, loudnessMap, metric }: ScalarLabelsProps
 	);
 }
 
-interface ChartCanvasProps {
-	readonly renderableSources: ReadonlyArray<SourceWithAudio>;
+interface ChartCanvasProps extends ChartCanvasBaseProps {
 	readonly metric: MetricSpec;
-	readonly startMs: number;
-	readonly endMs: number;
-	readonly liveStartMs: number;
-	readonly liveEndMs: number;
-	readonly onComputeState: (sourceId: string, state: ComputeState | null) => void;
 }
 
-function ChartCanvas({
-	renderableSources,
-	metric,
-	startMs,
-	endMs,
-	liveStartMs,
-	liveEndMs,
-	onComputeState,
-}: ChartCanvasProps) {
+function ChartCanvas({ chart, renderableSources, metric }: ChartCanvasProps) {
+	const { committedStartMs, committedEndMs, startMs: liveStartMs, endMs: liveEndMs } = chart.viewport;
 	const [loudnessMap, setLoudnessMap] = useState<Map<string, LoudnessData | null>>(() => new Map());
 
 	const handleLoudnessData = useCallback((sourceId: string, data: LoudnessData | null) => {
-		setLoudnessMap((prev) => {
-			const next = new Map(prev);
+		setLoudnessMap((previous) => {
+			const next = new Map(previous);
 
 			if (data === null) {
 				next.delete(sourceId);
@@ -328,33 +266,23 @@ function ChartCanvas({
 
 	return (
 		<div className="relative h-full w-full overflow-hidden bg-void">
-			{dbTicks.map((db) => {
-				const yPct = dbToY(db, metric.axisMin) * 100;
-
-				return (
-					<div
-						key={`h${db}`}
-						className="pointer-events-none absolute left-0 right-0 h-px bg-chrome-border-subtle"
-						style={{ top: `${yPct}%` }}
-					/>
-				);
-			})}
-			<svg className="absolute inset-0 h-full w-full" viewBox="0 0 1 1" preserveAspectRatio="none">
+			<HorizontalGridlines fractions={dbTicks.map((db) => dbToY(db, metric.axisMin))} />
+			<ChartSvg>
 				{renderableSources.map(({ source, audioData }) => (
 					<SourceLoudnessTrace
 						key={source.id}
 						source={source}
 						audioData={audioData}
-						startMs={startMs}
-						endMs={endMs}
+						startMs={committedStartMs}
+						endMs={committedEndMs}
 						liveStartMs={liveStartMs}
 						liveEndMs={liveEndMs}
 						metric={metric}
 						onLoudnessData={handleLoudnessData}
-						onComputeState={onComputeState}
+						onComputeState={chart.progress.handleComputeState}
 					/>
 				))}
-			</svg>
+			</ChartSvg>
 			{isScalarMetric(metric.id) && (
 				<ScalarLabels
 					visibleSources={renderableSources.map((entry) => entry.source)}
@@ -367,156 +295,42 @@ function ChartCanvas({
 }
 
 export function LoudnessView({ sources, sourceAudio, settings, onTransportControlChange }: LoudnessViewProps) {
-	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
-
-	const chromeAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
-
-	const viewport = useTimeViewport(0, chromeAudio.durationMs);
-
-	const progress = useFirstComputeProgress();
-
-	const setViewportToFraction = useCallback(
-		(fraction: number) => {
-			const centerMs = fraction * chromeAudio.durationMs;
-			const span = viewport.endMs - viewport.startMs;
-
-			viewport.setViewport({ startMs: centerMs - span / 2, endMs: centerMs + span / 2 });
-		},
-		[chromeAudio.durationMs, viewport],
-	);
-
-	const viewStartFrac = chromeAudio.durationMs > 0 ? viewport.startMs / chromeAudio.durationMs : 0;
-	const viewEndFrac = chromeAudio.durationMs > 0 ? viewport.endMs / chromeAudio.durationMs : 1;
+	const { renderableSources, chromeAudio, layerColor } = useChromeSources(sources, sourceAudio);
 
 	const metricSpec = useMemo(
 		() => METRICS.find((entry) => entry.id === settings.loudnessMetric) ?? DEFAULT_METRIC,
 		[settings.loudnessMetric],
 	);
 
-	const [playing, setPlaying] = useState(false);
-	const [positionSec, setPositionSec] = useState(0);
+	const axis = useMemo<ChartAxis>(
+		() => ({
+			max: DB_MAX,
+			min: metricSpec.axisMin,
+			formatValue: (value) => `${value.toFixed(1)} dB`,
+			emptyValue: "— dB",
+		}),
+		[metricSpec.axisMin],
+	);
+
 	const durationSec = chromeAudio.durationMs / 1000;
 
-	const onPlayToggle = useCallback(() => {
-		setPlaying((prev) => !prev);
-	}, []);
-
-	const onSeek = useCallback(
-		(sec: number) => {
-			setPositionSec(Math.max(0, Math.min(durationSec, sec)));
-		},
-		[durationSec],
-	);
-
-	const [cursorReadout, setCursorReadout] = useState<TransportCursorReadout>({
-		time: "00:00.000",
-		amp: "— dB",
-	});
-
-	const handleChartMouseMove = useCallback(
-		(ev: React.MouseEvent<HTMLDivElement>) => {
-			const rect = ev.currentTarget.getBoundingClientRect();
-
-			if (rect.width <= 0 || rect.height <= 0) return;
-
-			const xFrac = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
-			const yFrac = Math.max(0, Math.min(1, (ev.clientY - rect.top) / rect.height));
-
-			const windowMs = viewport.committedEndMs - viewport.committedStartMs;
-			const totalSec = (viewport.committedStartMs + xFrac * windowMs) / 1000;
-			const mins = Math.floor(totalSec / 60);
-			const secs = Math.floor(totalSec % 60);
-			const ms = Math.floor((totalSec % 1) * 1000);
-			const time = `${mins.toString().padStart(2, "0")}:${secs
-				.toString()
-				.padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
-
-			const db = DB_MAX - yFrac * (DB_MAX - metricSpec.axisMin);
-
-			setCursorReadout({ time, amp: `${db.toFixed(1)} dB` });
-		},
-		[viewport.committedStartMs, viewport.committedEndMs, metricSpec.axisMin],
-	);
-
-	const control = useMemo<TransportControl>(
+	const controlExtras = useMemo(
 		() => ({
-			disabled: false,
-			playing,
-			positionSec,
-			durationSec,
-			onPlayToggle,
-			onSeek,
-			cursorReadout,
 			selectionInSec: durationSec * 0.25,
 			selectionOutSec: durationSec * 0.45,
 			selectionInAmp: "-19.7 dB",
 			selectionOutAmp: "-24.3 dB",
 		}),
-		[playing, positionSec, durationSec, onPlayToggle, onSeek, cursorReadout],
+		[durationSec],
 	);
 
-	useEffect(() => {
-		if (onTransportControlChange) {
-			onTransportControlChange(control);
-		}
-	}, [control, onTransportControlChange]);
+	const chart = useChartView(chromeAudio, layerColor, axis, onTransportControlChange, controlExtras);
 
 	const dbTicks = metricSpec.axisMin === -60 ? DB_TICKS_60 : DB_TICKS_40;
 
-	const minimapColor = renderableSources[0]?.source.layerColor ?? {
-		primary: "#B8B8C0",
-		secondary: "#44444C",
-	};
-
 	return (
-		<div className="flex h-full min-h-0 w-full flex-col bg-void">
-			<div className="flex min-h-0 flex-1 flex-col pr-4">
-				<div className="flex shrink-0">
-					<div className="w-10 shrink-0 bg-void" />
-					<div className="min-w-0 flex-1">
-						<TimeRuler startMs={viewport.committedStartMs} endMs={viewport.committedEndMs} />
-					</div>
-				</div>
-				<div className="flex min-h-0 flex-1">
-					<LinearDbAxis ticks={dbTicks} />
-					<div
-						ref={viewport.wheelHandlers.ref}
-						className="relative min-w-0 flex-1"
-						onMouseMove={handleChartMouseMove}
-					>
-						{renderableSources.length === 0 ? (
-							<div className="flex h-full items-center justify-center bg-void">
-								<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
-							</div>
-						) : (
-							<>
-								<ChartCanvas
-									renderableSources={renderableSources}
-									metric={metricSpec}
-									startMs={viewport.committedStartMs}
-									endMs={viewport.committedEndMs}
-									liveStartMs={viewport.startMs}
-									liveEndMs={viewport.endMs}
-									onComputeState={progress.handleComputeState}
-								/>
-								{progress.firstComputing && <ComputeProgress fraction={progress.fraction} />}
-							</>
-						)}
-					</div>
-				</div>
-				<div className="flex shrink-0">
-					<div className="w-10 shrink-0 bg-void" />
-					<div className="min-w-0 flex-1">
-						<MinimapDisplay
-							audioData={chromeAudio}
-							viewStartFrac={viewStartFrac}
-							viewEndFrac={viewEndFrac}
-							waveformColor={hexToRgb255(minimapColor.primary)}
-							onScrubToFraction={setViewportToFraction}
-						/>
-					</div>
-				</div>
-			</div>
-		</div>
+		<ChartLayout chart={chart} ticks={dbTicks} isEmpty={renderableSources.length === 0}>
+			<ChartCanvas chart={chart} renderableSources={renderableSources} metric={metricSpec} />
+		</ChartLayout>
 	);
 }

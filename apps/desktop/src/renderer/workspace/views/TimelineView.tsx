@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SourceRender } from "../SourceRender";
 import { TimeRuler } from "../spectral/Axes";
+import { hexToRgb255 } from "../spectral/colorUtil";
+import { GridOverlay } from "../spectral/GridOverlay";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
+import { trackPointerDrag } from "../spectral/pointerDrag";
 import { useTimeViewport } from "../useTimeViewport";
 import { computeTimelineExtent } from "./timelineExtent";
 import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
@@ -18,64 +21,6 @@ const DEFAULT_CURSOR: SourceRenderCursorReadout = {
 	freq: "— Hz",
 	amp: "— dB",
 };
-
-function hexToRgb255(hex: string): [number, number, number] {
-	const cleaned = hex.startsWith("#") ? hex.slice(1) : hex;
-	const expanded =
-		cleaned.length === 3
-			? cleaned
-					.split("")
-					.map((char) => `${char}${char}`)
-					.join("")
-			: cleaned;
-	const value = Number.parseInt(expanded, 16);
-
-	if (Number.isNaN(value) || expanded.length !== 6) {
-		return [184, 184, 192];
-	}
-
-	return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
-}
-
-function GridOverlay({
-	startMs,
-	endMs,
-	opacity,
-}: {
-	readonly startMs: number;
-	readonly endMs: number;
-	readonly opacity: number;
-}) {
-	const spanMs = endMs - startMs;
-
-	let majorMs = 5000;
-
-	if (spanMs < 2000) majorMs = 200;
-	else if (spanMs < 5000) majorMs = 500;
-	else if (spanMs < 10000) majorMs = 1000;
-	else if (spanMs < 30000) majorMs = 2000;
-	else if (spanMs < 60000) majorMs = 5000;
-	else majorMs = 10000;
-
-	const timeTicks: Array<number> = [];
-	const first = Math.ceil(startMs / majorMs) * majorMs;
-
-	for (let tick = first; tick <= endMs; tick += majorMs) {
-		timeTicks.push((tick - startMs) / spanMs);
-	}
-
-	return (
-		<div className="pointer-events-none absolute inset-0" style={{ opacity }}>
-			{timeTicks.map((frac) => (
-				<div
-					key={`t${frac}`}
-					className="absolute top-0 bottom-0 w-px bg-chrome-text"
-					style={{ left: `${frac * 100}%` }}
-				/>
-			))}
-		</div>
-	);
-}
 
 function TimelineTrack({
 	source,
@@ -162,20 +107,14 @@ function TimelineTrack({
 				return Math.max(0, pointerMs - grabWithinClipMs);
 			};
 
-			const onMove = (moveEvent: PointerEvent) => {
-				onDragMoveRef.current(offsetFromClientX(moveEvent.clientX));
-			};
-
-			const onUp = (upEvent: PointerEvent) => {
-				onCommitRef.current(offsetFromClientX(upEvent.clientX));
-				window.removeEventListener("pointermove", onMove);
-				window.removeEventListener("pointerup", onUp);
-				window.removeEventListener("pointercancel", onUp);
-			};
-
-			window.addEventListener("pointermove", onMove);
-			window.addEventListener("pointerup", onUp);
-			window.addEventListener("pointercancel", onUp);
+			trackPointerDrag(
+				(clientX) => {
+					onDragMoveRef.current(offsetFromClientX(clientX));
+				},
+				(clientX) => {
+					onCommitRef.current(offsetFromClientX(clientX));
+				},
+			);
 		},
 		[draggable, offsetMs],
 	);
@@ -336,7 +275,7 @@ export function TimelineView({
 	void audibleSources;
 
 	const onPlayToggle = useCallback(() => {
-		setPlaying((prev) => !prev);
+		setPlaying((previous) => !previous);
 	}, []);
 
 	const onSeek = useCallback(

@@ -39,8 +39,8 @@ export function useFirstComputeProgress(): FirstComputeProgress {
 	const [states, setStates] = useState<Map<string, ComputeState>>(() => new Map());
 
 	const handleComputeState = useCallback((sourceId: string, state: ComputeState | null) => {
-		setStates((prev) => {
-			const next = new Map(prev);
+		setStates((previous) => {
+			const next = new Map(previous);
 
 			if (state === null) {
 				next.delete(sourceId);

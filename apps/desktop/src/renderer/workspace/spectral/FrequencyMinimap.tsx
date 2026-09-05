@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useMemo } from "react";
 import { SpectrogramCanvas, useSpectralCompute } from "spectral-display";
 import { buildLayerColormap } from "../layers";
 import { ComputeProgress } from "./ComputeProgress";
+import { heldComputeResult } from "./computeResult";
 import type { LayerColor } from "../layers";
 import type { AudioData } from "./types";
 import type { SpectralOptions } from "spectral-display";
@@ -63,12 +64,7 @@ export function FrequencyMinimap({ audioData, startMs, endMs, layerColor }: Freq
 
 	const computeResult = useSpectralCompute(spectralOptions);
 
-	const renderable =
-		computeResult.status === "ready"
-			? computeResult
-			: computeResult.status === "computing" || computeResult.status === "error"
-				? computeResult.previous
-				: null;
+	const renderable = heldComputeResult(computeResult);
 
 	const vpTopPct = VP_TOP_FRAC * 100;
 	const vpHeightPct = (VP_BOTTOM_FRAC - VP_TOP_FRAC) * 100;

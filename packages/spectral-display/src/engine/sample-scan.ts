@@ -73,7 +73,7 @@ export function createScanContext(
 	const biquadStates: Array<{ stage1: BiquadState; stage2: BiquadState }> = [];
 	const truePeakStates: Array<TruePeakState> = [];
 
-	for (let ch = 0; ch < channelCount; ch++) {
+	for (let channel = 0; channel < channelCount; channel++) {
 		biquadStates.push({
 			stage1: createBiquadState(),
 			stage2: createBiquadState(),
@@ -84,8 +84,8 @@ export function createScanContext(
 	const channelWeights = new Float32Array(channelCount);
 
 	if (weights) {
-		for (let ch = 0; ch < channelCount; ch++) {
-			channelWeights[ch] = weights[ch] ?? 1;
+		for (let channel = 0; channel < channelCount; channel++) {
+			channelWeights[channel] = weights[channel] ?? 1;
 		}
 	} else {
 		channelWeights.fill(1);
@@ -217,13 +217,13 @@ export function scanSamples(
 		lBuffer.fill(0, 0, samplesPerChannel);
 		rBuffer.fill(0, 0, samplesPerChannel);
 
-		for (let ch = 0; ch < channelCount; ch++) {
-			const lc = lCoef[ch]!;
-			const rc = rCoef[ch]!;
+		for (let channel = 0; channel < channelCount; channel++) {
+			const lc = lCoef[channel]!;
+			const rc = rCoef[channel]!;
 
 			if (lc === 0 && rc === 0) continue;
 
-			const channelData = channelBuffers[ch]!;
+			const channelData = channelBuffers[channel]!;
 
 			for (let si = 0; si < samplesPerChannel; si++) {
 				const sample = channelData[si]!;
@@ -284,11 +284,11 @@ export function scanSamples(
 	const s2a1 = s2Coeffs.a1;
 	const s2a2 = s2Coeffs.a2;
 
-	for (let ch = 0; ch < channelCount; ch++) {
-		const channelData = channelBuffers[ch]!;
-		const biquad = state.biquadStates[ch]!;
-		const chWeight = channelWeights[ch]!;
-		const tpState = state.truePeakStates[ch]!;
+	for (let channel = 0; channel < channelCount; channel++) {
+		const channelData = channelBuffers[channel]!;
+		const biquad = state.biquadStates[channel]!;
+		const channelWeight = channelWeights[channel]!;
+		const tpState = state.truePeakStates[channel]!;
 
 		let s1x1 = biquad.stage1.x1;
 		let s1x2 = biquad.stage1.x2;
@@ -299,7 +299,7 @@ export function scanSamples(
 		let s2y1 = biquad.stage2.y1;
 		let s2y2 = biquad.stage2.y2;
 
-		if (ch < lastChannel) {
+		if (channel < lastChannel) {
 			for (let si = 0; si < samplesPerChannel; si++) {
 				const sample = channelData[si]!;
 
@@ -320,7 +320,7 @@ export function scanSamples(
 					s2y2 = s2y1;
 					s2y1 = kw;
 
-					kwBuffer[si] = kwBuffer[si]! + chWeight * kw * kw;
+					kwBuffer[si] = kwBuffer[si]! + channelWeight * kw * kw;
 				}
 
 				if (computeTruePeak) {
@@ -357,7 +357,7 @@ export function scanSamples(
 					s2y2 = s2y1;
 					s2y1 = kw;
 
-					kWeightedPointSum += kwBuffer[si]! + chWeight * kw * kw;
+					kWeightedPointSum += kwBuffer[si]! + channelWeight * kw * kw;
 				}
 
 				if (computeTruePeak) {

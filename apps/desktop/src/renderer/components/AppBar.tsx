@@ -142,6 +142,15 @@ export function AppBar({ context, historyControl }: Props) {
 								isActive ? "bg-primary text-void" : "bg-chrome-raised text-chrome-text"
 							}`}
 							onClick={() => selectTab(tab.id)}
+							onKeyDown={(event) => {
+								if (event.key === "Enter" || event.key === " ") {
+									event.preventDefault();
+									selectTab(tab.id);
+								}
+							}}
+							role="tab"
+							aria-selected={isActive}
+							tabIndex={0}
 						>
 							{isEditing ? (
 								<input

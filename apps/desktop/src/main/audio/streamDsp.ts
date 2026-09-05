@@ -11,7 +11,7 @@ export interface StreamSpec {
 	readonly inputs: ReadonlyArray<StreamInput>;
 }
 
-export interface ResolvedInput {
+interface ResolvedInput {
 	readonly header: WavHeader;
 	readonly fileHandle: fs.FileHandle;
 	readonly offsetFrames: number;

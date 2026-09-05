@@ -8,10 +8,7 @@
 		"textlint-filter-rule-comments",
 		"textlint-rule-no-dead-link",
 		"@types/react-dom",
-		"react-dom",
-		"tailwindcss",
-		"@fontsource-variable/space-grotesk",
-		"@fontsource/dm-mono"
+		"react-dom"
 	],
 	"workspaces": {
 		".": {},
@@ -24,7 +21,7 @@
 				"src/main/index.ts",
 				"src/preload/index.ts"
 			],
-			"project": ["src/**/*.{ts,tsx}"]
+			"project": ["src/**/*.{ts,tsx,css}"]
 		},
 		"apps/spectral-display-demo": {
 			"entry": ["src/bench.ts"],
