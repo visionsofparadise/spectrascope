@@ -60,7 +60,13 @@ export class VectorscopeRenderer {
 			this.histogramByteLength = histogram.byteLength;
 		}
 
-		this.device.queue.writeBuffer(this.histogramBuffer, 0, histogram);
+		this.device.queue.writeBuffer(
+			this.histogramBuffer,
+			0,
+			histogram.buffer,
+			histogram.byteOffset,
+			histogram.byteLength,
+		);
 
 		// (Re)allocate the output texture when the dimensions change.
 		if (!this.outputTexture || this.outputWidth !== width || this.outputHeight !== height) {
