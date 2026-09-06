@@ -67,6 +67,7 @@ export function SyncProvider({ enabled, initial, children }: SyncProviderProps) 
  *   string ("spectrogram", "histogram", "minimap-a", …).
  */
 function useSync(viewId: string): SyncContextValue {
+	// eslint-disable-next-line @typescript-eslint/no-meaningless-void-operator
 	void viewId;
 
 	const value = useContext(SyncContext);

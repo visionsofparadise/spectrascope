@@ -124,6 +124,7 @@ export function useSourceStreams(
 	}, [version, canonicalSampleRate, sources]);
 
 	return useMemo<UseSourceStreamsResult>(() => {
+		// eslint-disable-next-line @typescript-eslint/no-meaningless-void-operator
 		void version;
 
 		if (sources.length === 0) return EMPTY_RESULT;

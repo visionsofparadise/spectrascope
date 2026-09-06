@@ -272,6 +272,7 @@ export function TimelineView({
 		? sources.filter((source) => source.soloed)
 		: sources.filter((source) => !source.muted && source.visible);
 
+	// eslint-disable-next-line @typescript-eslint/no-meaningless-void-operator
 	void audibleSources;
 
 	const onPlayToggle = useCallback(() => {

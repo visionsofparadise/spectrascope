@@ -151,6 +151,7 @@ export function useDerivedStreams(
 	useRegisteredDerivedStream(cacheRef, setVersion, diffKey, diffInputs);
 
 	return useMemo<UseDerivedStreamsResult>(() => {
+		// eslint-disable-next-line @typescript-eslint/no-meaningless-void-operator
 		void version;
 
 		const cache = cacheRef.current;
