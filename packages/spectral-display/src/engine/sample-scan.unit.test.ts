@@ -1,6 +1,61 @@
 import { describe, expect, it } from "vitest";
 import { createScanContext, finalizeScan, scanSamples } from "./sample-scan";
 
+describe("waveform boundaries and channel selection", () => {
+	it.each([1, 4, 5, 7])("flushes %i samples exactly once including partial buckets", (length) => {
+		const samples = new Float32Array(length);
+		samples[length - 1] = 1;
+		const context = createScanContext(
+			{ sampleRate: 48000, sampleCount: length, channelCount: 1 },
+			Math.ceil(length / 2),
+			2,
+			3,
+			false,
+			false,
+		);
+
+		for (let offset = 0; offset < length; offset += 3) {
+			const chunk = samples.subarray(offset, offset + 3);
+			scanSamples([chunk], chunk.length, context);
+		}
+
+		const summary = finalizeScan(context);
+		const pointCount = context.state.pointIndex;
+		finalizeScan(context);
+
+		expect(context.state.pointIndex).toBe(Math.ceil(length / 2));
+		expect(context.state.pointIndex).toBe(pointCount);
+		expect(context.waveformBuffer[pointCount * 2 - 1]).toBe(1);
+		expect(context.rmsEnvelope[pointCount - 1]).toBeCloseTo(length % 2 ? 1 : Math.SQRT1_2);
+		expect(context.peakEnvelope[pointCount - 1]).toBe(1);
+		expect(summary.overallPeak).toBe(1);
+		expect(summary.overallRms).toBeCloseTo(Math.sqrt(1 / length));
+	});
+
+	it.each(["mono", "mid", "side"] as const)(
+		"draws the selected %s signal while keeping mono level metrics",
+		(channelInput) => {
+			const context = createScanContext(
+				{ sampleRate: 48000, sampleCount: 3, channelCount: 2 },
+				2,
+				2,
+				3,
+				false,
+				false,
+				true,
+				channelInput,
+			);
+			scanSamples([new Float32Array([1, -1, 1]), new Float32Array([-1, 1, -1])], 3, context);
+			const summary = finalizeScan(context);
+
+			expect(Array.from(context.waveformBuffer)).toEqual(channelInput === "side" ? [-1, 1, 1, 1] : [0, 0, 0, 0]);
+			expect(summary.overallPeak).toBe(0);
+			expect(Array.from(context.rmsEnvelope)).toEqual([0, 0]);
+			expect(Array.from(context.correlationEnvelope)).toEqual([-1, -1]);
+		},
+	);
+});
+
 const POINTS_PER_SECOND = 500;
 const CHUNK_SIZE = 131072;
 

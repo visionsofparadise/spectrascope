@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { BlitRenderer } from "./engine/blit";
 import { useCanvasRef } from "./useCanvasRef";
+import { retainTexture } from "./utils/textureOwnership";
 import type { ComputeResult } from "./useSpectralCompute";
 
 interface SpectrogramCanvasProps {
@@ -26,7 +27,14 @@ export const SpectrogramCanvas: React.FC<SpectrogramCanvasProps> = ({
 	useEffect(() => {
 		const canvas = internalCanvasReference.current;
 
-		if (!canvas || computeResult.status !== "ready" || !computeResult.spectrogramTexture) {
+		if (!canvas || computeResult.status !== "ready") {
+			return;
+		}
+
+		if (!computeResult.spectrogramTexture) {
+			canvas.width = Math.round(computeResult.options.sampleQuery.width * canvasScale);
+			onRenderedRef.current?.();
+
 			return;
 		}
 
@@ -49,6 +57,12 @@ export const SpectrogramCanvas: React.FC<SpectrogramCanvasProps> = ({
 
 		onRenderedRef.current?.();
 	}, [computeResult, canvasScale]);
+
+	const texture = computeResult.status === "ready" ? computeResult.spectrogramTexture : null;
+
+	useEffect(() => {
+		if (texture) return retainTexture(texture);
+	}, [texture]);
 
 	useEffect(
 		() => () => {

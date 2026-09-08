@@ -138,6 +138,25 @@ export function createScanContext(
 
 export function finalizeScan(context: ScanContext): { overallPeak: number; overallRms: number; truePeak: number } {
 	const { state } = context;
+	const { pointIndex, samplesInCurrentPoint } = state;
+
+	if (samplesInCurrentPoint > 0 && pointIndex < context.waveformBuffer.length / 2) {
+		context.waveformBuffer[pointIndex * 2] = state.pointMin;
+		context.waveformBuffer[pointIndex * 2 + 1] = state.pointMax;
+		context.rmsEnvelope[pointIndex] = Math.sqrt(state.pointSumSq / samplesInCurrentPoint);
+		context.peakEnvelope[pointIndex] = state.pointPeak;
+		context.kWeightedMeanSquare[pointIndex] = state.kWeightedPointSum / samplesInCurrentPoint;
+
+		if (context.computeStereo) {
+			context.correlationEnvelope[pointIndex] =
+				state.pointSumL2 < CORRELATION_SILENCE_FLOOR || state.pointSumR2 < CORRELATION_SILENCE_FLOOR
+					? NaN
+					: Math.max(-1, Math.min(1, state.pointSumLR / Math.sqrt(state.pointSumL2 * state.pointSumR2)));
+		}
+
+		state.pointIndex++;
+		state.samplesInCurrentPoint = 0;
+	}
 
 	return {
 		overallPeak: state.overallPeakAbs,
@@ -339,6 +358,7 @@ export function scanSamples(
 			for (let si = 0; si < samplesPerChannel; si++) {
 				const sample = channelData[si]!;
 				const mono = (monoBuffer[si]! + sample) * invChannels;
+				const waveformSample = channelInput === "mono" ? mono : channelInputBuffer[si]!;
 
 				monoBuffer[si] = mono;
 
@@ -369,9 +389,9 @@ export function scanSamples(
 				const sq = mono * mono;
 				const abs = mono < 0 ? -mono : mono;
 
-				if (mono < pointMin) pointMin = mono;
+				if (waveformSample < pointMin) pointMin = waveformSample;
 
-				if (mono > pointMax) pointMax = mono;
+				if (waveformSample > pointMax) pointMax = waveformSample;
 
 				pointSumSq += sq;
 

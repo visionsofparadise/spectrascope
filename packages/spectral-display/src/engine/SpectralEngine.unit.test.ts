@@ -1,6 +1,74 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { lavaColormap } from "../utils/lava";
-import { computeColumnRange, computeHopSize, computeNumBands, resolveConfig } from "./SpectralEngine";
+import { computeColumnRange, computeHopSize, computeNumBands, resolveConfig, SpectralEngine } from "./SpectralEngine";
+
+function failingReadbackDevice() {
+	const buffers: Array<{ destroy: ReturnType<typeof vi.fn> }> = [];
+	const destroyTexture = vi.fn();
+	const pass = { setPipeline: vi.fn(), setBindGroup: vi.fn(), dispatchWorkgroups: vi.fn(), end: vi.fn() };
+	const createBuffer = vi.fn((descriptor: GPUBufferDescriptor) => {
+		const buffer = {
+			destroy: vi.fn(),
+			getMappedRange: () => new ArrayBuffer(descriptor.size),
+			unmap: vi.fn(),
+			mapAsync: () => Promise.reject(new Error("readback failed")),
+		};
+		buffers.push(buffer);
+		return buffer;
+	});
+	const device = {
+		limits: { maxComputeWorkgroupStorageSize: 32768 },
+		createBuffer,
+		createTexture: () => ({ createView: vi.fn(), destroy: destroyTexture }),
+		createShaderModule: () => ({ getCompilationInfo: async () => ({ messages: [] }) }),
+		createComputePipeline: () => ({ getBindGroupLayout: vi.fn() }),
+		createBindGroup: vi.fn(),
+		createCommandEncoder: () => ({ beginComputePass: () => pass, copyBufferToBuffer: vi.fn(), finish: vi.fn() }),
+		queue: { submit: vi.fn(), writeBuffer: vi.fn() },
+	} as unknown as GPUDevice;
+	return { device, buffers, destroyTexture, createBuffer };
+}
+
+describe("SpectralEngine failure cleanup", () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	function stubGpuConstants() {
+		vi.stubGlobal("GPUBufferUsage", { STORAGE: 1, COPY_DST: 2, COPY_SRC: 4, UNIFORM: 8, MAP_READ: 16 });
+		vi.stubGlobal("GPUTextureUsage", { STORAGE_BINDING: 1, TEXTURE_BINDING: 2, COPY_SRC: 4 });
+		vi.stubGlobal("GPUMapMode", { READ: 1 });
+	}
+
+	it.each([2048, 16384])(
+		"releases all intermediates and unpublished texture on %i-sample LTAS failure",
+		async (sampleCount) => {
+			stubGpuConstants();
+			const { device, buffers, destroyTexture } = failingReadbackDevice();
+			const engine = new SpectralEngine(device);
+			const config = resolveConfig({ device, signal: new AbortController().signal, fftSize: 2048, ltas: true });
+			const context = await engine.prepare(sampleCount, 48000, { width: 4, height: 16 }, config);
+
+			await expect(engine.finalize(context, config)).rejects.toThrow("readback failed");
+			expect(destroyTexture).toHaveBeenCalledTimes(1);
+			for (const buffer of buffers) expect(buffer.destroy).toHaveBeenCalledTimes(1);
+		},
+	);
+
+	it("releases partial allocations when preparation fails", async () => {
+		stubGpuConstants();
+		const { device, buffers, createBuffer } = failingReadbackDevice();
+		const allocation = createBuffer.getMockImplementation()!;
+		createBuffer.mockImplementation((descriptor) => {
+			if (buffers.length === 2) throw new Error("allocation failed");
+			return allocation(descriptor);
+		});
+		const engine = new SpectralEngine(device);
+		const config = resolveConfig({ device, signal: new AbortController().signal, fftSize: 2048 });
+
+		await expect(engine.prepare(2048, 48000, { width: 4, height: 16 }, config)).rejects.toThrow("allocation failed");
+		expect(buffers).toHaveLength(2);
+		for (const buffer of buffers) expect(buffer.destroy).toHaveBeenCalledTimes(1);
+	});
+});
 
 // f32 replica of the SPECTROGRAM_VISUALIZE_SHADER / SPECTROGRAM_FOLD_SHADER column partition.
 // stride = f32(total_frames) / f32(num_columns); frame_start = u32(f32(column) * stride);

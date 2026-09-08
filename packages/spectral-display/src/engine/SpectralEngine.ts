@@ -177,114 +177,129 @@ export class SpectralEngine {
 		const colormapData = generateColormapBuffer(resolvedColormap);
 		const pipelines = await this.getOrCreatePipelines(fftSize, frequencyScale);
 
-		let magnitudeBuffer: GPUBuffer | null = null;
-		let tileBuffer: GPUBuffer | null = null;
-		let spectrogramAccumulator: GPUBuffer | null = null;
-		let ltasAccumulator: GPUBuffer | null = null;
-		let foldUniformBuffer: GPUBuffer | null = null;
-		let spectrogramFoldPipeline: GPUComputePipeline | null = null;
-		let ltasFoldPipeline: GPUComputePipeline | null = null;
+		const allocatedBuffers: Array<GPUBuffer> = [];
+		const allocateBuffer = (descriptor: GPUBufferDescriptor) => {
+			const buffer = this.device.createBuffer(descriptor);
 
-		if (foldMode) {
-			const maxHopsPerBatch = Math.floor((MAX_INPUT_BUFFER_SAMPLES - fftSize) / hopSize) + 1;
+			allocatedBuffers.push(buffer);
 
-			tileBuffer = this.device.createBuffer({
-				size: maxHopsPerBatch * numBands * 4,
-				usage: GPUBufferUsage.STORAGE,
+			return buffer;
+		};
+
+		try {
+			let magnitudeBuffer: GPUBuffer | null = null;
+			let tileBuffer: GPUBuffer | null = null;
+			let spectrogramAccumulator: GPUBuffer | null = null;
+			let ltasAccumulator: GPUBuffer | null = null;
+			let foldUniformBuffer: GPUBuffer | null = null;
+			let spectrogramFoldPipeline: GPUComputePipeline | null = null;
+			let ltasFoldPipeline: GPUComputePipeline | null = null;
+
+			if (foldMode) {
+				const maxHopsPerBatch = Math.floor((MAX_INPUT_BUFFER_SAMPLES - fftSize) / hopSize) + 1;
+
+				tileBuffer = allocateBuffer({
+					size: maxHopsPerBatch * numBands * 4,
+					usage: GPUBufferUsage.STORAGE,
+				});
+
+				foldUniformBuffer = allocateBuffer({
+					size: 32,
+					usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+				});
+
+				if (config.spectrogram) {
+					spectrogramAccumulator = allocateBuffer({
+						size: dimensions.width * numBands * 4,
+						usage: GPUBufferUsage.STORAGE,
+					});
+					spectrogramFoldPipeline = await this.getOrCreateSpectrogramFoldPipeline();
+				}
+
+				if (config.ltas) {
+					ltasAccumulator = allocateBuffer({
+						size: numBands * 4,
+						usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+					});
+					ltasFoldPipeline = await this.getOrCreateLtasFoldPipeline();
+				}
+			} else {
+				magnitudeBuffer = allocateBuffer({
+					size: totalFrames * numBands * 4,
+					usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+				});
+			}
+
+			const bandMappingBuffer = allocateBuffer({
+				size: Math.max(16, bandMappingData.byteLength),
+				usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+				mappedAtCreation: true,
 			});
 
-			foldUniformBuffer = this.device.createBuffer({
+			new Float32Array(bandMappingBuffer.getMappedRange(0, bandMappingData.byteLength)).set(bandMappingData);
+			bandMappingBuffer.unmap();
+
+			const colormapPackedData = new Uint32Array(256);
+
+			for (let index = 0; index < 256; index++) {
+				const offset = index * 4;
+				const red = colormapData[offset] ?? 0;
+				const green = colormapData[offset + 1] ?? 0;
+				const blue = colormapData[offset + 2] ?? 0;
+				const alpha = colormapData[offset + 3] ?? 0;
+
+				colormapPackedData[index] = red | (green << 8) | (blue << 16) | (alpha << 24);
+			}
+
+			const colormapBuffer = allocateBuffer({
+				size: colormapPackedData.byteLength,
+				usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+				mappedAtCreation: true,
+			});
+
+			new Uint32Array(colormapBuffer.getMappedRange()).set(colormapPackedData);
+			colormapBuffer.unmap();
+
+			const inputBuffer = allocateBuffer({
+				size: (MAX_INPUT_BUFFER_SAMPLES + fftSize) * 4,
+				usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+			});
+
+			const uniformBuffer = allocateBuffer({
 				size: 32,
 				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 			});
 
-			if (config.spectrogram) {
-				spectrogramAccumulator = this.device.createBuffer({
-					size: dimensions.width * numBands * 4,
-					usage: GPUBufferUsage.STORAGE,
-				});
-				spectrogramFoldPipeline = await this.getOrCreateSpectrogramFoldPipeline();
-			}
+			return {
+				fftSize,
+				hopSize,
+				totalFrames,
+				overlapBuffer: new Float32Array(fftSize),
+				overlapCount: 0,
+				hopOffset: 0,
+				foldMode,
+				magnitudeBuffer,
+				tileBuffer,
+				spectrogramAccumulator,
+				ltasAccumulator,
+				foldUniformBuffer,
+				bandMappingBuffer,
+				colormapBuffer,
+				inputBuffer,
+				uniformBuffer,
+				pipelines,
+				spectrogramFoldPipeline,
+				ltasFoldPipeline,
+				numBands,
+				isLinear,
+				width: dimensions.width,
+				height: dimensions.height,
+			};
+		} catch (error: unknown) {
+			for (const buffer of allocatedBuffers) buffer.destroy();
 
-			if (config.ltas) {
-				ltasAccumulator = this.device.createBuffer({
-					size: numBands * 4,
-					usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-				});
-				ltasFoldPipeline = await this.getOrCreateLtasFoldPipeline();
-			}
-		} else {
-			magnitudeBuffer = this.device.createBuffer({
-				size: totalFrames * numBands * 4,
-				usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-			});
+			throw error;
 		}
-
-		const bandMappingBuffer = this.device.createBuffer({
-			size: Math.max(16, bandMappingData.byteLength),
-			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-			mappedAtCreation: true,
-		});
-
-		new Float32Array(bandMappingBuffer.getMappedRange(0, bandMappingData.byteLength)).set(bandMappingData);
-		bandMappingBuffer.unmap();
-
-		const colormapPackedData = new Uint32Array(256);
-
-		for (let index = 0; index < 256; index++) {
-			const offset = index * 4;
-			const red = colormapData[offset] ?? 0;
-			const green = colormapData[offset + 1] ?? 0;
-			const blue = colormapData[offset + 2] ?? 0;
-			const alpha = colormapData[offset + 3] ?? 0;
-
-			colormapPackedData[index] = red | (green << 8) | (blue << 16) | (alpha << 24);
-		}
-
-		const colormapBuffer = this.device.createBuffer({
-			size: colormapPackedData.byteLength,
-			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-			mappedAtCreation: true,
-		});
-
-		new Uint32Array(colormapBuffer.getMappedRange()).set(colormapPackedData);
-		colormapBuffer.unmap();
-
-		const inputBuffer = this.device.createBuffer({
-			size: (MAX_INPUT_BUFFER_SAMPLES + fftSize) * 4,
-			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-		});
-
-		const uniformBuffer = this.device.createBuffer({
-			size: 32,
-			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-		});
-
-		return {
-			fftSize,
-			hopSize,
-			totalFrames,
-			overlapBuffer: new Float32Array(fftSize),
-			overlapCount: 0,
-			hopOffset: 0,
-			foldMode,
-			magnitudeBuffer,
-			tileBuffer,
-			spectrogramAccumulator,
-			ltasAccumulator,
-			foldUniformBuffer,
-			bandMappingBuffer,
-			colormapBuffer,
-			inputBuffer,
-			uniformBuffer,
-			pipelines,
-			spectrogramFoldPipeline,
-			ltasFoldPipeline,
-			numBands,
-			isLinear,
-			width: dimensions.width,
-			height: dimensions.height,
-		};
 	}
 
 	submitChunk(monoSamples: Float32Array, chunkLength: number, context: SpectralProcessContext): void {
@@ -425,73 +440,79 @@ export class SpectralEngine {
 		const { width, height } = context;
 
 		let spectrogramTexture: GPUTexture | null = null;
+		let spectrogramUniformBuffer: GPUBuffer | null = null;
 
-		if (config.spectrogram) {
-			const magnitudeSource = context.foldMode ? context.spectrogramAccumulator : context.magnitudeBuffer;
+		try {
+			if (config.spectrogram) {
+				const magnitudeSource = context.foldMode ? context.spectrogramAccumulator : context.magnitudeBuffer;
 
-			if (!magnitudeSource) {
-				throw new Error("Spectral context is missing its spectrogram magnitude source");
+				if (!magnitudeSource) {
+					throw new Error("Spectral context is missing its spectrogram magnitude source");
+				}
+
+				const visualizeTotalFrames = context.foldMode ? width : context.totalFrames;
+
+				spectrogramTexture = this.device.createTexture({
+					size: { width, height },
+					format: "rgba8unorm",
+					usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
+				});
+
+				const spectrogramUniformData = new ArrayBuffer(24);
+				const spectrogramUniforms = new DataView(spectrogramUniformData);
+
+				spectrogramUniforms.setUint32(0, visualizeTotalFrames, true);
+				spectrogramUniforms.setUint32(4, context.numBands, true);
+				spectrogramUniforms.setUint32(8, width, true);
+				spectrogramUniforms.setUint32(12, height, true);
+				spectrogramUniforms.setFloat32(16, config.dbRange[0], true);
+				spectrogramUniforms.setFloat32(20, config.dbRange[1], true);
+
+				spectrogramUniformBuffer = this.device.createBuffer({
+					size: 24,
+					usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+					mappedAtCreation: true,
+				});
+
+				new Uint8Array(spectrogramUniformBuffer.getMappedRange()).set(new Uint8Array(spectrogramUniformData));
+				spectrogramUniformBuffer.unmap();
+
+				const spectrogramBindGroup = this.device.createBindGroup({
+					layout: context.pipelines.spectrogramPipeline.getBindGroupLayout(0),
+					entries: [
+						{ binding: 0, resource: { buffer: magnitudeSource } },
+						{ binding: 1, resource: { buffer: context.colormapBuffer } },
+						{ binding: 2, resource: spectrogramTexture.createView() },
+						{ binding: 3, resource: { buffer: spectrogramUniformBuffer } },
+					],
+				});
+
+				const commandEncoder = this.device.createCommandEncoder();
+				const computePass = commandEncoder.beginComputePass();
+
+				computePass.setPipeline(context.pipelines.spectrogramPipeline);
+				computePass.setBindGroup(0, spectrogramBindGroup);
+				computePass.dispatchWorkgroups(Math.ceil(width / 64), height);
+				computePass.end();
+
+				this.device.queue.submit([commandEncoder.finish()]);
 			}
 
-			const visualizeTotalFrames = context.foldMode ? width : context.totalFrames;
+			let ltas: Float32Array | null = null;
 
-			spectrogramTexture = this.device.createTexture({
-				size: { width, height },
-				format: "rgba8unorm",
-				usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC,
-			});
+			if (config.ltas) {
+				ltas = context.foldMode ? await this.readbackLtasAccumulator(context) : await this.reduceLtas(context);
+			}
 
-			const spectrogramUniformData = new ArrayBuffer(24);
-			const spectrogramUniforms = new DataView(spectrogramUniformData);
+			return { spectrogramTexture, width, height, ltas };
+		} catch (error: unknown) {
+			spectrogramTexture?.destroy();
 
-			spectrogramUniforms.setUint32(0, visualizeTotalFrames, true);
-			spectrogramUniforms.setUint32(4, context.numBands, true);
-			spectrogramUniforms.setUint32(8, width, true);
-			spectrogramUniforms.setUint32(12, height, true);
-			spectrogramUniforms.setFloat32(16, config.dbRange[0], true);
-			spectrogramUniforms.setFloat32(20, config.dbRange[1], true);
-
-			const spectrogramUniformBuffer = this.device.createBuffer({
-				size: 24,
-				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-				mappedAtCreation: true,
-			});
-
-			new Uint8Array(spectrogramUniformBuffer.getMappedRange()).set(new Uint8Array(spectrogramUniformData));
-			spectrogramUniformBuffer.unmap();
-
-			const spectrogramBindGroup = this.device.createBindGroup({
-				layout: context.pipelines.spectrogramPipeline.getBindGroupLayout(0),
-				entries: [
-					{ binding: 0, resource: { buffer: magnitudeSource } },
-					{ binding: 1, resource: { buffer: context.colormapBuffer } },
-					{ binding: 2, resource: spectrogramTexture.createView() },
-					{ binding: 3, resource: { buffer: spectrogramUniformBuffer } },
-				],
-			});
-
-			const commandEncoder = this.device.createCommandEncoder();
-			const computePass = commandEncoder.beginComputePass();
-
-			computePass.setPipeline(context.pipelines.spectrogramPipeline);
-			computePass.setBindGroup(0, spectrogramBindGroup);
-			computePass.dispatchWorkgroups(Math.ceil(width / 64), height);
-			computePass.end();
-
-			this.device.queue.submit([commandEncoder.finish()]);
-
-			spectrogramUniformBuffer.destroy();
+			throw error;
+		} finally {
+			spectrogramUniformBuffer?.destroy();
+			this.cleanupContext(context);
 		}
-
-		let ltas: Float32Array | null = null;
-
-		if (config.ltas) {
-			ltas = context.foldMode ? await this.readbackLtasAccumulator(context) : await this.reduceLtas(context);
-		}
-
-		this.cleanupContext(context);
-
-		return { spectrogramTexture, width, height, ltas };
 	}
 
 	private async readbackLtasAccumulator(context: SpectralProcessContext): Promise<Float32Array> {
@@ -506,25 +527,28 @@ export class SpectralEngine {
 			usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
 		});
 
-		const commandEncoder = this.device.createCommandEncoder();
+		try {
+			const commandEncoder = this.device.createCommandEncoder();
 
-		commandEncoder.copyBufferToBuffer(ltasAccumulator, 0, stagingBuffer, 0, numBands * 4);
+			commandEncoder.copyBufferToBuffer(ltasAccumulator, 0, stagingBuffer, 0, numBands * 4);
 
-		this.device.queue.submit([commandEncoder.finish()]);
+			this.device.queue.submit([commandEncoder.finish()]);
 
-		await stagingBuffer.mapAsync(GPUMapMode.READ);
+			await stagingBuffer.mapAsync(GPUMapMode.READ);
 
-		const sums = new Float32Array(stagingBuffer.getMappedRange());
-		const ltas = new Float32Array(numBands);
+			const sums = new Float32Array(stagingBuffer.getMappedRange());
+			const ltas = new Float32Array(numBands);
 
-		for (let band = 0; band < numBands; band++) {
-			ltas[band] = (sums[band] ?? 0) / totalFrames;
+			for (let band = 0; band < numBands; band++) {
+				ltas[band] = (sums[band] ?? 0) / totalFrames;
+			}
+
+			stagingBuffer.unmap();
+
+			return ltas;
+		} finally {
+			stagingBuffer.destroy();
 		}
-
-		stagingBuffer.unmap();
-		stagingBuffer.destroy();
-
-		return ltas;
 	}
 
 	private async reduceLtas(context: SpectralProcessContext): Promise<Float32Array> {
@@ -535,54 +559,59 @@ export class SpectralEngine {
 			throw new Error("Direct-mode context is missing its magnitude buffer");
 		}
 
-		const outputBuffer = this.device.createBuffer({
-			size: numBands * 4,
-			usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-		});
+		let outputBuffer: GPUBuffer | null = null;
+		let stagingBuffer: GPUBuffer | null = null;
+		let uniformBuffer: GPUBuffer | null = null;
 
-		const stagingBuffer = this.device.createBuffer({
-			size: numBands * 4,
-			usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-		});
+		try {
+			outputBuffer = this.device.createBuffer({
+				size: numBands * 4,
+				usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+			});
+			stagingBuffer = this.device.createBuffer({
+				size: numBands * 4,
+				usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+			});
+			uniformBuffer = this.device.createBuffer({
+				size: 16,
+				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+			});
 
-		const uniformBuffer = this.device.createBuffer({
-			size: 16,
-			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-		});
+			this.device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([totalFrames, numBands]));
 
-		this.device.queue.writeBuffer(uniformBuffer, 0, new Uint32Array([totalFrames, numBands]));
+			const bindGroup = this.device.createBindGroup({
+				layout: pipeline.getBindGroupLayout(0),
+				entries: [
+					{ binding: 0, resource: { buffer: magnitudeBuffer } },
+					{ binding: 1, resource: { buffer: outputBuffer } },
+					{ binding: 2, resource: { buffer: uniformBuffer } },
+				],
+			});
 
-		const bindGroup = this.device.createBindGroup({
-			layout: pipeline.getBindGroupLayout(0),
-			entries: [
-				{ binding: 0, resource: { buffer: magnitudeBuffer } },
-				{ binding: 1, resource: { buffer: outputBuffer } },
-				{ binding: 2, resource: { buffer: uniformBuffer } },
-			],
-		});
+			const commandEncoder = this.device.createCommandEncoder();
+			const computePass = commandEncoder.beginComputePass();
 
-		const commandEncoder = this.device.createCommandEncoder();
-		const computePass = commandEncoder.beginComputePass();
+			computePass.setPipeline(pipeline);
+			computePass.setBindGroup(0, bindGroup);
+			computePass.dispatchWorkgroups(Math.ceil(numBands / 64));
+			computePass.end();
 
-		computePass.setPipeline(pipeline);
-		computePass.setBindGroup(0, bindGroup);
-		computePass.dispatchWorkgroups(Math.ceil(numBands / 64));
-		computePass.end();
+			commandEncoder.copyBufferToBuffer(outputBuffer, 0, stagingBuffer, 0, numBands * 4);
 
-		commandEncoder.copyBufferToBuffer(outputBuffer, 0, stagingBuffer, 0, numBands * 4);
+			this.device.queue.submit([commandEncoder.finish()]);
 
-		this.device.queue.submit([commandEncoder.finish()]);
+			await stagingBuffer.mapAsync(GPUMapMode.READ);
 
-		await stagingBuffer.mapAsync(GPUMapMode.READ);
+			const ltas = new Float32Array(stagingBuffer.getMappedRange()).slice();
 
-		const ltas = new Float32Array(stagingBuffer.getMappedRange()).slice();
+			stagingBuffer.unmap();
 
-		stagingBuffer.unmap();
-		outputBuffer.destroy();
-		stagingBuffer.destroy();
-		uniformBuffer.destroy();
-
-		return ltas;
+			return ltas;
+		} finally {
+			outputBuffer?.destroy();
+			stagingBuffer?.destroy();
+			uniformBuffer?.destroy();
+		}
 	}
 
 	private async getOrCreateLtasPipeline(): Promise<GPUComputePipeline> {

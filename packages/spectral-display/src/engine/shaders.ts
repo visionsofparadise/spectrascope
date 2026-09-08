@@ -402,6 +402,8 @@ struct Uniforms {
   waveform_color_r: f32,
   waveform_color_g: f32,
   waveform_color_b: f32,
+  total_samples: f32,
+  samples_per_point: f32,
 }
 
 @group(0) @binding(0) var<storage, read> waveform_buffer: array<f32>;
@@ -416,9 +418,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     return;
   }
 
-  let stride = f32(uniforms.total_points) / f32(uniforms.output_width);
+  let stride = uniforms.total_samples / (uniforms.samples_per_point * f32(uniforms.output_width));
   let point_start = min(u32(f32(column) * stride), uniforms.total_points - 1u);
-  let point_end = max(point_start + 1u, min(u32(f32(column + 1u) * stride), uniforms.total_points));
+  let point_end = max(point_start + 1u, min(u32(ceil(f32(column + 1u) * stride)), uniforms.total_points));
 
   var min_val: f32 = 1.0;
   var max_val: f32 = -1.0;

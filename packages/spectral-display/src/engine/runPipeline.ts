@@ -1,3 +1,4 @@
+import { getMaxFftSize } from "./device";
 import { computeLoudnessData, WAVEFORM_POINTS_PER_SECOND } from "./loudness";
 import { createScanContext, finalizeScan, scanSamples } from "./sample-scan";
 import { resolveConfig, type Dimensions, type SpectralConfig, type SpectralEngine } from "./SpectralEngine";
@@ -31,6 +32,7 @@ export interface ResolvedPipelineOptions extends PipelineOptions {
 export interface PipelineResult {
 	waveformBuffer: Float32Array;
 	waveformPointCount: number;
+	waveformSamplesPerPoint: number;
 	loudnessData: LoudnessData | null;
 	spectrogramTexture: GPUTexture | null;
 	ltas: Float32Array | null;
@@ -46,7 +48,7 @@ export function computeSamplesPerPoint(
 	loudness: boolean,
 ): number {
 	if (loudness) {
-		return Math.round(sampleRate / WAVEFORM_POINTS_PER_SECOND);
+		return Math.max(1, Math.round(sampleRate / WAVEFORM_POINTS_PER_SECOND));
 	}
 
 	return Math.max(1, Math.floor(windowSamples / (width * 2)));
@@ -75,6 +77,8 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 	const resolvedConfig = resolveConfig(config);
 	const { spectrogram, ltas, loudness, truePeak: computeTruePeak, stereo, channelInput } = resolvedConfig;
 
+	signal.throwIfAborted();
+
 	const samplesPerPoint = computeSamplesPerPoint(sampleCount, sampleQuery.width, sampleRate, loudness);
 	const pointCount = Math.ceil(sampleCount / samplesPerPoint);
 
@@ -90,7 +94,7 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 	);
 
 	const spectralContext =
-		spectrogram || ltas
+		(spectrogram || ltas) && sampleCount >= Math.min(resolvedConfig.fftSize, getMaxFftSize(config.device))
 			? await engine.prepare(
 					sampleCount,
 					sampleRate,
@@ -103,11 +107,7 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 
 	try {
 		while (offset < sampleCount) {
-			if (signal.aborted) {
-				if (spectralContext) engine.cleanupContext(spectralContext);
-
-				throw new DOMException("Aborted", "AbortError");
-			}
+			signal.throwIfAborted();
 
 			const chunkFrames = Math.min(DEFAULT_CHUNK_SIZE, sampleCount - offset);
 
@@ -116,6 +116,12 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 					readSamples(channel, startSample + offset, chunkFrames),
 				),
 			);
+
+			signal.throwIfAborted();
+
+			if (channelBuffers.some((buffer) => buffer.length < chunkFrames)) {
+				throw new Error(`Audio reader returned fewer than ${chunkFrames} samples`);
+			}
 
 			scanSamples(channelBuffers, chunkFrames, scanContext);
 
@@ -131,6 +137,8 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 
 			await yieldControl();
 		}
+
+		signal.throwIfAborted();
 	} catch (error: unknown) {
 		if (spectralContext) engine.cleanupContext(spectralContext);
 
@@ -149,6 +157,11 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 	if (spectralContext) {
 		const finalizeResult = await engine.finalize(spectralContext, resolvedConfig);
 
+		if (signal.aborted) {
+			finalizeResult.spectrogramTexture?.destroy();
+			signal.throwIfAborted();
+		}
+
 		spectrogramTexture = finalizeResult.spectrogramTexture;
 		ltasResult = finalizeResult.ltas;
 	}
@@ -161,6 +174,7 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 	return {
 		waveformBuffer: scanContext.waveformBuffer,
 		waveformPointCount: scanContext.state.pointIndex,
+		waveformSamplesPerPoint: samplesPerPoint,
 		loudnessData,
 		spectrogramTexture,
 		ltas: ltasResult,

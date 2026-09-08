@@ -8,6 +8,7 @@ import {
 	type SpectralMetadata,
 } from "./engine/runPipeline";
 import { type Dimensions, type SpectralConfig, SpectralEngine } from "./engine/SpectralEngine";
+import { retainTexture } from "./utils/textureOwnership";
 import type { LoudnessData } from "./engine/loudness";
 
 export interface SpectralQuery extends Dimensions {
@@ -27,6 +28,7 @@ export interface ComputeResultReady {
 	spectrogramTexture: GPUTexture | null;
 	waveformBuffer: Float32Array | null;
 	waveformPointCount: number;
+	waveformSamplesPerPoint: number;
 	loudnessData: LoudnessData | null;
 	ltas: Float32Array | null;
 	correlationEnvelope: Float32Array | null;
@@ -52,34 +54,39 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 	const providedDevice = config?.device;
 	const providedSignal = config?.signal;
 
-	const deviceReference = useRef<GPUDevice | null>(null);
 	const engineReference = useRef<SpectralEngine | null>(null);
 	const engineDeviceRef = useRef<GPUDevice | null>(null);
-	const previousTextureRef = useRef<GPUTexture | null>(null);
+	const textureOwnersRef = useRef(new Map<GPUTexture, () => void>());
 	const lastReadyRef = useRef<ComputeResultReady | null>(null);
-	const abortControllerReference = useRef<AbortController | null>(null);
-	const readSamplesRef = useRef(readSamples);
-
-	readSamplesRef.current = readSamples;
 
 	const [result, setResult] = useState<ComputeResult>(EMPTY_RESULT);
 
 	const configKey = JSON.stringify(config ?? null);
+	const channelWeightsKey = JSON.stringify(metadata.channelWeights ?? null);
 
 	useEffect(() => {
-		abortControllerReference.current?.abort();
+		const sampleQuery: SampleQuery = {
+			startSample: Math.max(0, Math.min(Math.floor((startMs / 1000) * sampleRate), sampleCount)),
+			endSample: Math.max(0, Math.min(Math.ceil((endMs / 1000) * sampleRate), sampleCount)),
+			width,
+			height,
+		};
 
-		if (metadata.sampleCount === 0) return;
+		if (sampleQuery.endSample <= sampleQuery.startSample || width <= 0 || height <= 0 || channelCount <= 0) {
+			lastReadyRef.current = null;
+			setResult(EMPTY_RESULT);
+
+			return;
+		}
 
 		setResult({ status: "computing", fraction: 0, previous: lastReadyRef.current });
 
 		const controller = new AbortController();
 
-		abortControllerReference.current = controller;
-
-		const signal = providedSignal ?? controller.signal;
+		const signal = controller.signal;
 
 		let settled = false;
+		const obsolete = () => settled || signal.aborted;
 		let pendingFraction = 0;
 		let progressFrame: number | null = null;
 
@@ -97,24 +104,24 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 			progressFrame ??= requestAnimationFrame(flushProgress);
 		};
 
-		if (signal.aborted) {
+		const abort = () => controller.abort();
+
+		if (providedSignal?.aborted) {
 			controller.abort();
 		} else {
-			signal.addEventListener("abort", () => controller.abort(), { once: true });
+			providedSignal?.addEventListener("abort", abort, { once: true });
 		}
-
-		const sampleQuery: SampleQuery = {
-			startSample: Math.floor((startMs / 1000) * sampleRate),
-			endSample: Math.min(Math.ceil((endMs / 1000) * sampleRate), sampleCount),
-			width,
-			height,
-		};
 
 		void (async () => {
 			try {
-				deviceReference.current ??= await getDevice(providedDevice);
+				if (obsolete()) return;
 
-				const device = deviceReference.current;
+				const device =
+					providedDevice && engineDeviceRef.current === providedDevice
+						? providedDevice
+						: await getDevice(providedDevice);
+
+				if (obsolete()) return;
 
 				const pipelineOptions: PipelineOptions = {
 					metadata,
@@ -138,8 +145,18 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 
 				const pipelineResult = await runPipeline(pipelineOptions, engineReference.current);
 
-				previousTextureRef.current?.destroy();
-				previousTextureRef.current = pipelineResult.spectrogramTexture;
+				if (obsolete()) {
+					pipelineResult.spectrogramTexture?.destroy();
+
+					return;
+				}
+
+				if (pipelineResult.spectrogramTexture) {
+					textureOwnersRef.current.set(
+						pipelineResult.spectrogramTexture,
+						retainTexture(pipelineResult.spectrogramTexture),
+					);
+				}
 
 				settled = true;
 
@@ -153,7 +170,7 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 
 				setResult(readyResult);
 			} catch (error: unknown) {
-				if (error instanceof DOMException && error.name === "AbortError") {
+				if (settled || signal.aborted || (error instanceof DOMException && error.name === "AbortError")) {
 					return;
 				}
 
@@ -173,15 +190,43 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 			if (progressFrame !== null) cancelAnimationFrame(progressFrame);
 
 			controller.abort();
+			providedSignal?.removeEventListener("abort", abort);
 		};
-	}, [sampleRate, channelCount, sampleCount, startMs, endMs, width, height, providedDevice, configKey]);
+	}, [
+		sampleRate,
+		channelCount,
+		sampleCount,
+		startMs,
+		endMs,
+		width,
+		height,
+		providedDevice,
+		providedSignal,
+		configKey,
+		channelWeightsKey,
+		readSamples,
+	]);
+
+	useEffect(() => {
+		const retained = result.status === "ready" ? result : result.status === "idle" ? null : result.previous;
+
+		for (const [texture, release] of textureOwnersRef.current) {
+			if (texture !== retained?.spectrogramTexture && texture !== lastReadyRef.current?.spectrogramTexture) {
+				release();
+				textureOwnersRef.current.delete(texture);
+			}
+		}
+	}, [result]);
 
 	useEffect(
 		() => () => {
 			engineReference.current?.destroy();
 			engineReference.current = null;
-			previousTextureRef.current?.destroy();
-			previousTextureRef.current = null;
+
+			for (const release of textureOwnersRef.current.values()) release();
+
+			textureOwnersRef.current.clear();
+			lastReadyRef.current = null;
 		},
 		[],
 	);

@@ -13,7 +13,11 @@ export async function getDevice(provided?: GPUDevice): Promise<GPUDevice> {
 
 	if (cachedDevicePromise) return cachedDevicePromise;
 
-	cachedDevicePromise = createDevice();
+	cachedDevicePromise = createDevice().catch((error: unknown) => {
+		cachedDevicePromise = null;
+
+		throw error;
+	});
 
 	return cachedDevicePromise;
 }
