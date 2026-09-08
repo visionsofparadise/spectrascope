@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FrequencyMinimap } from "./FrequencyMinimap";
 import { EMPTY_AUDIO_DATA } from "../views/viewAudio";
+import { SpectrogramCanvas } from "spectral-display";
 import type { ComponentProps, ReactElement } from "react";
+import type { SpectralOptions, FrequencyScale } from "spectral-display";
 
-const runtime = vi.hoisted(() => ({ index: 0, refs: [] as Array<{ current: unknown }> }));
+const runtime = vi.hoisted(() => ({
+	index: 0,
+	refs: [] as Array<{ current: unknown }>,
+	result: { status: "idle" } as unknown,
+	options: null as SpectralOptions | null,
+}));
 vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
 	useRef: (initial: unknown) => {
@@ -15,7 +22,14 @@ vi.mock("react", async (importOriginal) => ({
 	useEffect: () => {},
 }));
 vi.mock("./useContainerSize", () => ({ useContainerSize: () => ({ width: 64, height: 800 }) }));
-vi.mock("spectral-display", () => ({ useSpectralCompute: () => ({ status: "idle" }), SpectrogramCanvas: () => null }));
+vi.mock("spectral-display", async (importOriginal) => ({
+	...(await importOriginal<typeof import("spectral-display")>()),
+	useSpectralCompute: (options: SpectralOptions) => {
+		runtime.options = options;
+		return runtime.result;
+	},
+	SpectrogramCanvas: () => null,
+}));
 
 function buttons(node: unknown): Array<ReactElement<ComponentProps<"button">>> {
 	if (!node || typeof node !== "object") return [];
@@ -26,25 +40,50 @@ function buttons(node: unknown): Array<ReactElement<ComponentProps<"button">>> {
 		...buttons(element.props?.children),
 	];
 }
-function render(change: ReturnType<typeof vi.fn>) {
+function renderTree(change: ReturnType<typeof vi.fn>, frequencyScale: FrequencyScale = "mel") {
 	runtime.index = 0;
-	return buttons(
-		FrequencyMinimap({
-			audioData: EMPTY_AUDIO_DATA,
-			startMs: 0,
-			endMs: 1000,
-			layerColor: { primary: "#ffffff", secondary: "#000000" },
-			channelInput: "mono",
-			frequencyRange: { top: 0.25, bottom: 0.75 },
-			onFrequencyRangeChange: change,
-		}),
-	);
+	return FrequencyMinimap({
+		audioData: EMPTY_AUDIO_DATA,
+		startMs: 0,
+		endMs: 1000,
+		layerColor: { primary: "#ffffff", secondary: "#000000" },
+		channelInput: "mono",
+		frequencyRange: { top: 0.25, bottom: 0.75 },
+		frequencyScale,
+		onFrequencyRangeChange: change,
+	});
+}
+function render(change: ReturnType<typeof vi.fn>) {
+	return buttons(renderTree(change));
+}
+function hasCanvas(node: unknown): boolean {
+	if (Array.isArray(node)) return node.some(hasCanvas);
+	if (!node || typeof node !== "object") return false;
+	const element = node as ReactElement<{ children?: unknown }>;
+	return element.type === SpectrogramCanvas || hasCanvas(element.props?.children);
 }
 beforeEach(() => {
 	runtime.refs = [];
 	runtime.index = 0;
+	runtime.result = { status: "idle" };
+	runtime.options = null;
 });
 describe("frequency minimap controls", () => {
+	it("uses the selected scale for compute and accessible frequency values", () => {
+		const controls = buttons(renderTree(vi.fn(), "linear"));
+		expect(runtime.options?.config?.frequencyScale).toBe("linear");
+		const pan = controls.find((button) => button.props["aria-label"] === "Frequency range");
+		const nyquist = EMPTY_AUDIO_DATA.sampleRate / 2;
+		expect(pan?.props["aria-valuetext"]).toBe(`${Math.round(nyquist * 0.25)} to ${Math.round(nyquist * 0.75)} Hz`);
+	});
+	it("hides held pixels from a different scale until matching output is ready", () => {
+		const previous = { status: "ready", options: { config: { frequencyScale: "mel" } } };
+		runtime.result = { status: "computing", previous };
+		expect(hasCanvas(renderTree(vi.fn(), "linear"))).toBe(false);
+		expect(hasCanvas(renderTree(vi.fn(), "mel"))).toBe(true);
+		runtime.result = { status: "ready", options: { config: { frequencyScale: "linear" } } };
+		expect(hasCanvas(renderTree(vi.fn(), "linear"))).toBe(true);
+	});
 	it("zooms and resets through keyboard and the named reset action", () => {
 		const change = vi.fn();
 		const controls = render(change);

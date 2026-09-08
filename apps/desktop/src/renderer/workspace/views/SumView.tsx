@@ -22,6 +22,7 @@ export function SumView({
 		derivedAudio,
 		SUM_LAYER_COLOR,
 		settings.frequencyRange,
+		settings.frequencyScale,
 		onFrequencyRangeChange,
 		onTransportControlChange,
 	);

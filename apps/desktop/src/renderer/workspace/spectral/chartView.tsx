@@ -90,6 +90,7 @@ export function ChartLayout({ chart, ticks, isEmpty, children }: ChartLayoutProp
 						ref={chart.viewport.wheelHandlers.ref}
 						startMs={chart.viewport.startMs}
 						endMs={chart.viewport.endMs}
+						seekOnClick
 						className="relative min-w-0 flex-1"
 						onMouseMove={chart.handleChartMouseMove}
 					>

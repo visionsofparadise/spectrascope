@@ -1,17 +1,20 @@
 import { formatInspectionTime } from "../utils/formatInspectionTime";
 import { frequencyToFraction } from "../utils/frequencyScale";
+import { verticalFractionOf } from "../utils/verticalRange";
 import { SelectionSurface } from "./SelectionSurface";
 import { FREQUENCY_TICK_LABELS, majorTickIntervalMs } from "./timeTicks";
+import type { FrequencyScale } from "spectral-display";
 import type { TextureVerticalRange } from "spectral-display";
 
 const FREQ_LABELS = FREQUENCY_TICK_LABELS.filter((tick) => tick.hz >= 100);
 
 interface FrequencyAxisProps {
 	readonly sampleRate: number;
+	readonly frequencyScale?: FrequencyScale;
 	readonly frequencyRange?: TextureVerticalRange;
 }
 
-export function FrequencyAxis({ sampleRate, frequencyRange }: FrequencyAxisProps) {
+export function FrequencyAxis({ sampleRate, frequencyRange, frequencyScale = "mel" }: FrequencyAxisProps) {
 	return (
 		<div
 			className="relative bg-void font-technical text-chrome-text-secondary"
@@ -22,7 +25,7 @@ export function FrequencyAxis({ sampleRate, frequencyRange }: FrequencyAxisProps
 			}}
 		>
 			{FREQ_LABELS.filter(({ hz }) => hz <= sampleRate / 2).map(({ hz, label }) => {
-				const yPct = frequencyToFraction(hz, sampleRate, frequencyRange) * 100;
+				const yPct = frequencyToFraction(hz, sampleRate, frequencyRange, frequencyScale) * 100;
 
 				if (yPct < 0 || yPct > 100) return null;
 
@@ -46,7 +49,16 @@ function dbToLinear(db: number): number {
 	return Math.pow(10, db / 20);
 }
 
-export function DbAxis() {
+export function DbAxis({ verticalRange }: { readonly verticalRange?: TextureVerticalRange }) {
+	const ticks = DB_HALF_LABELS.flatMap((db) => {
+		const amplitude = dbToLinear(db);
+
+		return [
+			{ key: `t${db}`, label: String(db), fraction: (1 - amplitude) / 2 },
+			{ key: `b${db}`, label: String(db), fraction: (1 + amplitude) / 2 },
+		];
+	}).concat({ key: "zero", label: "−∞", fraction: 0.5 });
+
 	return (
 		<div
 			className="relative w-8 bg-void font-technical text-chrome-text-secondary"
@@ -56,43 +68,21 @@ export function DbAxis() {
 				fontVariantNumeric: "tabular-nums",
 			}}
 		>
-			{DB_HALF_LABELS.map((db) => {
-				const amp = db === 0 ? 1 : dbToLinear(db);
-				const yPct = (1 - amp) * 50;
+			{ticks.map((tick) => {
+				const position = verticalFractionOf(tick.fraction, verticalRange);
+
+				if (position < 0 || position > 1) return null;
 
 				return (
 					<div
-						key={`t${db}`}
+						key={tick.key}
 						className="absolute left-0 flex items-center"
 						style={{
-							top: db === 0 ? "0px" : `${yPct}%`,
-							transform: db === 0 ? undefined : "translateY(-50%)",
+							top: `${position * 100}%`,
+							transform: position === 0 ? undefined : position === 1 ? "translateY(-100%)" : "translateY(-50%)",
 						}}
 					>
-						<span className="pl-1">{db}</span>
-					</div>
-				);
-			})}
-
-			<div className="absolute left-0 flex items-center" style={{ top: "50%", transform: "translateY(-50%)" }}>
-				<span className="pl-1">−∞</span>
-			</div>
-
-			{DB_HALF_LABELS.map((db) => {
-				const amp = db === 0 ? 1 : dbToLinear(db);
-				const yPct = 50 + amp * 50;
-
-				return (
-					<div
-						key={`b${db}`}
-						className="absolute left-0 flex items-center"
-						style={{
-							bottom: db === 0 ? "0px" : undefined,
-							top: db === 0 ? undefined : `${yPct}%`,
-							transform: db === 0 ? undefined : "translateY(-50%)",
-						}}
-					>
-						<span className="pl-1">{db}</span>
+						<span className="pl-1">{tick.label}</span>
 					</div>
 				);
 			})}

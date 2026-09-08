@@ -60,14 +60,12 @@ export function CursorSurface({
 		<SelectionSurface
 			startMs={startMs}
 			endMs={endMs}
+			seekOnClick
 			ref={surfaceRef}
 			className={className}
 			role="slider"
 			tabIndex={0}
-			aria-label="Inspection cursor"
-			aria-valuemin={startMs}
-			aria-valuemax={endMs}
-			aria-valuenow={cursorMs ?? startMs}
+			aria-label="Playback and inspection cursor"
 			onClick={handleClick}
 			onKeyDown={handleKeyDown}
 		>

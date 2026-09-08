@@ -228,7 +228,11 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 			appStore.mutate(app, (proxy) => {
 				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
 
-				if (target) target.selection = next ? normalizeSelection(next.start, next.end, comparisonDurationMs) : null;
+				if (target) {
+					target.selection = next ? normalizeSelection(next.start, next.end, comparisonDurationMs) : null;
+
+					if (target.selection) target.looping = true;
+				}
 			});
 		},
 		[app, appStore, comparison.id, comparisonDurationMs],

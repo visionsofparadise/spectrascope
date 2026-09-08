@@ -18,6 +18,7 @@ export class PlaybackEngine implements Player {
 	private knownDurationSec = 0;
 	private pendingSeek: number | null = null;
 	private generation = 0;
+	private playingIntent = false;
 	private readonly errorListeners = new Set<(message: string) => void>();
 
 	constructor() {
@@ -67,7 +68,7 @@ export class PlaybackEngine implements Player {
 	}
 
 	get playing(): boolean {
-		return !this.audio.paused;
+		return this.playingIntent;
 	}
 
 	get positionSec(): number {
@@ -78,6 +79,8 @@ export class PlaybackEngine implements Player {
 		if (!this.audio.src) return;
 
 		const generation = ++this.generation;
+
+		this.emitPlaying(true);
 
 		try {
 			if (this.audioContext.state === "suspended") await this.audioContext.resume();
@@ -95,12 +98,17 @@ export class PlaybackEngine implements Player {
 		} catch (error: unknown) {
 			if (generation !== this.generation) return;
 
+			this.pause();
+
 			throw error;
 		}
 
-		if (generation !== this.generation) return;
+		if (generation !== this.generation) {
+			if (!this.playingIntent) this.audio.pause();
 
-		this.emitPlaying(true);
+			return;
+		}
+
 		this.startRafLoop();
 	}
 
@@ -170,6 +178,7 @@ export class PlaybackEngine implements Player {
 
 	dispose(): void {
 		this.generation += 1;
+		this.playingIntent = false;
 		this.audio.pause();
 		this.stopRafLoop();
 		this.audio.removeEventListener("ended", this.handleEnded);
@@ -297,6 +306,8 @@ export class PlaybackEngine implements Player {
 	}
 
 	private emitPlaying(playing: boolean): void {
+		this.playingIntent = playing;
+
 		for (const listener of this.playingListeners) {
 			listener(playing);
 		}

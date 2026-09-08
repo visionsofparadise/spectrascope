@@ -27,6 +27,7 @@ export function DifferenceView({
 		derivedAudio,
 		layerColor,
 		settings.frequencyRange,
+		settings.frequencyScale,
 		onFrequencyRangeChange,
 		onTransportControlChange,
 	);

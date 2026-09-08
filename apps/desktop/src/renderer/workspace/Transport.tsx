@@ -1,5 +1,5 @@
 import { Icon } from "@iconify/react";
-import { useCallback, useRef } from "react";
+import { useCallback, useId, useRef } from "react";
 import { IconButton } from "../components/IconButton";
 import { formatInspectionTime } from "./utils/formatInspectionTime";
 import type { ReactNode } from "react";
@@ -96,7 +96,7 @@ function MediaButton({
 			onClick={() => {
 				if (interactive) onClick?.();
 			}}
-			className={`flex items-center justify-center px-1.5 py-1.5 ${
+			className={`flex h-8 ${large ? "w-8" : "w-6"} shrink-0 items-center justify-center ${
 				disabled
 					? "cursor-not-allowed text-chrome-text-dim"
 					: active
@@ -105,10 +105,59 @@ function MediaButton({
 			}`}
 			aria-label={label}
 		>
-			<span className={`flex items-center justify-center ${active && !disabled ? "bg-primary" : ""}`}>
-				<Icon icon={icon} width={large ? 24 : 17} height={large ? 24 : 17} />
+			<span className={`flex h-6 w-6 items-center justify-center ${active && !disabled ? "bg-primary" : ""}`}>
+				{icon === "lucide:play" || icon === "lucide:pause" ? (
+					<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+						{icon === "lucide:play" ? <path d="M8 4v16l12-8z" /> : <path d="M6 4h4v16H6zm8 0h4v16h-4z" />}
+					</svg>
+				) : (
+					<Icon icon={icon} width={17} height={17} />
+				)}
 			</span>
 		</button>
+	);
+}
+
+function TransportCluster({
+	label,
+	icon,
+	inlineClassName,
+	compactClassName,
+	children,
+}: {
+	readonly label: string;
+	readonly icon: string;
+	readonly inlineClassName: string;
+	readonly compactClassName: string;
+	readonly children: ReactNode;
+}) {
+	const id = useId();
+
+	return (
+		<>
+			<div className={inlineClassName}>{children}</div>
+			<div className={compactClassName}>
+				<button
+					type="button"
+					aria-label={label === "View" ? "View controls" : label}
+					title={label === "View" ? "View controls" : label}
+					popoverTarget={id}
+					className="flex h-8 min-w-8 shrink-0 items-center justify-center gap-1 bg-chrome-raised px-1.5 font-technical text-xs text-chrome-text hover:text-primary"
+				>
+					<Icon icon={icon} width={16} height={16} />
+					<span className="hidden @[500px]:inline">{label}</span>
+				</button>
+				<div
+					id={id}
+					popover="auto"
+					aria-label={label}
+					className="overflow-visible border border-chrome-border bg-void p-3 text-chrome-text shadow-xl"
+					style={{ inset: "auto 12px 104px auto", margin: 0, maxWidth: "calc(100vw - 24px)" }}
+				>
+					{children}
+				</div>
+			</div>
+		</>
 	);
 }
 
@@ -168,7 +217,7 @@ function ReadoutPanel({
 			<span />
 			<span />
 
-			<span className={`${rowLabelClass} max-w-28`} title={amplitudeLabel}>
+			<span className={`${rowLabelClass} max-w-28 truncate`} title={amplitudeLabel}>
 				{amplitudeLabel ?? "Amp"}
 			</span>
 			<span className={valueClass}>{cursor.amp}</span>
@@ -308,116 +357,143 @@ export function Transport({
 	const selectionOutLabel = selectionOutSec !== undefined ? formatInspectionTime(selectionOutSec * 1000) : "—";
 
 	return (
-		<div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-chrome-border-subtle bg-void px-4 py-3">
-			<div className="flex min-w-0 basis-80 flex-1 items-center overflow-x-auto">{viewControls}</div>
+		<div
+			role="region"
+			aria-label="Transport"
+			className="@container h-[92px] w-full border-t border-chrome-border-subtle bg-void"
+		>
+			<div className="flex h-full min-w-0 items-center justify-between gap-2 px-2">
+				{viewControls && (
+					<TransportCluster
+						label="View"
+						icon="lucide:sliders-horizontal"
+						inlineClassName="hidden min-w-0 @[1280px]:block"
+						compactClassName="shrink-0 @[1280px]:hidden"
+					>
+						<div className="[&_[role=listbox]]:bottom-full [&_[role=listbox]]:top-auto">{viewControls}</div>
+					</TransportCluster>
+				)}
 
-			<div className="flex shrink-0 flex-col items-center justify-center gap-1.5">
-				<div className="flex items-center gap-2">
-					<div className="flex items-center">
-						<MediaButton
-							icon="lucide:skip-back"
-							label="Skip to start"
+				<div className="flex shrink-0 flex-col items-center justify-center gap-1.5">
+					<div className="flex items-center gap-2">
+						<div className="flex items-center">
+							<MediaButton
+								icon="lucide:skip-back"
+								label="Skip to start"
+								disabled={disabled}
+								onClick={() => onSeek(0)}
+							/>
+							<MediaButton
+								icon="lucide:chevrons-left"
+								label="Jump back five seconds"
+								disabled={disabled}
+								onClick={() => onSeek(Math.max(0, positionSec - 5))}
+							/>
+							<MediaButton
+								icon="lucide:chevron-left"
+								label="Sample back"
+								disabled={disabled}
+								onClick={() => onSeek(Math.max(0, positionSec - 1 / sampleRate))}
+							/>
+							<MediaButton
+								icon={playing ? "lucide:pause" : "lucide:play"}
+								label={playing ? "Pause" : "Play"}
+								large
+								active={playing}
+								disabled={disabled}
+								onClick={onPlayToggle}
+							/>
+							<MediaButton
+								icon="lucide:chevron-right"
+								label="Sample forward"
+								disabled={disabled}
+								onClick={() => onSeek(Math.min(durationSec, positionSec + 1 / sampleRate))}
+							/>
+							<MediaButton
+								icon="lucide:chevrons-right"
+								label="Jump forward five seconds"
+								disabled={disabled}
+								onClick={() => onSeek(Math.min(durationSec, positionSec + 5))}
+							/>
+							<MediaButton
+								icon="lucide:skip-forward"
+								label="Skip to end"
+								disabled={disabled}
+								onClick={() => onSeek(durationSec)}
+							/>
+						</div>
+						<IconButton
+							icon="lucide:repeat"
+							label={looping ? "Disable loop" : "Loop selection or full stream"}
+							size={16}
+							variant="ghost"
+							dim={!looping}
 							disabled={disabled}
-							onClick={() => onSeek(0)}
-						/>
-						<MediaButton
-							icon="lucide:chevrons-left"
-							label="Jump back five seconds"
-							disabled={disabled}
-							onClick={() => onSeek(Math.max(0, positionSec - 5))}
-						/>
-						<MediaButton
-							icon="lucide:chevron-left"
-							label="Sample back"
-							disabled={disabled}
-							onClick={() => onSeek(Math.max(0, positionSec - 1 / sampleRate))}
-						/>
-						<MediaButton
-							icon={playing ? "lucide:pause" : "lucide:play"}
-							label={playing ? "Pause" : "Play"}
-							large
-							active={playing}
-							disabled={disabled}
-							onClick={onPlayToggle}
-						/>
-						<MediaButton
-							icon="lucide:chevron-right"
-							label="Sample forward"
-							disabled={disabled}
-							onClick={() => onSeek(Math.min(durationSec, positionSec + 1 / sampleRate))}
-						/>
-						<MediaButton
-							icon="lucide:chevrons-right"
-							label="Jump forward five seconds"
-							disabled={disabled}
-							onClick={() => onSeek(Math.min(durationSec, positionSec + 5))}
-						/>
-						<MediaButton
-							icon="lucide:skip-forward"
-							label="Skip to end"
-							disabled={disabled}
-							onClick={() => onSeek(durationSec)}
+							onClick={() => onLoopingChange(!looping)}
 						/>
 					</div>
-					<IconButton
-						icon="lucide:repeat"
-						label={looping ? "Disable loop" : "Loop selection or full stream"}
-						size={16}
-						variant="ghost"
-						dim={!looping}
-						disabled={disabled}
-						onClick={() => onLoopingChange(!looping)}
-					/>
+
+					<div className="flex items-center gap-3">
+						<select
+							aria-label="Playback speed"
+							value={playbackRate}
+							onChange={(event) => onPlaybackRateChange(Number(event.target.value))}
+							disabled={disabled}
+							className={`shrink-0 bg-chrome-raised px-1 py-0.5 font-technical text-[length:var(--text-sm)] italic ${
+								disabled ? "cursor-not-allowed text-chrome-text-dim" : "text-chrome-text"
+							}`}
+						>
+							{[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+								<option key={rate} value={rate}>
+									{rate}x
+								</option>
+							))}
+						</select>
+						<span
+							className={`shrink-0 font-technical text-[length:var(--text-sm)] tabular-nums ${timecodeMainClass}`}
+						>
+							{formatTimecode(positionSec)}
+							<span className={timecodeSecondaryClass}> / </span>
+							<span className={timecodeSecondaryClass}>{formatTimecode(durationSec)}</span>
+						</span>
+					</div>
 				</div>
 
-				<div className="flex items-center gap-3">
-					<select
-						aria-label="Playback speed"
-						value={playbackRate}
-						onChange={(event) => onPlaybackRateChange(Number(event.target.value))}
-						disabled={disabled}
-						className={`shrink-0 bg-chrome-raised px-1 py-0.5 font-technical text-[length:var(--text-sm)] italic ${
-							disabled ? "cursor-not-allowed text-chrome-text-dim" : "text-chrome-text"
-						}`}
-					>
-						{[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
-							<option key={rate} value={rate}>
-								{rate}x
-							</option>
-						))}
-					</select>
-					<span
-						className={`shrink-0 font-technical text-[length:var(--text-sm)] tabular-nums ${timecodeMainClass}`}
-					>
-						{formatTimecode(positionSec)}
-						<span className={timecodeSecondaryClass}> / </span>
-						<span className={timecodeSecondaryClass}>{formatTimecode(durationSec)}</span>
-					</span>
-				</div>
-			</div>
-
-			<div className="flex w-full min-w-0 items-center justify-between gap-4">
-				<ReadoutPanel
-					readoutSourceName={readoutSourceName}
-					amplitudeLabel={amplitudeLabel}
-					cursor={{
-						time: cursorReadout?.time ?? "—",
-						freq: cursorReadout?.freq ?? "— Hz",
-						amp: cursorReadout?.amp ?? "—",
-					}}
-					selectionIn={{
-						time: selectionInLabel,
-						amp: selectionInAmp ?? "—",
-					}}
-					selectionOut={{
-						time: selectionOutLabel,
-						amp: selectionOutAmp ?? "—",
-					}}
-					disabled={disabled}
-				/>
-				<div className="flex shrink-0 items-center justify-end">
+				<TransportCluster
+					label="Measurements"
+					icon="lucide:ruler"
+					inlineClassName="hidden min-w-0 @[960px]:block"
+					compactClassName="shrink-0 @[960px]:hidden"
+				>
+					<div className="w-[420px] max-w-[calc(100vw-48px)]">
+						<ReadoutPanel
+							readoutSourceName={readoutSourceName}
+							amplitudeLabel={amplitudeLabel}
+							cursor={{
+								time: cursorReadout?.time ?? "—",
+								freq: cursorReadout?.freq ?? "— Hz",
+								amp: cursorReadout?.amp ?? "—",
+							}}
+							selectionIn={{
+								time: selectionInLabel,
+								amp: selectionInAmp ?? "—",
+							}}
+							selectionOut={{
+								time: selectionOutLabel,
+								amp: selectionOutAmp ?? "—",
+							}}
+							disabled={disabled}
+						/>
+					</div>
+				</TransportCluster>
+				<TransportCluster
+					label="Volume"
+					icon="lucide:volume-2"
+					inlineClassName="hidden shrink-0 @[600px]:block"
+					compactClassName="shrink-0 @[600px]:hidden"
+				>
 					<VolumeSlider volume={volume} onVolumeChange={onVolumeChange} />
-				</div>
+				</TransportCluster>
 			</div>
 		</div>
 	);

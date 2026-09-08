@@ -19,6 +19,7 @@ import type { AudioData } from "../spectral/types";
 import type { DisplayedWaveform } from "../spectral/useWaveformReadouts";
 import type { TransportControl } from "../Transport";
 import type { ViewControlSettings } from "../viewSettings";
+import type { FrequencyScale } from "spectral-display";
 import type { ChannelInput } from "spectral-display";
 
 function TimelineTrack({
@@ -31,6 +32,7 @@ function TimelineTrack({
 	committedEndMs,
 	freezeCompute,
 	extentEndMs,
+	frequencyScale,
 	fftSize,
 	hopOverlap,
 	channelInput,
@@ -54,6 +56,7 @@ function TimelineTrack({
 	readonly committedEndMs: number;
 	readonly freezeCompute: boolean;
 	readonly extentEndMs: number;
+	readonly frequencyScale: FrequencyScale;
 	readonly fftSize: number;
 	readonly hopOverlap: number;
 	readonly channelInput: ChannelInput;
@@ -169,6 +172,7 @@ function TimelineTrack({
 							liveEndMs={liveWindow.endMs}
 							readoutTimeOffsetMs={offsetMs}
 							freezeCompute={freezeCompute}
+							frequencyScale={frequencyScale}
 							fftSize={fftSize}
 							hopOverlap={hopOverlap}
 							channelInput={channelInput}
@@ -322,10 +326,6 @@ export function TimelineView({
 		}
 	}, [onTransportControlChange, transportControl]);
 
-	const windowSpanMs = windowEndMs - windowStartMs;
-	const playheadFrac = windowSpanMs > 0 ? (playback.positionSec * 1000 - windowStartMs) / windowSpanMs : 0;
-	const playheadVisible = playheadFrac >= 0 && playheadFrac <= 1;
-
 	return (
 		<div className="flex h-full min-h-0 w-full overflow-hidden bg-void">
 			<div
@@ -372,6 +372,7 @@ export function TimelineView({
 											viewport.endMs !== viewport.committedEndMs
 										}
 										extentEndMs={extent.endMs}
+										frequencyScale={settings.frequencyScale}
 										fftSize={settings.fftSize}
 										hopOverlap={settings.hopOverlap}
 										channelInput={channelInput}
@@ -392,13 +393,6 @@ export function TimelineView({
 								))}
 							</div>
 							<GridOverlay startMs={windowStartMs} endMs={windowEndMs} opacity={settings.gridOpacity} />
-							{playheadVisible && (
-								<div
-									aria-hidden
-									className="pointer-events-none absolute top-0 bottom-0 w-px bg-data-cursor"
-									style={{ left: `${playheadFrac * 100}%` }}
-								/>
-							)}
 						</>
 					)}
 				</SelectionSurface>

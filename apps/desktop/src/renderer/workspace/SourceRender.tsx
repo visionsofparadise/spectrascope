@@ -10,6 +10,7 @@ import { fractionToFrequency } from "./utils/frequencyScale";
 import type { Source } from "./source";
 import type { AudioData } from "./spectral/types";
 import type { DisplayedWaveform } from "./spectral/useWaveformReadouts";
+import type { FrequencyScale } from "spectral-display";
 import type { TextureVerticalRange } from "spectral-display";
 import type { ChannelInput, ColormapDefinition, ComputeResultReady, SpectralOptions } from "spectral-display";
 
@@ -24,6 +25,7 @@ export interface SourceRenderCursorReadout {
 
 export interface SourceRenderProps {
 	readonly source: Source;
+	readonly frequencyScale?: FrequencyScale;
 	readonly frequencyRange?: TextureVerticalRange;
 	readonly onDisplayedResultChange?: (sourceId: string, displayed: DisplayedWaveform | null) => void;
 	readonly audioData: AudioData;
@@ -53,6 +55,7 @@ export interface SourceRenderProps {
 
 export function SourceRender({
 	source,
+	frequencyScale = "mel",
 	frequencyRange,
 	onDisplayedResultChange,
 	audioData,
@@ -97,7 +100,7 @@ export function SourceRender({
 			const timeMs = readoutTimeOffsetMs + cursorStartMs + xFrac * (cursorEndMs - cursorStartMs);
 			const timeStr = formatInspectionTime(timeMs);
 
-			const freqHz = fractionToFrequency(yFrac, audioData.sampleRate, frequencyRange);
+			const freqHz = fractionToFrequency(yFrac, audioData.sampleRate, frequencyRange, frequencyScale);
 			const freqStr = freqHz >= 1000 ? `${(freqHz / 1000).toFixed(1)} kHz` : `${Math.round(freqHz)} Hz`;
 
 			onCursorMove({ sourceId: source.id, timeMs, frequencyHz: freqHz, time: timeStr, freq: freqStr, amp: "—" });
@@ -111,6 +114,7 @@ export function SourceRender({
 			readoutTimeOffsetMs,
 			audioData.sampleRate,
 			frequencyRange,
+			frequencyScale,
 			source.id,
 		],
 	);
@@ -127,7 +131,7 @@ export function SourceRender({
 			config: {
 				fftSize,
 				hopOverlap,
-				frequencyScale: "mel",
+				frequencyScale,
 				colormap,
 				channelInput,
 				loudness: false,
@@ -147,6 +151,7 @@ export function SourceRender({
 			hopOverlap,
 			channelInput,
 			colormap,
+			frequencyScale,
 		],
 	);
 
@@ -159,7 +164,8 @@ export function SourceRender({
 	const incoming = computeResult.status === "ready" ? computeResult : null;
 
 	const [held, setHeld] = useState<ComputeResultReady | null>(null);
-	const front = computeResult.status === "idle" ? null : held;
+	const front =
+		computeResult.status === "idle" || held?.options.config.frequencyScale !== frequencyScale ? null : held;
 
 	useEffect(() => {
 		onDisplayedResultChange?.(
@@ -246,6 +252,7 @@ export function SourceRender({
 						style={{ opacity: waveformOpacity }}
 					>
 						<WaveformCanvas
+							verticalRange={frequencyRange}
 							computeResult={result}
 							color={waveformColor}
 							onRendered={isFront ? undefined : handleBackRendered}
@@ -255,11 +262,6 @@ export function SourceRender({
 			))}
 			{front === null && computeResult.status === "computing" && (
 				<ComputeProgress fraction={computeResult.fraction} />
-			)}
-			{front !== null && front.spectrogramTexture === null && spectrogramOpacity > 0 && (
-				<div className="pointer-events-none absolute bottom-1 left-2 font-technical text-[length:var(--text-xs)] text-chrome-text-secondary">
-					This time range is shorter than the selected FFT window.
-				</div>
 			)}
 			{computeResult.status === "error" && (
 				<div

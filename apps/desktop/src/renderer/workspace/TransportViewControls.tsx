@@ -14,6 +14,12 @@ interface TransportViewControlsProps {
 }
 
 const FFT_SELECT_OPTIONS = FFT_OPTIONS.map((value) => ({ value, label: value }));
+const FREQUENCY_SCALE_OPTIONS = [
+	{ value: "linear", label: "Linear" },
+	{ value: "log", label: "Log" },
+	{ value: "mel", label: "Mel" },
+	{ value: "erb", label: "ERB" },
+] as const;
 const HOP_SELECT_OPTIONS = HOP_OPTIONS.map((value, index) => ({
 	value,
 	label: HOP_LABELS[index] ?? value,
@@ -166,10 +172,28 @@ export function TransportViewControls({
 				<LayerOpacityKnobs settings={settings} onSettingsChange={onSettingsChange} />
 
 				<div className="flex flex-col items-stretch gap-0.5 min-[1400px]:flex-row min-[1400px]:items-center min-[1400px]:gap-1">
-					<span className="px-2 font-technical text-[length:var(--text-sm)] text-chrome-text-secondary">Mel</span>
 					<Select
 						variant="chip"
+						direction="up"
+						value={settings.frequencyScale}
+						ariaLabel="Frequency scale"
+						options={FREQUENCY_SCALE_OPTIONS}
+						onChange={(value) => {
+							const selected = FREQUENCY_SCALE_OPTIONS.find((option) => option.value === value);
+
+							if (selected)
+								onSettingsChange({
+									...settings,
+									frequencyScale: selected.value,
+									frequencyRange: { top: 0, bottom: 1 },
+								});
+						}}
+					/>
+					<Select
+						variant="chip"
+						direction="up"
 						value={String(settings.fftSize)}
+						ariaLabel="FFT size"
 						options={FFT_SELECT_OPTIONS}
 						onChange={(value) => {
 							onSettingsChange({ ...settings, fftSize: Number(value) });
@@ -177,7 +201,9 @@ export function TransportViewControls({
 					/>
 					<Select
 						variant="chip"
+						direction="up"
 						value={String(settings.hopOverlap)}
+						ariaLabel="FFT hop"
 						options={HOP_SELECT_OPTIONS}
 						onChange={(value) => {
 							onSettingsChange({ ...settings, hopOverlap: Number(value) });

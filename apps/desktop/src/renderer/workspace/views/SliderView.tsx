@@ -42,6 +42,7 @@ export function SliderView({
 		chromeAudio,
 		layerColor,
 		settings.frequencyRange,
+		settings.frequencyScale,
 		onFrequencyRangeChange,
 		onTransportControlChange,
 	);

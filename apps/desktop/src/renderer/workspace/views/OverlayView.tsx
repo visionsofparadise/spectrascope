@@ -17,6 +17,7 @@ export function OverlayView({
 		chromeAudio,
 		layerColor,
 		settings.frequencyRange,
+		settings.frequencyScale,
 		onFrequencyRangeChange,
 		onTransportControlChange,
 	);

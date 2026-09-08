@@ -57,6 +57,7 @@ function keyboardEvent(surface: SurfaceElement, key: string, shiftKey = false, t
 		target,
 		key,
 		shiftKey,
+		isPrimary: true,
 		altKey: false,
 		ctrlKey: false,
 		metaKey: false,
@@ -132,8 +133,90 @@ describe("SelectionSurface gestures", () => {
 		const delegated = vi.fn();
 		const surface = new SurfaceElement();
 		const event = keyboardEvent(surface, "ArrowRight");
-		surfaceProps({ onKeyDown: delegated }).onKeyDown?.(event);
+		surfaceProps({ seekOnClick: false, onKeyDown: delegated }).onKeyDown?.(event);
 		expect(delegated).toHaveBeenCalledExactlyOnceWith(event);
+		expect(playback.onSeek).not.toHaveBeenCalled();
+	});
+
+	it("clears the range and seeks on an ordinary click", () => {
+		const surface = new SurfaceElement();
+		playback.selection = { start: 100, end: 300 };
+		const event = { ...keyboardEvent(surface, ""), clientX: 75 } as unknown as React.MouseEvent<HTMLDivElement>;
+		surfaceProps().onClick?.(event);
+		expect(playback.onSelectionChange).toHaveBeenCalledExactlyOnceWith(null);
+		expect(playback.onSeek).toHaveBeenCalledExactlyOnceWith(0.75);
+		expect(playback.onSelectionChange.mock.invocationCallOrder[0]).toBeLessThan(
+			playback.onSeek.mock.invocationCallOrder[0]!,
+		);
+	});
+
+	it.each([
+		[20, 70],
+		[70, 20],
+	])("selects an ordinary drag from %i to %i without a trailing seek", (from, to) => {
+		const surface = new SurfaceElement();
+		const down = {
+			...keyboardEvent(surface, ""),
+			button: 0,
+			pointerId: 1,
+			clientX: from,
+		} as unknown as React.PointerEvent<HTMLDivElement>;
+		surfaceProps().onPointerDown?.(down);
+		surfaceProps().onPointerMove?.({ ...down, clientX: to });
+		surfaceProps().onPointerUp?.({ ...down, clientX: to });
+		surfaceProps().onLostPointerCapture?.(down);
+		surfaceProps().onClick?.({ ...down, clientX: to });
+		expect(playback.selection).toEqual({ start: 200, end: 700 });
+		expect(playback.onSeek).not.toHaveBeenCalled();
+		expect(surface.releasePointerCapture).toHaveBeenCalledExactlyOnceWith(1);
+	});
+
+	it("treats three pixels of pointer movement as a click", () => {
+		const surface = new SurfaceElement();
+		const down = {
+			...keyboardEvent(surface, ""),
+			button: 0,
+			pointerId: 1,
+			clientX: 20,
+		} as unknown as React.PointerEvent<HTMLDivElement>;
+		surfaceProps().onPointerDown?.(down);
+		surfaceProps().onPointerMove?.({ ...down, clientX: 23 });
+		surfaceProps().onPointerUp?.({ ...down, clientX: 23 });
+		expect(playback.onSelectionChange).not.toHaveBeenCalled();
+		surfaceProps().onClick?.({ ...down, clientX: 23 });
+		expect(playback.onSeek).toHaveBeenCalledExactlyOnceWith(0.23);
+	});
+
+	it.each(["onPointerCancel", "onLostPointerCapture"] as const)("abandons a drag on %s", (cancel) => {
+		const surface = new SurfaceElement();
+		const down = {
+			...keyboardEvent(surface, ""),
+			button: 0,
+			pointerId: 1,
+			clientX: 20,
+		} as unknown as React.PointerEvent<HTMLDivElement>;
+		surfaceProps().onPointerDown?.(down);
+		surfaceProps().onPointerMove?.({ ...down, clientX: 70 });
+		surfaceProps()[cancel]?.(down);
+		surfaceProps().onPointerUp?.({ ...down, clientX: 70 });
+		surfaceProps().onClick?.({ ...down, clientX: 70 });
+		expect(playback.onSelectionChange).not.toHaveBeenCalled();
+		expect(playback.onSeek).not.toHaveBeenCalled();
+	});
+
+	it("leaves nested controls independent of display gestures", () => {
+		const surface = new SurfaceElement();
+		const down = {
+			...keyboardEvent(surface, "", false, new SurfaceElement()),
+			button: 0,
+			pointerId: 1,
+			clientX: 20,
+		} as unknown as React.PointerEvent<HTMLDivElement>;
+		surfaceProps().onPointerDown?.(down);
+		surfaceProps().onPointerUp?.({ ...down, clientX: 70 });
+		surfaceProps().onClick?.({ ...down, clientX: 70 });
+		expect(surface.setPointerCapture).not.toHaveBeenCalled();
+		expect(playback.onSelectionChange).not.toHaveBeenCalled();
 		expect(playback.onSeek).not.toHaveBeenCalled();
 	});
 });

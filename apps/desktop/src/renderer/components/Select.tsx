@@ -9,6 +9,7 @@ interface SelectOption {
 
 interface SelectProps {
 	readonly label?: string;
+	readonly ariaLabel?: string;
 	readonly value: string;
 	readonly options: ReadonlyArray<SelectOption>;
 	readonly onChange: (value: string) => void;
@@ -24,6 +25,7 @@ interface SelectProps {
 
 export function Select({
 	label,
+	ariaLabel,
 	value,
 	options,
 	onChange,
@@ -105,6 +107,7 @@ export function Select({
 			<button
 				type="button"
 				aria-haspopup="listbox"
+				aria-label={ariaLabel ?? label}
 				aria-expanded={open}
 				onClick={() => {
 					setOpen((previous) => !previous);
@@ -118,6 +121,7 @@ export function Select({
 			<button
 				type="button"
 				aria-haspopup="listbox"
+				aria-label={ariaLabel ?? label}
 				aria-expanded={open}
 				onClick={() => {
 					setOpen((previous) => !previous);

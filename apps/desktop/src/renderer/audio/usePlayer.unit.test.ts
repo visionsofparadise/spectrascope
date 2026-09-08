@@ -123,6 +123,31 @@ afterEach(() => {
 });
 
 describe("playback stream transitions", () => {
+	it("cancels pending startup with the next toggle", async () => {
+		let resolvePlay: (() => void) | undefined;
+		media.play.mockImplementationOnce(() => {
+			media.playing = true;
+			return new Promise<void>((resolve) => {
+				resolvePlay = resolve;
+			});
+		});
+		const player = render("media://audio");
+		player.onPlayToggle();
+		player.onPlayToggle();
+		expect(media.play).toHaveBeenCalledTimes(1);
+		expect(media.pause).toHaveBeenCalledTimes(1);
+		expect(media.playing).toBe(false);
+		resolvePlay?.();
+		await Promise.resolve();
+	});
+
+	it("clears deferred resume after an explicit pause during preparation", () => {
+		render("media://audio").onPlayToggle();
+		render(null, true).onPlayToggle();
+		render("media://audio");
+		expect(media.play).toHaveBeenCalledTimes(1);
+		expect(media.playing).toBe(false);
+	});
 	it("resumes the same URL after temporary preparation", async () => {
 		render("media://audio").onPlayToggle();
 		await Promise.resolve();

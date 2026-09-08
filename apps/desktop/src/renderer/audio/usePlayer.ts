@@ -136,13 +136,14 @@ export function usePlayer(
 	const onPlayToggle = useCallback(() => {
 		const player = playerRef.current;
 
-		if (!player || streamUrl === null) return;
+		if (!player) return;
 
 		setError(null);
 
-		if (player.playing) {
+		if (player.playing || resumeAfterPreparationRef.current) {
+			resumeAfterPreparationRef.current = false;
 			player.pause();
-		} else {
+		} else if (streamUrl !== null) {
 			if (player.positionSec >= player.durationSec) player.seek(0);
 
 			void player.play().catch((reason: unknown) => {

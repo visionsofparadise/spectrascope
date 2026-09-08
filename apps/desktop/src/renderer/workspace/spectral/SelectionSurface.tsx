@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useWorkspacePlayback } from "../playback";
 import { extendSelection, isNestedSelectionControl, normalizeSelection } from "../utils/selection";
+import { Playhead } from "./Playhead";
 import { Selection } from "./Selection";
 import type { SelectionGesture } from "../utils/selection";
 import type { ComponentProps } from "react";
@@ -14,19 +15,20 @@ interface SelectionSurfaceProps extends ComponentProps<"div"> {
 export function SelectionSurface({
 	startMs,
 	endMs,
-	seekOnClick = false,
+	seekOnClick = true,
 	children,
 	onPointerDown,
 	onPointerMove,
 	onPointerUp,
 	onPointerCancel,
+	onLostPointerCapture,
 	onClick,
 	onKeyDown,
 	onBlur,
 	...props
 }: SelectionSurfaceProps) {
 	const playback = useWorkspacePlayback();
-	const anchorRef = useRef<number | null>(null);
+	const gestureRef = useRef<{ pointerId: number; clientX: number; anchor: number; dragging: boolean } | null>(null);
 	const keyboardGestureRef = useRef<SelectionGesture | null>(null);
 	const wasSelectingRef = useRef(false);
 	const [draft, setDraft] = useState<{ start: number; end: number } | null>(null);
@@ -48,22 +50,26 @@ export function SelectionSurface({
 			aria-valuemin={startMs}
 			aria-valuemax={endMs}
 			aria-valuenow={Math.max(startMs, Math.min(endMs, selection?.end ?? playback.positionSec * 1000))}
-			title="Shift-drag to select a range. Escape clears the selection."
+			title="Click to seek. Drag to select a loop. Escape clears the selection."
 			{...props}
+			style={{ ...props.style, touchAction: "none", userSelect: "none" }}
 			onPointerDown={(event) => {
 				if (event.defaultPrevented || isNestedSelectionControl(event.target, event.currentTarget)) return;
 
 				wasSelectingRef.current = false;
 				keyboardGestureRef.current = null;
 
-				if (event.shiftKey && event.button === 0 && span > 0) {
+				if (event.button === 0 && event.isPrimary && span > 0 && !gestureRef.current) {
 					event.preventDefault();
 					event.stopPropagation();
 					event.currentTarget.focus({ preventScroll: true });
 					event.currentTarget.setPointerCapture(event.pointerId);
-					anchorRef.current = timeAt(event.currentTarget, event.clientX);
-					wasSelectingRef.current = true;
-					setDraft({ start: anchorRef.current, end: anchorRef.current });
+					gestureRef.current = {
+						pointerId: event.pointerId,
+						clientX: event.clientX,
+						anchor: timeAt(event.currentTarget, event.clientX),
+						dragging: false,
+					};
 
 					return;
 				}
@@ -71,26 +77,35 @@ export function SelectionSurface({
 				onPointerDown?.(event);
 			}}
 			onPointerMove={(event) => {
-				const anchor = anchorRef.current;
+				const gesture = gestureRef.current;
 
-				if (anchor !== null) {
+				if (gesture?.pointerId === event.pointerId) {
 					const time = timeAt(event.currentTarget, event.clientX);
 
-					setDraft({ start: Math.min(anchor, time), end: Math.max(anchor, time) });
+					gesture.dragging ||= Math.abs(event.clientX - gesture.clientX) > 3;
+
+					if (gesture.dragging) {
+						wasSelectingRef.current = true;
+						setDraft({ start: Math.min(gesture.anchor, time), end: Math.max(gesture.anchor, time) });
+					}
 				}
 
 				onPointerMove?.(event);
 			}}
 			onPointerUp={(event) => {
-				const anchor = anchorRef.current;
+				const gesture = gestureRef.current;
 
-				if (anchor !== null) {
-					const active = timeAt(event.currentTarget, event.clientX);
-					const selected = normalizeSelection(anchor, active, durationMs);
+				if (gesture?.pointerId === event.pointerId) {
+					if (gesture.dragging || Math.abs(event.clientX - gesture.clientX) > 3) {
+						const active = timeAt(event.currentTarget, event.clientX);
+						const selected = normalizeSelection(gesture.anchor, active, durationMs);
 
-					keyboardGestureRef.current = { anchor, active, selection: selected };
-					playback.onSelectionChange(selected);
-					anchorRef.current = null;
+						wasSelectingRef.current = true;
+						keyboardGestureRef.current = { anchor: gesture.anchor, active, selection: selected };
+						playback.onSelectionChange(selected);
+					}
+
+					gestureRef.current = null;
 					setDraft(null);
 
 					if (event.currentTarget.hasPointerCapture(event.pointerId))
@@ -100,9 +115,25 @@ export function SelectionSurface({
 				onPointerUp?.(event);
 			}}
 			onPointerCancel={(event) => {
-				anchorRef.current = null;
-				setDraft(null);
+				if (gestureRef.current?.pointerId === event.pointerId) {
+					gestureRef.current = null;
+					wasSelectingRef.current = true;
+					setDraft(null);
+
+					if (event.currentTarget.hasPointerCapture(event.pointerId))
+						event.currentTarget.releasePointerCapture(event.pointerId);
+				}
+
 				onPointerCancel?.(event);
+			}}
+			onLostPointerCapture={(event) => {
+				if (gestureRef.current?.pointerId === event.pointerId) {
+					gestureRef.current = null;
+					wasSelectingRef.current = true;
+					setDraft(null);
+				}
+
+				onLostPointerCapture?.(event);
 			}}
 			onClick={(event) => {
 				if (event.defaultPrevented || isNestedSelectionControl(event.target, event.currentTarget)) return;
@@ -116,6 +147,7 @@ export function SelectionSurface({
 
 				if (seekOnClick && !event.shiftKey) {
 					keyboardGestureRef.current = null;
+					playback.onSelectionChange(null);
 					playback.onSeek(timeAt(event.currentTarget, event.clientX) / 1000);
 				}
 
@@ -127,7 +159,16 @@ export function SelectionSurface({
 				if (event.key === "Escape") {
 					playback.onSelectionChange(null);
 					setDraft(null);
-					anchorRef.current = null;
+
+					const gesture = gestureRef.current;
+
+					gestureRef.current = null;
+
+					if (gesture && event.currentTarget.hasPointerCapture(gesture.pointerId)) {
+						wasSelectingRef.current = true;
+						event.currentTarget.releasePointerCapture(gesture.pointerId);
+					}
+
 					keyboardGestureRef.current = null;
 					event.preventDefault();
 					event.stopPropagation();
@@ -190,6 +231,7 @@ export function SelectionSurface({
 					endFraction={Math.min(1, (selection.end - startMs) / span)}
 				/>
 			)}
+			<Playhead startMs={startMs} endMs={endMs} />
 		</div>
 	);
 }

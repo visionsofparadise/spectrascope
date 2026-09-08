@@ -9,6 +9,7 @@ it("roundtrips settings and references while regenerating only the comparison id
 	original.differenceA = original.sources[0]?.id ?? null;
 	original.differenceB = original.sources[1]?.id ?? null;
 	original.viewSettings.frequencyRange = { top: 0.25, bottom: 0.5 };
+	original.viewSettings.frequencyScale = "erb";
 	original.volume = 0.4;
 	original.looping = true;
 	const parsed = parseSession(serializeSession(original, ["../audio/a.wav", "../audio/b.wav"]));
@@ -26,6 +27,18 @@ it("roundtrips frequency navigation at its minimum span across floating-point bo
 		const top = index / 1024;
 		expect(ViewControlSettingsSchema.safeParse({ frequencyRange: { top, bottom: top + 1 / 64 } }).success).toBe(true);
 	}
+});
+
+it("loads older session settings as Mel and validates all supported frequency scales", () => {
+	const session = JSON.parse(serializeSession(createComparison(["/a.wav"]), ["a.wav"]));
+	delete session.comparison.viewSettings.frequencyScale;
+	expect(parseSession(JSON.stringify(session)).viewSettings.frequencyScale).toBe("mel");
+	for (const frequencyScale of ["linear", "log", "mel", "erb"]) {
+		session.comparison.viewSettings.frequencyScale = frequencyScale;
+		expect(parseSession(JSON.stringify(session)).viewSettings.frequencyScale).toBe(frequencyScale);
+	}
+	session.comparison.viewSettings.frequencyScale = "unknown";
+	expect(() => parseSession(JSON.stringify(session))).toThrow("Invalid");
 });
 
 it("rejects unsupported versions, invalid settings and broken source identities", () => {

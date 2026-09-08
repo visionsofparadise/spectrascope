@@ -15,6 +15,7 @@ import type { Source } from "../source";
 import type { TransportControl } from "../Transport";
 import type { ViewControlSettings } from "../viewSettings";
 import type { AudioData } from "./types";
+import type { FrequencyScale } from "spectral-display";
 import type { TextureVerticalRange } from "spectral-display";
 import type { ChannelInput } from "spectral-display";
 
@@ -30,6 +31,7 @@ export function useStripView(
 	chromeAudio: AudioData,
 	layerColor: LayerColor,
 	frequencyRange: TextureVerticalRange,
+	frequencyScale: FrequencyScale,
 	onFrequencyRangeChange: (range: TextureVerticalRange) => void,
 	onTransportControlChange?: (control: TransportControl) => void,
 ) {
@@ -64,6 +66,7 @@ export function useStripView(
 		endMs,
 		...readouts,
 		frequencyRange,
+		frequencyScale,
 		onFrequencyRangeChange,
 		cursorFrac: timeToFraction(viewSync.cursor, scrub.viewport.startMs, scrub.viewport.endMs),
 	};
@@ -83,6 +86,7 @@ export function StripOverlays({ view, settings }: StripOverlaysProps) {
 				mode={settings.gridMode}
 				sampleRate={view.chromeAudio.sampleRate}
 				frequencyRange={view.frequencyRange}
+				frequencyScale={view.frequencyScale}
 				opacity={settings.gridOpacity}
 			/>
 			{view.cursorFrac !== null && view.cursorFrac >= 0 && view.cursorFrac <= 1 && (
@@ -125,7 +129,11 @@ export function StripLayout({ view, header, children, channelInput }: StripLayou
 				<div className="bg-void" />
 				<div className="bg-void" />
 
-				<FrequencyAxis sampleRate={view.chromeAudio.sampleRate} frequencyRange={view.frequencyRange} />
+				<FrequencyAxis
+					sampleRate={view.chromeAudio.sampleRate}
+					frequencyRange={view.frequencyRange}
+					frequencyScale={view.frequencyScale}
+				/>
 
 				<CursorSurface
 					surfaceRef={view.viewport.wheelHandlers.ref}
@@ -140,6 +148,7 @@ export function StripLayout({ view, header, children, channelInput }: StripLayou
 
 				<FrequencyMinimap
 					frequencyRange={view.frequencyRange}
+					frequencyScale={view.frequencyScale}
 					onFrequencyRangeChange={view.onFrequencyRangeChange}
 					audioData={view.chromeAudio}
 					startMs={view.startMs}
@@ -147,7 +156,7 @@ export function StripLayout({ view, header, children, channelInput }: StripLayou
 					layerColor={view.layerColor}
 					channelInput={channelInput}
 				/>
-				<DbAxis />
+				<DbAxis verticalRange={view.frequencyRange} />
 
 				<div className="bg-void" />
 				<MinimapDisplay
@@ -187,6 +196,7 @@ export function StripSourceRender({
 	return (
 		<SourceRender
 			frequencyRange={view.frequencyRange}
+			frequencyScale={view.frequencyScale}
 			onDisplayedResultChange={view.onDisplayedResultChange}
 			source={source}
 			audioData={audioData}

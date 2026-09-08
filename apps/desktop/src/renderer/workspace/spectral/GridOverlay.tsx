@@ -1,6 +1,8 @@
 import { frequencyToFraction } from "../utils/frequencyScale";
+import { verticalFractionOf } from "../utils/verticalRange";
 import { majorTickIntervalMs } from "./timeTicks";
 import type { GridMode } from "../viewSettings";
+import type { FrequencyScale } from "spectral-display";
 import type { TextureVerticalRange } from "spectral-display";
 
 interface GridOverlayProps {
@@ -9,10 +11,19 @@ interface GridOverlayProps {
 	readonly opacity: number;
 	readonly mode?: GridMode;
 	readonly sampleRate?: number;
+	readonly frequencyScale?: FrequencyScale;
 	readonly frequencyRange?: TextureVerticalRange;
 }
 
-export function GridOverlay({ startMs, endMs, opacity, mode, sampleRate = 48000, frequencyRange }: GridOverlayProps) {
+export function GridOverlay({
+	startMs,
+	endMs,
+	opacity,
+	mode,
+	sampleRate = 48000,
+	frequencyRange,
+	frequencyScale = "mel",
+}: GridOverlayProps) {
 	const spanMs = endMs - startMs;
 
 	if (spanMs <= 0 || !Number.isFinite(spanMs)) return null;
@@ -30,7 +41,7 @@ export function GridOverlay({ startMs, endMs, opacity, mode, sampleRate = 48000,
 
 	if (mode === "freq") {
 		for (const hz of [100, 200, 500, 1000, 2000, 5000, 10000, 20000]) {
-			const fraction = frequencyToFraction(hz, sampleRate, frequencyRange);
+			const fraction = frequencyToFraction(hz, sampleRate, frequencyRange, frequencyScale);
 
 			if (fraction >= 0 && fraction <= 1) hLines.push(fraction);
 		}
@@ -40,11 +51,11 @@ export function GridOverlay({ startMs, endMs, opacity, mode, sampleRate = 48000,
 		for (const db of [-3, -6, -12, -24]) {
 			const amp = dbToLinear(db);
 
-			hLines.push((1 - amp) * 0.5);
-			hLines.push(0.5 + amp * 0.5);
+			hLines.push(verticalFractionOf((1 - amp) * 0.5, frequencyRange));
+			hLines.push(verticalFractionOf(0.5 + amp * 0.5, frequencyRange));
 		}
 
-		hLines.push(0.5);
+		hLines.push(verticalFractionOf(0.5, frequencyRange));
 	}
 
 	return (
@@ -56,13 +67,15 @@ export function GridOverlay({ startMs, endMs, opacity, mode, sampleRate = 48000,
 					style={{ left: `${frac * 100}%` }}
 				/>
 			))}
-			{hLines.map((frac, index) => (
-				<div
-					key={`h${index}`}
-					className="absolute left-0 right-0 h-px bg-chrome-text"
-					style={{ top: `${frac * 100}%` }}
-				/>
-			))}
+			{hLines
+				.filter((fraction) => fraction >= 0 && fraction <= 1)
+				.map((frac, index) => (
+					<div
+						key={`h${index}`}
+						className="absolute left-0 right-0 h-px bg-chrome-text"
+						style={{ top: `${frac * 100}%` }}
+					/>
+				))}
 		</div>
 	);
 }

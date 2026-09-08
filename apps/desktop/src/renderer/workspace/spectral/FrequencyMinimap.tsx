@@ -15,6 +15,7 @@ import { heldComputeResult } from "./computeResult";
 import { useContainerSize } from "./useContainerSize";
 import type { LayerColor } from "../layers";
 import type { AudioData } from "./types";
+import type { FrequencyScale } from "spectral-display";
 import type { ChannelInput, SpectralOptions, TextureVerticalRange } from "spectral-display";
 
 interface FrequencyMinimapProps {
@@ -23,6 +24,7 @@ interface FrequencyMinimapProps {
 	readonly endMs: number;
 	readonly layerColor: LayerColor;
 	readonly channelInput: ChannelInput;
+	readonly frequencyScale?: FrequencyScale;
 	readonly frequencyRange: TextureVerticalRange;
 	readonly onFrequencyRangeChange: (range: TextureVerticalRange) => void;
 }
@@ -33,6 +35,7 @@ export function FrequencyMinimap({
 	endMs,
 	layerColor,
 	channelInput,
+	frequencyScale = "mel",
 	frequencyRange,
 	onFrequencyRangeChange,
 }: FrequencyMinimapProps) {
@@ -142,7 +145,7 @@ export function FrequencyMinimap({
 			readSamples: audioData.readSamples,
 			config: {
 				fftSize: 2048,
-				frequencyScale: "mel",
+				frequencyScale,
 				colormap,
 				waveform: false,
 				loudness: false,
@@ -150,11 +153,12 @@ export function FrequencyMinimap({
 				channelInput,
 			},
 		}),
-		[audioData, startMs, endMs, size.width, size.height, colormap, channelInput],
+		[audioData, startMs, endMs, size.width, size.height, colormap, channelInput, frequencyScale],
 	);
 	const computeResult = useSpectralCompute(spectralOptions);
-	const renderable = heldComputeResult(computeResult);
-	const label = `${Math.round(fractionToFrequency(range.bottom, audioData.sampleRate))} to ${Math.round(fractionToFrequency(range.top, audioData.sampleRate))} Hz`;
+	const held = heldComputeResult(computeResult);
+	const renderable = held?.options.config.frequencyScale === frequencyScale ? held : null;
+	const label = `${Math.round(fractionToFrequency(range.bottom, audioData.sampleRate, undefined, frequencyScale))} to ${Math.round(fractionToFrequency(range.top, audioData.sampleRate, undefined, frequencyScale))} Hz`;
 
 	return (
 		<div ref={containerRef} className="relative w-8 bg-void">
@@ -163,7 +167,7 @@ export function FrequencyMinimap({
 					<SpectrogramCanvas computeResult={renderable} />
 				</div>
 			)}
-			{computeResult.status === "computing" && computeResult.previous === null && <ComputeProgress />}
+			{computeResult.status === "computing" && renderable === null && <ComputeProgress />}
 			<div
 				className="pointer-events-none absolute inset-x-0 top-0 bg-black/65"
 				style={{ height: `${range.top * 100}%` }}
@@ -204,7 +208,7 @@ export function FrequencyMinimap({
 					aria-valuemin={0}
 					aria-valuemax={1}
 					aria-valuenow={range[edge]}
-					aria-valuetext={`${Math.round(fractionToFrequency(range[edge], audioData.sampleRate))} Hz`}
+					aria-valuetext={`${Math.round(fractionToFrequency(range[edge], audioData.sampleRate, undefined, frequencyScale))} Hz`}
 					onPointerDown={(event) => pointerDown(event, edge)}
 					onPointerMove={pointerMove}
 					onPointerUp={() => {

@@ -2,6 +2,18 @@ import { describe, expect, it } from "vitest";
 import { fractionToFrequency, frequencyToFraction } from "./frequencyScale";
 
 describe("Mel display coordinates", () => {
+	it.each(["linear", "log", "mel", "erb"] as const)(
+		"keeps %s cropped display, hover and out-of-range ticks consistent",
+		(scale) => {
+			const range = { top: 0.1, bottom: 0.75 };
+			for (const fraction of [0, 0.3, 1]) {
+				const frequency = fractionToFrequency(fraction, 44100, range, scale);
+				expect(frequencyToFraction(frequency, 44100, range, scale)).toBeCloseTo(fraction);
+			}
+			expect(frequencyToFraction(30000, 44100, undefined, scale)).toBeLessThan(0);
+			expect(fractionToFrequency(1, 44100, undefined, scale)).toBeCloseTo(scale === "linear" ? 0 : 20);
+		},
+	);
 	it("maps a cropped spectrum consistently between axes and hover", () => {
 		const range = { top: 0.2, bottom: 0.6 };
 		const upper = fractionToFrequency(0.2, 48000);

@@ -34,10 +34,14 @@ class AudioElement extends EventTarget {
 }
 
 class AudioGraph {
+	static instances: Array<AudioGraph> = [];
 	state = "running";
 	destination = {};
 	resume = vi.fn(() => Promise.resolve());
 	close = vi.fn(() => Promise.resolve());
+	constructor() {
+		AudioGraph.instances.push(this);
+	}
 	createMediaElementSource() {
 		return { connect: vi.fn(), disconnect: vi.fn() };
 	}
@@ -55,6 +59,7 @@ describe("PlaybackEngine", () => {
 		frames = new Map();
 		nextFrame = 0;
 		AudioElement.instances = [];
+		AudioGraph.instances = [];
 		vi.stubGlobal("Audio", AudioElement);
 		vi.stubGlobal("AudioContext", AudioGraph);
 		vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
@@ -66,6 +71,83 @@ describe("PlaybackEngine", () => {
 		const instance = AudioElement.instances[0];
 		if (!instance) throw new Error("Expected an audio element");
 		audio = instance;
+	});
+	it("cancels play while AudioContext resume is pending", async () => {
+		const graph = AudioGraph.instances[0]!;
+		graph.state = "suspended";
+		let resume: (() => void) | undefined;
+		graph.resume.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					resume = resolve;
+				}),
+		);
+		player.setSourceUrl("media://audio", 0, 10);
+		const changed = vi.fn();
+		player.onPlayingChange(changed);
+		const pending = player.play();
+		expect(player.playing).toBe(true);
+		expect(changed).toHaveBeenLastCalledWith(true);
+		player.pause();
+		resume?.();
+		await pending;
+		expect(player.playing).toBe(false);
+		expect(changed).toHaveBeenLastCalledWith(false);
+		expect(audio.play).not.toHaveBeenCalled();
+		expect(frames.size).toBe(0);
+	});
+	it("keeps a cancelled media startup paused when its promise later resolves", async () => {
+		player.setSourceUrl("media://audio", 0, 10);
+		let resolvePlay: (() => void) | undefined;
+		audio.play.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					resolvePlay = resolve;
+				}),
+		);
+		const pending = player.play();
+		expect(player.playing).toBe(true);
+		player.pause();
+		audio.paused = false;
+		resolvePlay?.();
+		await pending;
+		expect(player.playing).toBe(false);
+		expect(audio.paused).toBe(true);
+		expect(frames.size).toBe(0);
+	});
+	it("keeps a newer play active when an obsolete startup settles", async () => {
+		player.setSourceUrl("media://audio", 0, 10);
+		let resolvePlay: (() => void) | undefined;
+		audio.play.mockImplementationOnce(
+			() =>
+				new Promise<void>((resolve) => {
+					resolvePlay = resolve;
+				}),
+		);
+		const pending = player.play();
+		player.pause();
+		await player.play();
+		resolvePlay?.();
+		await pending;
+		expect(player.playing).toBe(true);
+		expect(audio.paused).toBe(false);
+		expect(frames.size).toBe(1);
+	});
+	it("resets intent when the current media startup fails", async () => {
+		player.setSourceUrl("media://audio", 0, 10);
+		audio.play.mockRejectedValueOnce(new Error("failed startup"));
+		await expect(player.play()).rejects.toThrow("failed startup");
+		expect(player.playing).toBe(false);
+		expect(frames.size).toBe(0);
+	});
+	it("seeks during playback without changing play intent", async () => {
+		player.setSourceUrl("media://audio", 0, 10);
+		audio.metadata(10);
+		await player.play();
+		player.seek(7.25);
+		expect(player.positionSec).toBe(7.25);
+		expect(player.playing).toBe(true);
+		expect(audio.paused).toBe(false);
 	});
 	afterEach(() => {
 		player.dispose();
