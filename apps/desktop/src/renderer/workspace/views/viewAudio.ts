@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { NEUTRAL_LAYER_COLOR } from "../layers";
+import { placeAudioOnTimeline } from "../utils/placeAudioOnTimeline";
 import type { Source } from "../source";
 import type { AudioData } from "../spectral/types";
 
@@ -35,7 +36,7 @@ export function resolveVisibleSourceAudio(
 	return resolved;
 }
 
-export function useChromeSources(sources: ReadonlyArray<Source>, sourceAudio: ReadonlyMap<string, AudioData>) {
+function useChromeSources(sources: ReadonlyArray<Source>, sourceAudio: ReadonlyMap<string, AudioData>) {
 	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
 	return {
@@ -43,4 +44,47 @@ export function useChromeSources(sources: ReadonlyArray<Source>, sourceAudio: Re
 		chromeAudio: renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA,
 		layerColor: renderableSources[0]?.source.layerColor ?? NEUTRAL_LAYER_COLOR,
 	};
+}
+
+export function comparisonDurationOf(sources: ReadonlyArray<SourceWithAudio>): number {
+	return sources.reduce(
+		(duration, { source, audioData }) =>
+			Math.max(duration, Math.max(0, source.timelineOffsetMs) + audioData.durationMs),
+		0,
+	);
+}
+
+export function useTimelineChromeSources(sources: ReadonlyArray<Source>, sourceAudio: ReadonlyMap<string, AudioData>) {
+	const { renderableSources: rawSources, layerColor } = useChromeSources(sources, sourceAudio);
+	const cacheRef = useRef(
+		new Map<string, { original: AudioData; offsetMs: number; durationMs: number; audioData: AudioData }>(),
+	);
+	const durationMs = comparisonDurationOf(rawSources);
+	const renderableSources = useMemo(() => {
+		const previous = cacheRef.current;
+		const next: typeof previous = new Map();
+		const resolved = rawSources.map(({ source, audioData }) => {
+			const cached = previous.get(source.id);
+			const offsetMs = source.timelineOffsetMs;
+			const entry =
+				cached?.original === audioData && cached.offsetMs === offsetMs && cached.durationMs === durationMs
+					? cached
+					: {
+							original: audioData,
+							offsetMs,
+							durationMs,
+							audioData: placeAudioOnTimeline(audioData, offsetMs, durationMs),
+						};
+
+			next.set(source.id, entry);
+
+			return { source, audioData: entry.audioData };
+		});
+
+		cacheRef.current = next;
+
+		return resolved;
+	}, [rawSources, durationMs]);
+
+	return { renderableSources, chromeAudio: renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA, layerColor };
 }

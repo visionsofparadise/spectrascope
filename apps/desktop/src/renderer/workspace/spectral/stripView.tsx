@@ -8,7 +8,6 @@ import { CursorSurface } from "./CursorSurface";
 import { FrequencyMinimap } from "./FrequencyMinimap";
 import { GridOverlay } from "./GridOverlay";
 import { MinimapDisplay } from "./MinimapDisplay";
-import { Selection } from "./Selection";
 import { usePublishedTransportControl, useTransportPlayback, useViewportScrub } from "./viewScaffold";
 import type { LayerColor } from "../layers";
 import type { Source } from "../source";
@@ -67,9 +66,7 @@ export function useStripView(
 		startMs,
 		endMs,
 		setCursorReadout,
-		cursorFrac: timeToFraction(viewSync.cursor, startMs, endMs),
-		selectionStartFrac: timeToFraction(viewSync.selection?.start ?? null, startMs, endMs),
-		selectionEndFrac: timeToFraction(viewSync.selection?.end ?? null, startMs, endMs),
+		cursorFrac: timeToFraction(viewSync.cursor, scrub.viewport.startMs, scrub.viewport.endMs),
 	};
 }
 
@@ -82,14 +79,12 @@ export function StripOverlays({ view, settings }: StripOverlaysProps) {
 	return (
 		<>
 			<GridOverlay
-				startMs={view.startMs}
-				endMs={view.endMs}
+				startMs={view.viewport.startMs}
+				endMs={view.viewport.endMs}
 				mode={settings.gridMode}
+				sampleRate={view.chromeAudio.sampleRate}
 				opacity={settings.gridOpacity}
 			/>
-			{view.selectionStartFrac !== null && view.selectionEndFrac !== null && (
-				<Selection startFraction={view.selectionStartFrac} endFraction={view.selectionEndFrac} />
-			)}
 			{view.cursorFrac !== null && view.cursorFrac >= 0 && view.cursorFrac <= 1 && (
 				<div
 					className="pointer-events-none absolute top-0 bottom-0 w-px bg-data-cursor"
@@ -104,9 +99,10 @@ interface StripLayoutProps {
 	readonly view: StripView;
 	readonly header?: React.ReactNode;
 	readonly children: React.ReactNode;
+	readonly channelInput: ChannelInput;
 }
 
-export function StripLayout({ view, header, children }: StripLayoutProps) {
+export function StripLayout({ view, header, children, channelInput }: StripLayoutProps) {
 	return (
 		<div
 			className={
@@ -125,17 +121,17 @@ export function StripLayout({ view, header, children }: StripLayoutProps) {
 				}}
 			>
 				<div className="bg-void" />
-				<TimeRuler startMs={view.startMs} endMs={view.endMs} />
+				<TimeRuler startMs={view.viewport.startMs} endMs={view.viewport.endMs} />
 				<div className="bg-void" />
 				<div className="bg-void" />
 
-				<FrequencyAxis />
+				<FrequencyAxis sampleRate={view.chromeAudio.sampleRate} />
 
 				<CursorSurface
 					surfaceRef={view.viewport.wheelHandlers.ref}
 					className="relative cursor-crosshair overflow-hidden bg-void"
-					startMs={view.startMs}
-					endMs={view.endMs}
+					startMs={view.viewport.startMs}
+					endMs={view.viewport.endMs}
 					cursorMs={view.viewSync.cursor}
 					onCursorChange={view.viewSync.setCursor}
 				>
@@ -147,6 +143,7 @@ export function StripLayout({ view, header, children }: StripLayoutProps) {
 					startMs={view.startMs}
 					endMs={view.endMs}
 					layerColor={view.layerColor}
+					channelInput={channelInput}
 				/>
 				<DbAxis />
 
@@ -156,6 +153,7 @@ export function StripLayout({ view, header, children }: StripLayoutProps) {
 					viewStartFrac={view.viewStartFrac}
 					viewEndFrac={view.viewEndFrac}
 					waveformColor={hexToRgb255(view.layerColor.primary)}
+					channelInput={channelInput}
 					onScrubToFraction={view.setViewportToFraction}
 				/>
 				<div className="bg-void" />

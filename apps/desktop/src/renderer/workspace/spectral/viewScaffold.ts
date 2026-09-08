@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
+import { useWorkspacePlayback } from "../playback";
 import { useTimeViewport } from "../useTimeViewport";
 import type { TransportControl } from "../Transport";
 import type { AudioData } from "./types";
@@ -23,23 +24,19 @@ export function useViewportScrub(chromeAudio: AudioData) {
 }
 
 export function useTransportPlayback(durationSec: number) {
-	const [playing, setPlaying] = useState(false);
-	const [positionSec, setPositionSec] = useState(0);
-
-	const onPlayToggle = useCallback(() => {
-		setPlaying((previous) => !previous);
-	}, []);
-
-	const onSeek = useCallback(
-		(sec: number) => {
-			setPositionSec(Math.max(0, Math.min(durationSec, sec)));
-		},
-		[durationSec],
-	);
+	const { playing, positionSec, onPlayToggle, onSeek, selection } = useWorkspacePlayback();
 
 	return useMemo(
-		() => ({ playing, positionSec, durationSec, onPlayToggle, onSeek }),
-		[playing, positionSec, durationSec, onPlayToggle, onSeek],
+		() => ({
+			playing,
+			positionSec,
+			durationSec,
+			onPlayToggle,
+			onSeek,
+			selectionInSec: selection ? selection.start / 1000 : undefined,
+			selectionOutSec: selection ? selection.end / 1000 : undefined,
+		}),
+		[playing, positionSec, durationSec, onPlayToggle, onSeek, selection],
 	);
 }
 

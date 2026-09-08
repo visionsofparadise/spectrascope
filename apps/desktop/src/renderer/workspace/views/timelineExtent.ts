@@ -1,3 +1,12 @@
+import type { TimeWindow } from "../useTimeViewport";
+
+export function clipWindowIntersection(offsetMs: number, durationMs: number, window: TimeWindow): TimeWindow | null {
+	const startMs = Math.max(0, window.startMs - offsetMs);
+	const endMs = Math.min(durationMs, window.endMs - offsetMs);
+
+	return endMs > startMs ? { startMs, endMs } : null;
+}
+
 export interface TimelineClip {
 	readonly id: string;
 	readonly offsetMs: number;

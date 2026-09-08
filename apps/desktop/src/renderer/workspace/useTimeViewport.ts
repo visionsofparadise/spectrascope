@@ -59,7 +59,7 @@ export function zoomWindow(
 	return clampWindowToExtent({ startMs: start, endMs: start + newSpan }, extent);
 }
 
-function reconcileToExtent(current: TimeWindow, previousExtent: TimeWindow, nextExtent: TimeWindow): TimeWindow {
+export function reconcileToExtent(current: TimeWindow, previousExtent: TimeWindow, nextExtent: TimeWindow): TimeWindow {
 	const wasFull = current.startMs <= previousExtent.startMs && current.endMs >= previousExtent.endMs;
 
 	if (wasFull || current.endMs <= current.startMs) {
@@ -86,16 +86,11 @@ export interface TimeViewport {
 	readonly endMs: number;
 	readonly committedStartMs: number;
 	readonly committedEndMs: number;
-	/**
-	 * CSS `translateX`/`scaleX` mapping the committed window onto the live one,
-	 * for a canvas-wrapping div (`transform-origin: left`). Identity when settled.
-	 */
-	readonly transform: string;
 	readonly wheelHandlers: { readonly ref: React.RefObject<HTMLDivElement | null> };
 	readonly setViewport: (window: TimeWindow) => void;
 }
 
-export function useTimeViewport(extentStartMs: number, extentEndMs: number): TimeViewport {
+export function useTimeViewport(extentStartMs: number, extentEndMs: number, freezeCommit = false): TimeViewport {
 	const [live, setLive] = useState<TimeWindow>({ startMs: extentStartMs, endMs: extentEndMs });
 	const [committed, setCommitted] = useState<TimeWindow>({
 		startMs: extentStartMs,
@@ -107,32 +102,50 @@ export function useTimeViewport(extentStartMs: number, extentEndMs: number): Tim
 	const extentRef = useRef<TimeWindow>({ startMs: extentStartMs, endMs: extentEndMs });
 	const previousExtentRef = useRef<TimeWindow>({ startMs: extentStartMs, endMs: extentEndMs });
 	const commitTimerRef = useRef<number | null>(null);
+	const freezeCommitRef = useRef(freezeCommit);
+	const previousFreezeRef = useRef(freezeCommit);
 
 	liveRef.current = live;
+	freezeCommitRef.current = freezeCommit;
 	extentRef.current = { startMs: extentStartMs, endMs: extentEndMs };
 
 	const scheduleCommit = useCallback(() => {
 		if (commitTimerRef.current !== null) {
 			window.clearTimeout(commitTimerRef.current);
+			commitTimerRef.current = null;
 		}
+
+		if (freezeCommitRef.current) return;
 
 		commitTimerRef.current = window.setTimeout(() => {
 			commitTimerRef.current = null;
-			setCommitted(liveRef.current);
+
+			if (!freezeCommitRef.current) setCommitted(liveRef.current);
 		}, COMMIT_DEBOUNCE_MS);
 	}, []);
 
 	useEffect(() => {
 		const previous = previousExtentRef.current;
-
-		if (previous.startMs === extentStartMs && previous.endMs === extentEndMs) return;
-
 		const nextExtent = { startMs: extentStartMs, endMs: extentEndMs };
+		const extentChanged = previous.startMs !== extentStartMs || previous.endMs !== extentEndMs;
+		const thawed = previousFreezeRef.current && !freezeCommit;
+		const nextLive = extentChanged ? reconcileToExtent(liveRef.current, previous, nextExtent) : liveRef.current;
 
 		previousExtentRef.current = nextExtent;
-		setLive((current) => reconcileToExtent(current, previous, nextExtent));
-		setCommitted((current) => reconcileToExtent(current, previous, nextExtent));
-	}, [extentStartMs, extentEndMs]);
+		previousFreezeRef.current = freezeCommit;
+		liveRef.current = nextLive;
+
+		if (extentChanged) setLive(nextLive);
+
+		if (freezeCommit && commitTimerRef.current !== null) {
+			window.clearTimeout(commitTimerRef.current);
+			commitTimerRef.current = null;
+		}
+
+		if (thawed) setCommitted(nextLive);
+		else if (extentChanged && !freezeCommit)
+			setCommitted((current) => reconcileToExtent(current, previous, nextExtent));
+	}, [extentStartMs, extentEndMs, freezeCommit]);
 
 	useEffect(() => {
 		const element = wheelTargetRef.current;
@@ -183,8 +196,6 @@ export function useTimeViewport(extentStartMs: number, extentEndMs: number): Tim
 		[scheduleCommit],
 	);
 
-	const transform = useMemo(() => computeWindowTransform(committed, live), [live, committed]);
-
 	const wheelHandlers = useMemo(() => ({ ref: wheelTargetRef }), []);
 
 	return {
@@ -192,7 +203,6 @@ export function useTimeViewport(extentStartMs: number, extentEndMs: number): Tim
 		endMs: live.endMs,
 		committedStartMs: committed.startMs,
 		committedEndMs: committed.endMs,
-		transform,
 		wheelHandlers,
 		setViewport,
 	};

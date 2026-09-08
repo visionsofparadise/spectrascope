@@ -31,6 +31,11 @@ export interface TransportControl {
 
 interface TransportProps {
 	readonly control: TransportControl;
+	readonly playbackRate: number;
+	readonly onPlaybackRateChange: (rate: number) => void;
+	readonly looping: boolean;
+	readonly onLoopingChange: (looping: boolean) => void;
+	readonly sampleRate: number;
 	/**
 	 * Monitor volume — `0` silent, `1` unity. A *controlled* value: the
 	 * Transport renders the `VolumeSlider` from this prop and emits changes via
@@ -252,13 +257,24 @@ function VolumeSlider({
 	);
 }
 
-export function Transport({ control, volume, onVolumeChange, viewControls }: TransportProps) {
+export function Transport({
+	control,
+	volume,
+	onVolumeChange,
+	viewControls,
+	playbackRate,
+	onPlaybackRateChange,
+	looping,
+	onLoopingChange,
+	sampleRate,
+}: TransportProps) {
 	const {
 		disabled,
 		playing,
 		positionSec,
 		durationSec,
 		onPlayToggle,
+		onSeek,
 		cursorReadout,
 		selectionInSec,
 		selectionOutSec,
@@ -279,9 +295,24 @@ export function Transport({ control, volume, onVolumeChange, viewControls }: Tra
 			<div className="flex shrink-0 flex-col items-center justify-center gap-1.5">
 				<div className="flex items-center gap-2">
 					<div className="flex items-center">
-						<MediaButton icon="lucide:skip-back" label="Skip to start" disabled={disabled} />
-						<MediaButton icon="lucide:chevrons-left" label="Jump back" disabled={disabled} />
-						<MediaButton icon="lucide:chevron-left" label="Frame back" disabled={disabled} />
+						<MediaButton
+							icon="lucide:skip-back"
+							label="Skip to start"
+							disabled={disabled}
+							onClick={() => onSeek(0)}
+						/>
+						<MediaButton
+							icon="lucide:chevrons-left"
+							label="Jump back five seconds"
+							disabled={disabled}
+							onClick={() => onSeek(Math.max(0, positionSec - 5))}
+						/>
+						<MediaButton
+							icon="lucide:chevron-left"
+							label="Sample back"
+							disabled={disabled}
+							onClick={() => onSeek(Math.max(0, positionSec - 1 / sampleRate))}
+						/>
 						<MediaButton
 							icon={playing ? "lucide:pause" : "lucide:play"}
 							label={playing ? "Pause" : "Play"}
@@ -290,26 +321,52 @@ export function Transport({ control, volume, onVolumeChange, viewControls }: Tra
 							disabled={disabled}
 							onClick={onPlayToggle}
 						/>
-						<MediaButton icon="lucide:chevron-right" label="Frame forward" disabled={disabled} />
-						<MediaButton icon="lucide:chevrons-right" label="Jump forward" disabled={disabled} />
-						<MediaButton icon="lucide:skip-forward" label="Skip to end" disabled={disabled} />
+						<MediaButton
+							icon="lucide:chevron-right"
+							label="Sample forward"
+							disabled={disabled}
+							onClick={() => onSeek(Math.min(durationSec, positionSec + 1 / sampleRate))}
+						/>
+						<MediaButton
+							icon="lucide:chevrons-right"
+							label="Jump forward five seconds"
+							disabled={disabled}
+							onClick={() => onSeek(Math.min(durationSec, positionSec + 5))}
+						/>
+						<MediaButton
+							icon="lucide:skip-forward"
+							label="Skip to end"
+							disabled={disabled}
+							onClick={() => onSeek(durationSec)}
+						/>
 					</div>
-					<IconButton icon="lucide:repeat" label="Loop" size={16} variant="ghost" dim disabled={disabled} />
+					<IconButton
+						icon="lucide:repeat"
+						label={looping ? "Disable loop" : "Loop selection or full stream"}
+						size={16}
+						variant="ghost"
+						dim={!looping}
+						disabled={disabled}
+						onClick={() => onLoopingChange(!looping)}
+					/>
 				</div>
 
 				<div className="flex items-center gap-3">
-					<button
-						type="button"
+					<select
+						aria-label="Playback speed"
+						value={playbackRate}
+						onChange={(event) => onPlaybackRateChange(Number(event.target.value))}
 						disabled={disabled}
-						className={`flex shrink-0 items-center px-1 py-0.5 font-technical text-[length:var(--text-sm)] italic ${
+						className={`shrink-0 bg-chrome-raised px-1 py-0.5 font-technical text-[length:var(--text-sm)] italic ${
 							disabled ? "cursor-not-allowed text-chrome-text-dim" : "text-chrome-text"
 						}`}
 					>
-						<span className="flex items-center gap-0.5 bg-chrome-raised">
-							<span>1x</span>
-							<Icon icon="lucide:chevron-down" width={12} height={12} />
-						</span>
-					</button>
+						{[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
+							<option key={rate} value={rate}>
+								{rate}x
+							</option>
+						))}
+					</select>
 					<span
 						className={`shrink-0 font-technical text-[length:var(--text-sm)] tabular-nums ${timecodeMainClass}`}
 					>

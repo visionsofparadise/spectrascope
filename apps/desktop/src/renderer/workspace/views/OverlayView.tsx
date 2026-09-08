@@ -1,5 +1,5 @@
 import { StripLayout, StripOverlays, StripSourceRender, useStripView } from "../spectral/stripView";
-import { useChromeSources } from "./viewAudio";
+import { useTimelineChromeSources } from "./viewAudio";
 import type { Source } from "../source";
 import type { AudioData } from "../spectral/types";
 import type { TransportControl } from "../Transport";
@@ -21,12 +21,12 @@ export function OverlayView({
 	settings,
 	onTransportControlChange,
 }: OverlayViewProps) {
-	const { renderableSources, chromeAudio, layerColor } = useChromeSources(sources, sourceAudio);
+	const { renderableSources, chromeAudio, layerColor } = useTimelineChromeSources(sources, sourceAudio);
 
 	const view = useStripView("overlay", chromeAudio, layerColor, onTransportControlChange);
 
 	return (
-		<StripLayout view={view}>
+		<StripLayout channelInput={channelInput} view={view}>
 			{renderableSources.length === 0 ? (
 				<div className="flex h-full items-center justify-center">
 					<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>

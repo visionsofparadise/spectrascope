@@ -100,7 +100,7 @@ export function DifferenceView({
 	);
 
 	return (
-		<StripLayout view={view} header={selectorRow}>
+		<StripLayout channelInput={channelInput} view={view} header={selectorRow}>
 			<div className="absolute inset-0">
 				<StripSourceRender
 					view={view}

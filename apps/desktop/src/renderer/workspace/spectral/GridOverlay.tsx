@@ -1,3 +1,4 @@
+import { frequencyToFraction } from "../utils/frequencyScale";
 import { majorTickIntervalMs } from "./timeTicks";
 import type { GridMode } from "../viewSettings";
 
@@ -6,10 +7,13 @@ interface GridOverlayProps {
 	readonly endMs: number;
 	readonly opacity: number;
 	readonly mode?: GridMode;
+	readonly sampleRate?: number;
 }
 
-export function GridOverlay({ startMs, endMs, opacity, mode }: GridOverlayProps) {
+export function GridOverlay({ startMs, endMs, opacity, mode, sampleRate = 48000 }: GridOverlayProps) {
 	const spanMs = endMs - startMs;
+
+	if (spanMs <= 0 || !Number.isFinite(spanMs)) return null;
 
 	const majorMs = majorTickIntervalMs(spanMs);
 
@@ -23,15 +27,8 @@ export function GridOverlay({ startMs, endMs, opacity, mode }: GridOverlayProps)
 	const hLines: Array<number> = [];
 
 	if (mode === "freq") {
-		const FREQ_MIN = 20;
-		const FREQ_MAX = 22050;
-		const melMin = 2595 * Math.log10(1 + FREQ_MIN / 700);
-		const melMax = 2595 * Math.log10(1 + FREQ_MAX / 700);
-
 		for (const hz of [100, 200, 500, 1000, 2000, 5000, 10000, 20000]) {
-			const mel = 2595 * Math.log10(1 + hz / 700);
-
-			hLines.push(1 - (mel - melMin) / (melMax - melMin));
+			if (hz <= sampleRate / 2) hLines.push(frequencyToFraction(hz, sampleRate));
 		}
 	} else if (mode === "amp") {
 		const dbToLinear = (db: number) => Math.pow(10, db / 20);

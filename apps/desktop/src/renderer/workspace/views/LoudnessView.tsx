@@ -6,7 +6,7 @@ import { useTraceCompute } from "../spectral/traceCompute";
 import { computeWindowTransform } from "../useTimeViewport";
 import { METRICS } from "../viewSettings";
 import { buildPolylineSegments } from "./chartTrace";
-import { useChromeSources } from "./viewAudio";
+import { useTimelineChromeSources } from "./viewAudio";
 import type { Source } from "../source";
 import type { AudioData } from "../spectral/types";
 import type { TransportControl } from "../Transport";
@@ -295,7 +295,7 @@ function ChartCanvas({ chart, renderableSources, metric }: ChartCanvasProps) {
 }
 
 export function LoudnessView({ sources, sourceAudio, settings, onTransportControlChange }: LoudnessViewProps) {
-	const { renderableSources, chromeAudio, layerColor } = useChromeSources(sources, sourceAudio);
+	const { renderableSources, chromeAudio, layerColor } = useTimelineChromeSources(sources, sourceAudio);
 
 	const metricSpec = useMemo(
 		() => METRICS.find((entry) => entry.id === settings.loudnessMetric) ?? DEFAULT_METRIC,
@@ -312,19 +312,7 @@ export function LoudnessView({ sources, sourceAudio, settings, onTransportContro
 		[metricSpec.axisMin],
 	);
 
-	const durationSec = chromeAudio.durationMs / 1000;
-
-	const controlExtras = useMemo(
-		() => ({
-			selectionInSec: durationSec * 0.25,
-			selectionOutSec: durationSec * 0.45,
-			selectionInAmp: "-19.7 dB",
-			selectionOutAmp: "-24.3 dB",
-		}),
-		[durationSec],
-	);
-
-	const chart = useChartView(chromeAudio, layerColor, axis, onTransportControlChange, controlExtras);
+	const chart = useChartView(chromeAudio, layerColor, axis, onTransportControlChange);
 
 	const dbTicks = metricSpec.axisMin === -60 ? DB_TICKS_60 : DB_TICKS_40;
 

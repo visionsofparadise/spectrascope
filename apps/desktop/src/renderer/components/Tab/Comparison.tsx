@@ -7,10 +7,12 @@ import { createSourceFromFile, isBareAddSource, toSourceState } from "../../comp
 import { pickAudioFiles } from "../../comparison/pickAudioFiles";
 import { useComparisonHistory } from "../../state/useComparisonHistory";
 import { AppShell } from "../../workspace/AppShell";
+import { WorkspacePlaybackProvider } from "../../workspace/playback";
 import { Sidebar } from "../../workspace/Sidebar";
 import { SyncProvider } from "../../workspace/sync";
 import { Transport } from "../../workspace/Transport";
 import { TransportViewControls } from "../../workspace/TransportViewControls";
+import { normalizeSelection } from "../../workspace/utils/selection";
 import { INITIAL_VIEW_CONTROL_SETTINGS } from "../../workspace/viewSettings";
 import { Workspace } from "../../workspace/Workspace";
 import type { AppContext } from "../../models/Context";
@@ -61,6 +63,8 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 	const [transportControl, setTransportControl] = useState<TransportControl>(INITIAL_TRANSPORT_CONTROL);
 
 	const [volume, setVolume] = useState(INITIAL_VOLUME);
+	const [playbackRate, setPlaybackRate] = useState(1);
+	const [looping, setLooping] = useState(false);
 
 	const [syncEnabled, setSyncEnabled] = useState(false);
 
@@ -97,19 +101,23 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 		[app, appStore, comparison.id],
 	);
 
-	const { sourceAudio, prepared, status } = useSourceStreams(
-		sources,
-		comparison.canonicalSampleRate,
-		setCanonicalSampleRate,
-	);
-
-	const { sumAudio, diffAudio, sumInfo, diffInfo } = useDerivedStreams(
-		sources,
+	const {
+		sourceAudio,
 		prepared,
-		comparison.differenceA,
-		comparison.differenceB,
-		setDifference,
-	);
+		status,
+		errors: sourceErrors,
+		retrySource,
+	} = useSourceStreams(sources, comparison.canonicalSampleRate, setCanonicalSampleRate);
+
+	const {
+		sumAudio,
+		diffAudio,
+		sumInfo,
+		diffInfo,
+		preparing: derivedPreparing,
+		error: derivedError,
+		retry: retryDerived,
+	} = useDerivedStreams(sources, prepared, comparison.differenceA, comparison.differenceB, setDifference);
 
 	const derivedAudio = activeView === "difference" ? diffAudio : sumAudio;
 
@@ -122,6 +130,27 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 
 	const playbackStreamUrl = activeStreamInfo === null ? null : streamUrl(activeStreamInfo.key, "wav");
 	const playbackDurationSec = activeStreamInfo === null ? 0 : activeStreamInfo.durationMs / 1000;
+	const comparisonDurationMs = sources.reduce(
+		(duration, source) => Math.max(duration, source.timelineOffsetMs + (sourceAudio.get(source.id)?.durationMs ?? 0)),
+		playbackDurationSec * 1000,
+	);
+	const selection = useMemo(
+		() =>
+			comparison.selection
+				? normalizeSelection(comparison.selection.start, comparison.selection.end, comparisonDurationMs)
+				: null,
+		[comparison.selection, comparisonDurationMs],
+	);
+	const handleSelectionChange = useCallback(
+		(next: { start: number; end: number } | null) => {
+			appStore.mutate(app, (proxy) => {
+				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
+
+				if (target) target.selection = next ? normalizeSelection(next.start, next.end, comparisonDurationMs) : null;
+			});
+		},
+		[app, appStore, comparison.id, comparisonDurationMs],
+	);
 
 	const derivedOverlayMessage = useMemo(() => {
 		if (activeView === "sum") {
@@ -162,6 +191,28 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 		initialPositionRef.current,
 		persistPosition,
 		volume,
+		{ playbackRate, looping, selection, preparing: preparing || derivedPreparing },
+	);
+	const workspacePlayback = useMemo(
+		() => ({
+			positionSec: player.positionSec,
+			durationSec: Math.max(player.durationSec, comparisonDurationMs / 1000),
+			playing: player.playing,
+			onPlayToggle: player.onPlayToggle,
+			onSeek: player.onSeek,
+			selection,
+			onSelectionChange: handleSelectionChange,
+		}),
+		[
+			player.positionSec,
+			player.durationSec,
+			player.playing,
+			player.onPlayToggle,
+			player.onSeek,
+			comparisonDurationMs,
+			selection,
+			handleSelectionChange,
+		],
 	);
 
 	const handleVolumeChange = useCallback(
@@ -172,20 +223,22 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 		[player],
 	);
 
-	const boundTransportControl = useMemo<TransportControl>(() => {
-		if (transportControl.disabled || playbackStreamUrl === null) {
-			return transportControl;
-		}
-
-		return {
+	const boundTransportControl = useMemo<TransportControl>(
+		() => ({
 			...transportControl,
+			disabled: (transportControl.disabled ?? false) || playbackStreamUrl === null,
 			playing: player.playing,
 			positionSec: player.positionSec,
 			durationSec: player.durationSec > 0 ? player.durationSec : transportControl.durationSec,
 			onPlayToggle: player.onPlayToggle,
 			onSeek: player.onSeek,
-		};
-	}, [transportControl, playbackStreamUrl, player]);
+			selectionInSec: selection ? selection.start / 1000 : undefined,
+			selectionOutSec: selection ? selection.end / 1000 : undefined,
+			selectionInAmp: undefined,
+			selectionOutAmp: undefined,
+		}),
+		[transportControl, playbackStreamUrl, player, selection],
+	);
 
 	const appendSources = useCallback(
 		(filePaths: ReadonlyArray<string>) => {
@@ -318,71 +371,95 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 	}, [undo, redo]);
 
 	return (
-		<div className="relative flex flex-1 flex-col bg-void">
-			<AppShell
-				sidebar={
-					<Sidebar
-						activeView={activeView}
-						onActiveViewChange={handleActiveViewChange}
-						channelInput={comparison.channelInput}
-						onChannelInputChange={handleChannelInputChange}
-						canonicalSampleRate={comparison.canonicalSampleRate}
-						onSampleRateChange={setCanonicalSampleRate}
-						sources={sources}
-						sourceStatus={status}
-						onSourcesChange={handleSourcesChange}
-					/>
-				}
-				workspace={
-					<SyncProvider enabled={syncEnabled} initial={INITIAL_SYNC_STATE}>
-						<Workspace
-							sources={sources}
-							sourceAudio={sourceAudio}
-							derivedAudio={derivedAudio}
+		<WorkspacePlaybackProvider value={workspacePlayback}>
+			<div className="relative flex flex-1 flex-col bg-void">
+				<AppShell
+					sidebar={
+						<Sidebar
 							activeView={activeView}
+							onActiveViewChange={handleActiveViewChange}
 							channelInput={comparison.channelInput}
-							settings={viewSettings}
-							differenceA={comparison.differenceA}
-							differenceB={comparison.differenceB}
-							onDifferenceChange={setDifference}
-							onSourceOffsetChange={handleSourceOffsetChange}
-							onTransportControlChange={setTransportControl}
+							onChannelInputChange={handleChannelInputChange}
+							canonicalSampleRate={comparison.canonicalSampleRate}
+							onSampleRateChange={setCanonicalSampleRate}
+							sources={sources}
+							sourceStatus={status}
+							sourceErrors={sourceErrors}
+							onRetrySource={retrySource}
+							onSourcesChange={handleSourcesChange}
 						/>
-					</SyncProvider>
-				}
-				transport={
-					boundTransportControl.disabled ? undefined : (
-						<Transport
-							control={boundTransportControl}
-							volume={volume}
-							onVolumeChange={handleVolumeChange}
-							viewControls={
-								<TransportViewControls
-									activeView={activeView}
-									settings={viewSettings}
-									onSettingsChange={setViewSettings}
-									syncEnabled={syncEnabled}
-									onSyncEnabledChange={setSyncEnabled}
-								/>
-							}
-						/>
-					)
-				}
-			/>
-			{preparing && (
-				<div className="pointer-events-none absolute right-3 top-3 z-50 flex items-center gap-2 bg-chrome-raised px-2 py-1">
-					<span className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-secondary">
-						Preparing audio…
-					</span>
-				</div>
-			)}
-			{derivedOverlayMessage !== null && (
-				<div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center">
-					<span className="bg-chrome-raised px-3 py-1.5 font-technical text-sm uppercase tracking-[0.06em] text-chrome-text-secondary">
-						{derivedOverlayMessage}
-					</span>
-				</div>
-			)}
-		</div>
+					}
+					workspace={
+						<SyncProvider enabled={syncEnabled} initial={INITIAL_SYNC_STATE}>
+							<Workspace
+								sources={sources}
+								sourceAudio={sourceAudio}
+								derivedAudio={derivedAudio}
+								activeView={activeView}
+								channelInput={comparison.channelInput}
+								settings={viewSettings}
+								differenceA={comparison.differenceA}
+								differenceB={comparison.differenceB}
+								onDifferenceChange={setDifference}
+								onSourceOffsetChange={handleSourceOffsetChange}
+								onTransportControlChange={setTransportControl}
+							/>
+						</SyncProvider>
+					}
+					transport={
+						activeView === "frequency-distribution" || activeView === "vectorscope" ? undefined : (
+							<Transport
+								control={boundTransportControl}
+								playbackRate={playbackRate}
+								onPlaybackRateChange={setPlaybackRate}
+								looping={looping}
+								onLoopingChange={setLooping}
+								sampleRate={comparison.canonicalSampleRate ?? 48000}
+								volume={volume}
+								onVolumeChange={handleVolumeChange}
+								viewControls={
+									<TransportViewControls
+										activeView={activeView}
+										settings={viewSettings}
+										onSettingsChange={setViewSettings}
+										syncEnabled={syncEnabled}
+										onSyncEnabledChange={setSyncEnabled}
+									/>
+								}
+							/>
+						)
+					}
+				/>
+				{(preparing || derivedPreparing) && (
+					<div className="pointer-events-none absolute right-3 top-3 z-50 flex items-center gap-2 bg-chrome-raised px-2 py-1">
+						<span className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-secondary">
+							Preparing audio…
+						</span>
+					</div>
+				)}
+				{(derivedError ?? player.error) && (
+					<div
+						role="alert"
+						className="absolute right-3 top-10 z-50 max-w-md bg-chrome-raised p-3 text-sm text-chrome-text"
+					>
+						<p>{derivedError ?? player.error}</p>
+						<button
+							type="button"
+							className="mt-2 text-primary"
+							onClick={derivedError ? retryDerived : player.onPlayToggle}
+						>
+							Retry
+						</button>
+					</div>
+				)}
+				{derivedOverlayMessage !== null && (
+					<div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center">
+						<span className="bg-chrome-raised px-3 py-1.5 font-technical text-sm uppercase tracking-[0.06em] text-chrome-text-secondary">
+							{derivedOverlayMessage}
+						</span>
+					</div>
+				)}
+			</div>
+		</WorkspacePlaybackProvider>
 	);
 }

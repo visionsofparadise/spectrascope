@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Curtain } from "../spectral/Curtain";
 import { StripLayout, StripOverlays, StripSourceRender, useStripView } from "../spectral/stripView";
 import { curtainBounds, defaultCurtainPositions, stripClipPath } from "./sliderClip";
-import { useChromeSources } from "./viewAudio";
+import { useTimelineChromeSources } from "./viewAudio";
 import type { Source } from "../source";
 import type { AudioData } from "../spectral/types";
 import type { TransportControl } from "../Transport";
@@ -24,7 +24,7 @@ export function SliderView({
 	settings,
 	onTransportControlChange,
 }: SliderViewProps) {
-	const { renderableSources, chromeAudio, layerColor } = useChromeSources(sources, sourceAudio);
+	const { renderableSources, chromeAudio, layerColor } = useTimelineChromeSources(sources, sourceAudio);
 
 	const sourceCount = renderableSources.length;
 
@@ -53,7 +53,7 @@ export function SliderView({
 	const hasSources = sourceCount >= 2;
 
 	return (
-		<StripLayout view={view}>
+		<StripLayout channelInput={channelInput} view={view}>
 			{hasSources ? (
 				<>
 					<div className="absolute inset-0">

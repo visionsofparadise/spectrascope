@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { useWorkspacePlayback } from "./playback";
 import type { ReactNode } from "react";
 
 export interface SyncState {
@@ -41,18 +42,17 @@ interface SyncProviderProps {
 
 export function SyncProvider({ enabled, initial, children }: SyncProviderProps) {
 	const [state, setState] = useState<SyncState>(initial);
+	const playback = useWorkspacePlayback();
 
 	const setCursor = useCallback((next: number | null) => {
 		setState((previous) => ({ ...previous, cursor: next }));
 	}, []);
 
-	const setSelection = useCallback((next: { start: number; end: number } | null) => {
-		setState((previous) => ({ ...previous, selection: next }));
-	}, []);
+	const setSelection = playback.onSelectionChange;
 
 	const value = useMemo<SyncContextValue>(
-		() => ({ enabled, state, setCursor, setSelection }),
-		[enabled, state, setCursor, setSelection],
+		() => ({ enabled, state: { ...state, selection: playback.selection }, setCursor, setSelection }),
+		[enabled, state, playback.selection, setCursor, setSelection],
 	);
 
 	return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;
@@ -95,10 +95,6 @@ export function useViewSync(viewId: string, localInitial: SyncState): ViewSync {
 		setLocal((previous) => ({ ...previous, cursor: next }));
 	}, []);
 
-	const setLocalSelection = useCallback((next: { start: number; end: number } | null) => {
-		setLocal((previous) => ({ ...previous, selection: next }));
-	}, []);
-
 	if (shared.enabled) {
 		return {
 			synced: true,
@@ -112,8 +108,8 @@ export function useViewSync(viewId: string, localInitial: SyncState): ViewSync {
 	return {
 		synced: false,
 		cursor: local.cursor,
-		selection: local.selection,
+		selection: shared.state.selection,
 		setCursor: setLocalCursor,
-		setSelection: setLocalSelection,
+		setSelection: shared.setSelection,
 	};
 }

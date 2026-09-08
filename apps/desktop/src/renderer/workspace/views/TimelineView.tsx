@@ -5,8 +5,11 @@ import { hexToRgb255 } from "../spectral/colorUtil";
 import { GridOverlay } from "../spectral/GridOverlay";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
 import { trackPointerDrag } from "../spectral/pointerDrag";
+import { SelectionSurface } from "../spectral/SelectionSurface";
+import { useTransportPlayback } from "../spectral/viewScaffold";
 import { useTimeViewport } from "../useTimeViewport";
-import { computeTimelineExtent } from "./timelineExtent";
+import { placeAudioOnTimeline } from "../utils/placeAudioOnTimeline";
+import { clipWindowIntersection, computeTimelineExtent } from "./timelineExtent";
 import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
 import type { Source } from "../source";
 import type { SourceRenderCursorReadout } from "../SourceRender";
@@ -28,11 +31,13 @@ function TimelineTrack({
 	offsetMs,
 	windowStartMs,
 	windowEndMs,
+	committedStartMs,
+	committedEndMs,
+	freezeCompute,
 	extentEndMs,
 	fftSize,
 	hopOverlap,
 	channelInput,
-	gridOpacity,
 	waveformOpacity,
 	spectrogramOpacity,
 	draggable,
@@ -48,11 +53,13 @@ function TimelineTrack({
 	readonly offsetMs: number;
 	readonly windowStartMs: number;
 	readonly windowEndMs: number;
+	readonly committedStartMs: number;
+	readonly committedEndMs: number;
+	readonly freezeCompute: boolean;
 	readonly extentEndMs: number;
 	readonly fftSize: number;
 	readonly hopOverlap: number;
 	readonly channelInput: ChannelInput;
-	readonly gridOpacity: number;
 	readonly waveformOpacity: number;
 	readonly spectrogramOpacity: number;
 	readonly draggable: boolean;
@@ -141,57 +148,71 @@ function TimelineTrack({
 
 	const windowSpanMs = windowEndMs - windowStartMs;
 	const span = windowSpanMs > 0 ? windowSpanMs : 1;
-	const leftPct = ((offsetMs - windowStartMs) / span) * 100;
-	const widthPct = (durationMs / span) * 100;
+	const liveWindow = clipWindowIntersection(offsetMs, durationMs, { startMs: windowStartMs, endMs: windowEndMs });
+	const computeWindow = clipWindowIntersection(source.timelineOffsetMs, durationMs, {
+		startMs: committedStartMs,
+		endMs: committedEndMs,
+	});
+	const leftPct = liveWindow ? ((offsetMs + liveWindow.startMs - windowStartMs) / span) * 100 : 0;
+	const widthPct = liveWindow ? ((liveWindow.endMs - liveWindow.startMs) / span) * 100 : 0;
 
 	return (
 		<div ref={trackRef} className="relative min-h-0 flex-1 overflow-hidden">
-			<div className="absolute inset-y-0" style={{ left: `${leftPct}%`, width: `${widthPct}%` }}>
-				<SourceRender
-					source={source}
-					audioData={audioData}
-					startMs={0}
-					endMs={durationMs}
-					fftSize={fftSize}
-					hopOverlap={hopOverlap}
-					channelInput={channelInput}
-					waveformOpacity={waveformOpacity}
-					spectrogramOpacity={spectrogramOpacity}
-					onCursorMove={onCursorMove}
-				/>
-				<GridOverlay startMs={0} endMs={durationMs} opacity={gridOpacity} />
-				<div
-					aria-hidden
-					className={`pointer-events-none absolute inset-y-0 left-0 w-0.5 ${
-						dragging ? "bg-primary" : "bg-chrome-text/60"
-					}`}
-				/>
-				{draggable && (
-					<button
-						type="button"
-						onPointerDown={handlePointerDown}
-						onKeyDown={handleKeyDown}
-						aria-label={`Timeline offset for ${source.name}`}
-						role="slider"
-						aria-valuemin={0}
-						aria-valuemax={Math.round(extentEndMs)}
-						aria-valuenow={Math.round(offsetMs)}
-						aria-valuetext={`${(offsetMs / 1000).toFixed(2)} seconds`}
-						className={`absolute top-0 left-0 right-0 flex h-4 cursor-ew-resize items-center gap-1 px-1.5 outline-none focus-visible:ring-1 focus-visible:ring-primary ${
-							dragging ? "bg-primary/30" : "bg-chrome-raised/70 hover:bg-chrome-raised"
-						}`}
-					>
-						<span aria-hidden className="flex items-center gap-0.5">
-							<span className="block h-2 w-px bg-chrome-text/70" />
-							<span className="block h-2 w-px bg-chrome-text/70" />
-							<span className="block h-2 w-px bg-chrome-text/70" />
-						</span>
-						<span className="truncate font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-secondary">
-							{source.name}
-						</span>
-					</button>
-				)}
-			</div>
+			{liveWindow && (
+				<div className="absolute inset-y-0" style={{ left: `${leftPct}%`, width: `${widthPct}%` }}>
+					{computeWindow && (
+						<SourceRender
+							source={source}
+							audioData={audioData}
+							startMs={computeWindow.startMs}
+							endMs={computeWindow.endMs}
+							liveStartMs={liveWindow.startMs}
+							liveEndMs={liveWindow.endMs}
+							readoutTimeOffsetMs={offsetMs}
+							freezeCompute={freezeCompute}
+							fftSize={fftSize}
+							hopOverlap={hopOverlap}
+							channelInput={channelInput}
+							waveformOpacity={waveformOpacity}
+							spectrogramOpacity={spectrogramOpacity}
+							onCursorMove={onCursorMove}
+						/>
+					)}
+					{liveWindow.startMs === 0 && (
+						<div
+							aria-hidden
+							className={`pointer-events-none absolute inset-y-0 left-0 w-0.5 ${
+								dragging ? "bg-primary" : "bg-chrome-text/60"
+							}`}
+						/>
+					)}
+					{draggable && (
+						<button
+							type="button"
+							onPointerDown={handlePointerDown}
+							onKeyDown={handleKeyDown}
+							aria-label={`Timeline offset for ${source.name}`}
+							role="slider"
+							aria-valuemin={0}
+							aria-valuemax={Math.round(extentEndMs)}
+							aria-valuenow={Math.round(offsetMs)}
+							aria-valuetext={`${(offsetMs / 1000).toFixed(2)} seconds`}
+							className={`absolute top-0 left-0 right-0 flex h-4 cursor-ew-resize items-center gap-1 px-1.5 outline-none focus-visible:ring-1 focus-visible:ring-primary ${
+								dragging ? "bg-primary/30" : "bg-chrome-raised/70 hover:bg-chrome-raised"
+							}`}
+						>
+							<span aria-hidden className="flex items-center gap-0.5">
+								<span className="block h-2 w-px bg-chrome-text/70" />
+								<span className="block h-2 w-px bg-chrome-text/70" />
+								<span className="block h-2 w-px bg-chrome-text/70" />
+							</span>
+							<span className="truncate font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-secondary">
+								{source.name}
+							</span>
+						</button>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }
@@ -221,8 +242,6 @@ export function TimelineView({
 	onSourceOffsetChange,
 	onTransportControlChange,
 }: TimelineViewProps) {
-	const [playing, setPlaying] = useState(false);
-	const [positionSec, setPositionSec] = useState(0);
 	const [cursorReadout, setCursorReadout] = useState<SourceRenderCursorReadout>(DEFAULT_CURSOR);
 	const [drag, setDrag] = useState<TimelineDrag | null>(null);
 
@@ -240,66 +259,57 @@ export function TimelineView({
 			),
 		[renderableSources, drag],
 	);
+	const minimapDurationMs = useMemo(
+		() =>
+			computeTimelineExtent(
+				renderableSources.map(({ source, audioData }) => ({
+					id: source.id,
+					offsetMs: source.timelineOffsetMs,
+					durationMs: audioData.durationMs,
+				})),
+				null,
+			).endMs,
+		[renderableSources],
+	);
 
-	const viewport = useTimeViewport(extent.startMs, extent.endMs);
-	const windowStartMs = viewport.committedStartMs;
-	const windowEndMs = viewport.committedEndMs;
+	const viewport = useTimeViewport(extent.startMs, extent.endMs, drag !== null);
+	const windowStartMs = viewport.startMs;
+	const windowEndMs = viewport.endMs;
 
-	const extentSpanMs = extent.endMs - extent.startMs;
 	const durationSec = extent.endMs / 1000;
 
 	const setViewportToFraction = useCallback(
 		(fraction: number) => {
-			const centerMs = extent.startMs + fraction * extentSpanMs;
+			const centerMs = fraction * minimapDurationMs;
 			const span = viewport.endMs - viewport.startMs;
 
 			viewport.setViewport({ startMs: centerMs - span / 2, endMs: centerMs + span / 2 });
 		},
-		[extent.startMs, extentSpanMs, viewport],
+		[minimapDurationMs, viewport],
 	);
 
-	const viewStartFrac = extentSpanMs > 0 ? (windowStartMs - extent.startMs) / extentSpanMs : 0;
-	const viewEndFrac = extentSpanMs > 0 ? (windowEndMs - extent.startMs) / extentSpanMs : 1;
+	const viewStartFrac = minimapDurationMs > 0 ? Math.max(0, Math.min(1, windowStartMs / minimapDurationMs)) : 0;
+	const viewEndFrac = minimapDurationMs > 0 ? Math.max(0, Math.min(1, windowEndMs / minimapDurationMs)) : 1;
 
-	const minimapAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
+	const firstAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
+	const firstOffsetMs = renderableSources[0]?.source.timelineOffsetMs ?? 0;
+	const minimapAudio = useMemo(
+		() => placeAudioOnTimeline(firstAudio, firstOffsetMs, minimapDurationMs),
+		[firstAudio, firstOffsetMs, minimapDurationMs],
+	);
 	const minimapColor = renderableSources[0]?.source.layerColor ?? {
 		primary: "#B8B8C0",
 		secondary: "#44444C",
 	};
 
-	const anySoloed = sources.some((source) => source.soloed);
-	const audibleSources = anySoloed
-		? sources.filter((source) => source.soloed)
-		: sources.filter((source) => !source.muted && source.visible);
-
-	// eslint-disable-next-line @typescript-eslint/no-meaningless-void-operator
-	void audibleSources;
-
-	const onPlayToggle = useCallback(() => {
-		setPlaying((previous) => !previous);
-	}, []);
-
-	const onSeek = useCallback(
-		(sec: number) => {
-			setPositionSec(Math.max(0, Math.min(durationSec, sec)));
-		},
-		[durationSec],
-	);
+	const playback = useTransportPlayback(durationSec);
 
 	const transportControl = useMemo<TransportControl>(
 		() => ({
-			playing,
-			positionSec,
-			durationSec,
-			onPlayToggle,
-			onSeek,
+			...playback,
 			cursorReadout,
-			selectionInSec: durationSec * 0.25,
-			selectionOutSec: durationSec * 0.45,
-			selectionInAmp: "-19.7 dB",
-			selectionOutAmp: "-24.3 dB",
 		}),
-		[playing, positionSec, durationSec, onPlayToggle, onSeek, cursorReadout],
+		[playback, cursorReadout],
 	);
 
 	useEffect(() => {
@@ -309,7 +319,7 @@ export function TimelineView({
 	}, [onTransportControlChange, transportControl]);
 
 	const windowSpanMs = windowEndMs - windowStartMs;
-	const playheadFrac = windowSpanMs > 0 ? (positionSec * 1000 - windowStartMs) / windowSpanMs : 0;
+	const playheadFrac = windowSpanMs > 0 ? (playback.positionSec * 1000 - windowStartMs) / windowSpanMs : 0;
 	const playheadVisible = playheadFrac >= 0 && playheadFrac <= 1;
 
 	return (
@@ -324,20 +334,20 @@ export function TimelineView({
 			>
 				<TimeRuler startMs={windowStartMs} endMs={windowEndMs} />
 
-				<div ref={viewport.wheelHandlers.ref} className="relative flex flex-col overflow-hidden bg-void">
+				<SelectionSurface
+					ref={viewport.wheelHandlers.ref}
+					startMs={windowStartMs}
+					endMs={windowEndMs}
+					seekOnClick
+					className="relative flex flex-col overflow-hidden bg-void"
+				>
 					{renderableSources.length === 0 ? (
 						<div className="flex h-full items-center justify-center">
 							<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
 						</div>
 					) : (
 						<>
-							<div
-								className="absolute inset-0 flex flex-col"
-								style={{
-									transform: viewport.transform,
-									transformOrigin: "left",
-								}}
-							>
+							<div className="absolute inset-0 flex flex-col">
 								{renderableSources.map(({ source, audioData }) => (
 									<TimelineTrack
 										key={source.id}
@@ -350,11 +360,17 @@ export function TimelineView({
 										}
 										windowStartMs={windowStartMs}
 										windowEndMs={windowEndMs}
+										committedStartMs={viewport.committedStartMs}
+										committedEndMs={viewport.committedEndMs}
+										freezeCompute={
+											drag !== null ||
+											viewport.startMs !== viewport.committedStartMs ||
+											viewport.endMs !== viewport.committedEndMs
+										}
 										extentEndMs={extent.endMs}
 										fftSize={settings.fftSize}
 										hopOverlap={settings.hopOverlap}
 										channelInput={channelInput}
-										gridOpacity={settings.gridOpacity}
 										waveformOpacity={settings.waveformOpacity}
 										spectrogramOpacity={settings.spectrogramOpacity}
 										draggable={onSourceOffsetChange !== undefined}
@@ -370,6 +386,7 @@ export function TimelineView({
 									/>
 								))}
 							</div>
+							<GridOverlay startMs={windowStartMs} endMs={windowEndMs} opacity={settings.gridOpacity} />
 							{playheadVisible && (
 								<div
 									aria-hidden
@@ -379,13 +396,14 @@ export function TimelineView({
 							)}
 						</>
 					)}
-				</div>
+				</SelectionSurface>
 
 				<MinimapDisplay
 					audioData={minimapAudio}
 					viewStartFrac={viewStartFrac}
 					viewEndFrac={viewEndFrac}
 					waveformColor={hexToRgb255(minimapColor.primary)}
+					channelInput={channelInput}
 					onScrubToFraction={setViewportToFraction}
 				/>
 			</div>

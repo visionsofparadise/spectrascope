@@ -1,23 +1,14 @@
+import { frequencyToFraction } from "../utils/frequencyScale";
+import { SelectionSurface } from "./SelectionSurface";
 import { FREQUENCY_TICK_LABELS, majorTickIntervalMs } from "./timeTicks";
 
 const FREQ_LABELS = FREQUENCY_TICK_LABELS.filter((tick) => tick.hz >= 100);
 
-const FREQ_MIN = 20;
-const FREQ_MAX = 22050;
-
-function freqToMel(hz: number): number {
-	return 2595 * Math.log10(1 + hz / 700);
+interface FrequencyAxisProps {
+	readonly sampleRate: number;
 }
 
-function freqToY(hz: number): number {
-	const melMin = freqToMel(FREQ_MIN);
-	const melMax = freqToMel(FREQ_MAX);
-	const melHz = freqToMel(hz);
-
-	return 1 - (melHz - melMin) / (melMax - melMin);
-}
-
-export function FrequencyAxis() {
+export function FrequencyAxis({ sampleRate }: FrequencyAxisProps) {
 	return (
 		<div
 			className="relative bg-void font-technical text-chrome-text-secondary"
@@ -27,8 +18,8 @@ export function FrequencyAxis() {
 				fontVariantNumeric: "tabular-nums",
 			}}
 		>
-			{FREQ_LABELS.map(({ hz, label }) => {
-				const yPct = freqToY(hz) * 100;
+			{FREQ_LABELS.filter(({ hz }) => hz <= sampleRate / 2).map(({ hz, label }) => {
+				const yPct = frequencyToFraction(hz, sampleRate) * 100;
 
 				return (
 					<div
@@ -109,13 +100,13 @@ interface TimeRulerProps {
 	readonly endMs: number;
 }
 
-function formatRulerTime(ms: number): string {
-	const totalSeconds = ms / 1000;
-	const minutes = Math.floor(totalSeconds / 60);
-	const seconds = Math.floor(totalSeconds % 60);
-	const frac = Math.floor((totalSeconds * 10) % 10);
+function formatRulerTime(ms: number, majorMs: number): string {
+	const roundedMs = Math.round(ms);
+	const minutes = Math.floor(roundedMs / 60000);
+	const precision = majorMs >= 100 ? 1 : majorMs >= 10 ? 2 : 3;
+	const seconds = ((roundedMs % 60000) / 1000).toFixed(precision);
 
-	return `${minutes}:${seconds.toString().padStart(2, "0")}.${frac}`;
+	return `${minutes}:${seconds.padStart(3 + precision, "0")}`;
 }
 
 export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
@@ -128,22 +119,26 @@ export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
 	const majorTicks: Array<{ timeMs: number; label: string }> = [];
 	const firstMajor = Math.ceil(startMs / majorMs) * majorMs;
 
-	for (let tick = firstMajor; tick <= endMs; tick += majorMs) {
-		majorTicks.push({ timeMs: tick, label: formatRulerTime(tick) });
+	for (let tick = firstMajor; spanMs > 0 && tick <= endMs; tick += majorMs) {
+		majorTicks.push({ timeMs: tick, label: formatRulerTime(tick, majorMs) });
 	}
 
 	const minorTicks: Array<number> = [];
 	const firstMinor = Math.ceil(startMs / minorMs) * minorMs;
 
-	for (let tick = firstMinor; tick <= endMs; tick += minorMs) {
-		if (tick % majorMs !== 0) {
+	for (let tick = firstMinor; spanMs > 0 && tick <= endMs; tick += minorMs) {
+		if (Math.abs(tick / majorMs - Math.round(tick / majorMs)) > 0.000001) {
 			minorTicks.push(tick);
 		}
 	}
 
 	return (
-		<div
-			className="relative h-8 bg-void font-technical text-chrome-text-secondary"
+		<SelectionSurface
+			startMs={startMs}
+			endMs={endMs}
+			seekOnClick
+			aria-label="Timeline ruler: click to seek, Shift-drag to select"
+			className="relative h-8 cursor-crosshair bg-void font-technical text-chrome-text-secondary"
 			style={{
 				fontSize: "var(--text-xs)",
 				letterSpacing: "0.02em",
@@ -174,7 +169,7 @@ export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
 			})}
 
 			<div className="absolute bottom-0 left-0 right-0 h-px bg-chrome-border" />
-		</div>
+		</SelectionSurface>
 	);
 }
 

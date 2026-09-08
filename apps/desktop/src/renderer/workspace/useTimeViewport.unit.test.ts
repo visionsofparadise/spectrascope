@@ -1,9 +1,29 @@
 import { describe, expect, it } from "vitest";
 import type { TimeWindow } from "./useTimeViewport";
-import { computeWindowTransform, panWindow, zoomWindow } from "./useTimeViewport";
+import { computeWindowTransform, panWindow, reconcileToExtent, zoomWindow } from "./useTimeViewport";
 
 const EXTENT: TimeWindow = { startMs: 0, endMs: 1000 };
 const MIN_WINDOW_MS = 10;
+
+describe("reconcileToExtent", () => {
+	it("follows a growing whole extent", () => {
+		expect(reconcileToExtent(EXTENT, EXTENT, { startMs: 100, endMs: 2000 })).toEqual({ startMs: 100, endMs: 2000 });
+	});
+
+	it("keeps a zoomed window stable while the extent grows", () => {
+		expect(reconcileToExtent({ startMs: 200, endMs: 400 }, EXTENT, { startMs: 0, endMs: 2000 })).toEqual({
+			startMs: 200,
+			endMs: 400,
+		});
+	});
+
+	it("clamps a zoomed window when a clip moves inside it", () => {
+		expect(reconcileToExtent({ startMs: 800, endMs: 1000 }, EXTENT, { startMs: 0, endMs: 900 })).toEqual({
+			startMs: 700,
+			endMs: 900,
+		});
+	});
+});
 
 describe("panWindow", () => {
 	it("shifts the window by a fraction of its span", () => {

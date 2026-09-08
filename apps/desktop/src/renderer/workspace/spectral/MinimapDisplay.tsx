@@ -4,13 +4,14 @@ import { ComputeProgress } from "./ComputeProgress";
 import { heldComputeResult } from "./computeResult";
 import { useContainerSize } from "./useContainerSize";
 import type { AudioData } from "./types";
-import type { SpectralOptions } from "spectral-display";
+import type { ChannelInput, SpectralOptions } from "spectral-display";
 
 interface MinimapDisplayProps {
 	readonly audioData: AudioData;
 	readonly viewStartFrac: number;
 	readonly viewEndFrac: number;
 	readonly waveformColor: readonly [number, number, number];
+	readonly channelInput?: ChannelInput;
 	/**
 	 * Click / drag on the strip reports the pointer's `[0, 1]` fraction of the
 	 * full duration. The view recentres its viewport window on that fraction.
@@ -24,6 +25,7 @@ export function MinimapDisplay({
 	viewStartFrac,
 	viewEndFrac,
 	waveformColor,
+	channelInput = "mono",
 	onScrubToFraction,
 }: MinimapDisplayProps) {
 	const minimapRef = useRef<HTMLDivElement>(null);
@@ -78,9 +80,11 @@ export function MinimapDisplay({
 			config: {
 				spectrogram: false,
 				loudness: false,
+				truePeak: false,
+				channelInput,
 			},
 		}),
-		[audioData, width, height],
+		[audioData, width, height, channelInput],
 	);
 
 	const computeResult = useSpectralCompute(spectralOptions);

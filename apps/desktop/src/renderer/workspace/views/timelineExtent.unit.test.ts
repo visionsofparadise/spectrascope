@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TimelineClip } from "./timelineExtent";
-import { computeTimelineExtent } from "./timelineExtent";
+import { clipWindowIntersection, computeTimelineExtent } from "./timelineExtent";
 
 const CLIPS: ReadonlyArray<TimelineClip> = [
 	{ id: "a", offsetMs: 2000, durationMs: 3000 },
@@ -35,5 +35,34 @@ describe("computeTimelineExtent", () => {
 
 		// b moved to 3000; a is now the earliest start (2000) and still latest end.
 		expect(result).toEqual({ startMs: 2000, endMs: 5000 });
+	});
+});
+
+describe("clipWindowIntersection", () => {
+	it.each([
+		[0, 10000, { startMs: 0, endMs: 10000 }, { startMs: 0, endMs: 10000 }],
+		[2000, 3000, { startMs: 0, endMs: 10000 }, { startMs: 0, endMs: 3000 }],
+		[2000, 3000, { startMs: 2500, endMs: 3500 }, { startMs: 500, endMs: 1500 }],
+		[2000, 3000, { startMs: 1000, endMs: 2500 }, { startMs: 0, endMs: 500 }],
+		[2000, 3000, { startMs: 4500, endMs: 6000 }, { startMs: 2500, endMs: 3000 }],
+	] as const)("scopes offset %i duration %i to the viewport", (offsetMs, durationMs, window, expected) => {
+		expect(clipWindowIntersection(offsetMs, durationMs, window)).toEqual(expected);
+	});
+
+	it.each([
+		{ startMs: 0, endMs: 2000 },
+		{ startMs: 0, endMs: 1000 },
+		{ startMs: 5000, endMs: 6000 },
+		{ startMs: 6000, endMs: 7000 },
+		{ startMs: 3000, endMs: 3000 },
+	])("skips offscreen and touching windows: %s", (window) => {
+		expect(clipWindowIntersection(2000, 3000, window)).toBeNull();
+	});
+
+	it("keeps a one-hour clip scoped to a ten-millisecond viewport", () => {
+		const result = clipWindowIntersection(0, 3600000, { startMs: 1800000, endMs: 1800010 });
+
+		expect(result).toEqual({ startMs: 1800000, endMs: 1800010 });
+		expect(clipWindowIntersection(0, 0, { startMs: 0, endMs: 1000 })).toBeNull();
 	});
 });

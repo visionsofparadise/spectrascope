@@ -5,21 +5,19 @@ import { ComputeProgress } from "./ComputeProgress";
 import { heldComputeResult } from "./computeResult";
 import type { LayerColor } from "../layers";
 import type { AudioData } from "./types";
-import type { SpectralOptions } from "spectral-display";
+import type { ChannelInput, SpectralOptions } from "spectral-display";
 
 const STRIP_WIDTH = 36;
-
-const VP_TOP_FRAC = 0.18;
-const VP_BOTTOM_FRAC = 0.78;
 
 interface FrequencyMinimapProps {
 	readonly audioData: AudioData;
 	readonly startMs: number;
 	readonly endMs: number;
 	readonly layerColor: LayerColor;
+	readonly channelInput: ChannelInput;
 }
 
-export function FrequencyMinimap({ audioData, startMs, endMs, layerColor }: FrequencyMinimapProps) {
+export function FrequencyMinimap({ audioData, startMs, endMs, layerColor, channelInput }: FrequencyMinimapProps) {
 	const colormap = useMemo(() => buildLayerColormap(layerColor), [layerColor]);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [containerHeight, setContainerHeight] = useState(400);
@@ -57,17 +55,16 @@ export function FrequencyMinimap({ audioData, startMs, endMs, layerColor }: Freq
 				colormap,
 				waveform: false,
 				loudness: false,
+				truePeak: false,
+				channelInput,
 			},
 		}),
-		[audioData, startMs, endMs, containerHeight, colormap],
+		[audioData, startMs, endMs, containerHeight, colormap, channelInput],
 	);
 
 	const computeResult = useSpectralCompute(spectralOptions);
 
 	const renderable = heldComputeResult(computeResult);
-
-	const vpTopPct = VP_TOP_FRAC * 100;
-	const vpHeightPct = (VP_BOTTOM_FRAC - VP_TOP_FRAC) * 100;
 
 	return (
 		<div ref={containerRef} className="relative w-8 bg-void">
@@ -77,14 +74,9 @@ export function FrequencyMinimap({ audioData, startMs, endMs, layerColor }: Freq
 				</div>
 			)}
 			{computeResult.status === "computing" && computeResult.previous === null && <ComputeProgress />}
-			<div className="absolute inset-x-0 top-0 bg-black/65" style={{ height: `${vpTopPct}%` }} />
 			<div
-				className="absolute inset-x-0 bottom-0 bg-black/65"
-				style={{ height: `${(1 - VP_BOTTOM_FRAC) * 100}%` }}
-			/>
-			<div
-				className="absolute inset-x-0 cursor-ns-resize border-2 border-data-selection-border"
-				style={{ top: `${vpTopPct}%`, height: `${vpHeightPct}%` }}
+				aria-label="Full frequency range"
+				className="pointer-events-none absolute inset-0 border border-data-selection-border"
 			/>
 		</div>
 	);

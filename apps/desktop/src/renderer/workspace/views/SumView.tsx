@@ -44,7 +44,7 @@ export function SumView({ sources, derivedAudio, channelInput, settings, onTrans
 	);
 
 	return (
-		<StripLayout view={view}>
+		<StripLayout channelInput={channelInput} view={view}>
 			{visibleSources.length === 0 ? (
 				<div className="flex h-full items-center justify-center">
 					<p className="font-technical text-sm text-chrome-text-dim">No visible sources</p>

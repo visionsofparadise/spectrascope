@@ -4,7 +4,7 @@ import { ChartLayout, useChartView, type ChartAxis, type ChartCanvasBaseProps } 
 import { useReportComputeState, type ComputeState } from "../spectral/firstComputeProgress";
 import { useTraceCompute } from "../spectral/traceCompute";
 import { buildPolylineSegments } from "./chartTrace";
-import { useChromeSources } from "./viewAudio";
+import { useTimelineChromeSources } from "./viewAudio";
 import type { Source } from "../source";
 import type { AudioData } from "../spectral/types";
 import type { TransportControl } from "../Transport";
@@ -108,7 +108,7 @@ function ChartCanvas({ chart, renderableSources }: ChartCanvasBaseProps) {
 }
 
 export function CorrelationView({ sources, sourceAudio, onTransportControlChange }: CorrelationViewProps) {
-	const { renderableSources, chromeAudio, layerColor } = useChromeSources(sources, sourceAudio);
+	const { renderableSources, chromeAudio, layerColor } = useTimelineChromeSources(sources, sourceAudio);
 
 	const chart = useChartView(chromeAudio, layerColor, CORR_AXIS, onTransportControlChange);
 

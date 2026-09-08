@@ -1,10 +1,11 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SpectrogramCanvas, WaveformCanvas, useSpectralCompute } from "spectral-display";
 import { buildLayerColormap } from "./layers";
 import { hexToRgb255 } from "./spectral/colorUtil";
 import { ComputeProgress } from "./spectral/ComputeProgress";
 import { useContainerSize } from "./spectral/useContainerSize";
 import { computeWindowTransform } from "./useTimeViewport";
+import { fractionToFrequency } from "./utils/frequencyScale";
 import type { Source } from "./source";
 import type { AudioData } from "./spectral/types";
 import type { ChannelInput, ColormapDefinition, ComputeResultReady, SpectralOptions } from "spectral-display";
@@ -20,22 +21,12 @@ export interface SourceRenderProps {
 	readonly audioData: AudioData;
 	readonly startMs: number;
 	readonly endMs: number;
-	/**
-	 * The view's live (gesture-following) window, mapped onto the held render via
-	 * `computeWindowTransform`. Optional — defaults to the committed
-	 * `startMs`/`endMs` (identity transform) for views whose live window equals
-	 * the compute window (e.g. Timeline this plan).
-	 */
 	readonly liveStartMs?: number;
 	readonly liveEndMs?: number;
+	readonly readoutTimeOffsetMs?: number;
+	readonly freezeCompute?: boolean;
 	readonly fftSize: number;
 	readonly hopOverlap: number;
-	/**
-	 * Which derived signal feeds the spectrogram FFT — `"mono"` (channel sum),
-	 * `"mid"` (`(L+R)/2`), or `"side"` (`(L-R)/2`). A *compute* parameter:
-	 * changing it re-runs the spectrogram pipeline (it must therefore be in the
-	 * `spectralOptions` `useMemo` config AND its dependency array).
-	 */
 	readonly channelInput: ChannelInput;
 	readonly opacity?: number;
 	readonly clipPath?: string;
@@ -59,6 +50,8 @@ export function SourceRender({
 	endMs,
 	liveStartMs,
 	liveEndMs,
+	readoutTimeOffsetMs = 0,
+	freezeCompute = false,
 	fftSize,
 	hopOverlap,
 	channelInput,
@@ -89,7 +82,9 @@ export function SourceRender({
 			const xFrac = (ev.clientX - rect.left) / rect.width;
 			const yFrac = (ev.clientY - rect.top) / rect.height;
 
-			const timeMs = startMs + xFrac * (endMs - startMs);
+			const cursorStartMs = liveStartMs ?? startMs;
+			const cursorEndMs = liveEndMs ?? endMs;
+			const timeMs = readoutTimeOffsetMs + cursorStartMs + xFrac * (cursorEndMs - cursorStartMs);
 			const totalSec = timeMs / 1000;
 			const mins = Math.floor(totalSec / 60);
 			const secs = Math.floor(totalSec % 60);
@@ -98,14 +93,12 @@ export function SourceRender({
 				.toString()
 				.padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
 
-			const logMin = Math.log10(20);
-			const logMax = Math.log10(20000);
-			const freqHz = Math.pow(10, logMax - yFrac * (logMax - logMin));
+			const freqHz = fractionToFrequency(yFrac, audioData.sampleRate);
 			const freqStr = freqHz >= 1000 ? `${(freqHz / 1000).toFixed(1)} kHz` : `${Math.round(freqHz)} Hz`;
 
 			onCursorMove({ time: timeStr, freq: freqStr, amp: "— dB" });
 		},
-		[onCursorMove, startMs, endMs],
+		[onCursorMove, startMs, endMs, liveStartMs, liveEndMs, readoutTimeOffsetMs, audioData.sampleRate],
 	);
 
 	const spectralOptions = useMemo<SpectralOptions>(
@@ -143,12 +136,20 @@ export function SourceRender({
 		],
 	);
 
-	const computeResult = useSpectralCompute(spectralOptions);
+	const computeOptionsRef = useRef(spectralOptions);
+
+	if (!freezeCompute) computeOptionsRef.current = spectralOptions;
+
+	const computeResult = useSpectralCompute(computeOptionsRef.current);
 
 	const incoming = computeResult.status === "ready" ? computeResult : null;
 
 	const [held, setHeld] = useState<ComputeResultReady | null>(null);
-	const front = held;
+	const front = computeResult.status === "idle" ? null : held;
+
+	useEffect(() => {
+		if (computeResult.status === "idle") setHeld(null);
+	}, [computeResult.status]);
 
 	const drawCountRef = useRef(0);
 	const backResultRef = useRef<ComputeResultReady | null>(null);
@@ -228,6 +229,20 @@ export function SourceRender({
 			))}
 			{front === null && computeResult.status === "computing" && (
 				<ComputeProgress fraction={computeResult.fraction} />
+			)}
+			{front !== null && front.spectrogramTexture === null && spectrogramOpacity > 0 && (
+				<div className="pointer-events-none absolute bottom-1 left-2 font-technical text-[length:var(--text-xs)] text-chrome-text-secondary">
+					This time range is shorter than the selected FFT window.
+				</div>
+			)}
+			{computeResult.status === "error" && (
+				<div
+					role="status"
+					className="pointer-events-none absolute bottom-1 left-2 font-technical text-[length:var(--text-xs)] text-chrome-text-secondary"
+				>
+					{front ? "Analysis update failed: " : "Analysis unavailable: "}
+					{computeResult.error.message}
+				</div>
 			)}
 		</div>
 	);

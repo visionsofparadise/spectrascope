@@ -7,6 +7,8 @@ export interface Player {
 
 	setVolume(volume: number): void;
 
+	setPlaybackRate(rate: number): void;
+
 	readonly durationSec: number;
 	readonly playing: boolean;
 	readonly positionSec: number;

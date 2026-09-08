@@ -4,6 +4,7 @@ import { hexToRgb255 } from "./colorUtil";
 import { ComputeProgress } from "./ComputeProgress";
 import { useFirstComputeProgress } from "./firstComputeProgress";
 import { MinimapDisplay } from "./MinimapDisplay";
+import { SelectionSurface } from "./SelectionSurface";
 import { usePublishedTransportControl, useTransportPlayback, useViewportScrub } from "./viewScaffold";
 import type { LayerColor } from "../layers";
 import type { TransportControl, TransportCursorReadout } from "../Transport";
@@ -37,7 +38,7 @@ export function useChartView(
 		amp: axis.emptyValue,
 	});
 
-	const { committedStartMs, committedEndMs } = scrub.viewport;
+	const { startMs, endMs } = scrub.viewport;
 
 	const handleChartMouseMove = useCallback(
 		(event: React.MouseEvent<HTMLDivElement>) => {
@@ -48,7 +49,7 @@ export function useChartView(
 			const xFrac = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
 			const yFrac = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
 
-			const totalSec = (committedStartMs + xFrac * (committedEndMs - committedStartMs)) / 1000;
+			const totalSec = (startMs + xFrac * (endMs - startMs)) / 1000;
 			const mins = Math.floor(totalSec / 60);
 			const secs = Math.floor(totalSec % 60);
 			const ms = Math.floor((totalSec % 1) * 1000);
@@ -58,7 +59,7 @@ export function useChartView(
 
 			setCursorReadout({ time, amp: axis.formatValue(axis.max - yFrac * (axis.max - axis.min)) });
 		},
-		[committedStartMs, committedEndMs, axis],
+		[startMs, endMs, axis],
 	);
 
 	const control = useMemo<TransportControl>(
@@ -90,13 +91,15 @@ export function ChartLayout({ chart, ticks, isEmpty, children }: ChartLayoutProp
 				<div className="flex shrink-0">
 					<div className="w-10 shrink-0 bg-void" />
 					<div className="min-w-0 flex-1">
-						<TimeRuler startMs={chart.viewport.committedStartMs} endMs={chart.viewport.committedEndMs} />
+						<TimeRuler startMs={chart.viewport.startMs} endMs={chart.viewport.endMs} />
 					</div>
 				</div>
 				<div className="flex min-h-0 flex-1">
 					<LinearDbAxis ticks={ticks} />
-					<div
+					<SelectionSurface
 						ref={chart.viewport.wheelHandlers.ref}
+						startMs={chart.viewport.startMs}
+						endMs={chart.viewport.endMs}
 						className="relative min-w-0 flex-1"
 						onMouseMove={chart.handleChartMouseMove}
 					>
@@ -110,7 +113,7 @@ export function ChartLayout({ chart, ticks, isEmpty, children }: ChartLayoutProp
 								{chart.progress.firstComputing && <ComputeProgress fraction={chart.progress.fraction} />}
 							</>
 						)}
-					</div>
+					</SelectionSurface>
 				</div>
 				<div className="flex shrink-0">
 					<div className="w-10 shrink-0 bg-void" />

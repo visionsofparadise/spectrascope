@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { eventToTime } from "../views/viewCursor";
+import { SelectionSurface } from "./SelectionSurface";
 
 interface CursorSurfaceProps {
 	readonly startMs: number;
@@ -56,7 +57,9 @@ export function CursorSurface({
 	);
 
 	return (
-		<div
+		<SelectionSurface
+			startMs={startMs}
+			endMs={endMs}
 			ref={surfaceRef}
 			className={className}
 			role="slider"
@@ -69,6 +72,6 @@ export function CursorSurface({
 			onKeyDown={handleKeyDown}
 		>
 			{children}
-		</div>
+		</SelectionSurface>
 	);
 }

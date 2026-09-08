@@ -18,13 +18,10 @@ const HOP_SELECT_OPTIONS = HOP_OPTIONS.map((value, index) => ({
 	value,
 	label: HOP_LABELS[index] ?? value,
 }));
-const MEL_SELECT_OPTIONS = [{ value: "mel", label: "Mel" }];
 const METRIC_SELECT_OPTIONS = METRICS.map((metric) => ({
 	value: metric.id,
 	label: metric.label,
 }));
-
-const noop = () => {};
 
 function KnobControl({
 	value,
@@ -139,6 +136,7 @@ export function TransportViewControls({
 	if (isSpectralGroup) {
 		return (
 			<div className="flex items-center gap-3.5">
+				<SyncToggle enabled={syncEnabled} onEnabledChange={onSyncEnabledChange} />
 				<KnobControl
 					value={settings.gridOpacity}
 					icon="lucide:grid-3x3"
@@ -168,7 +166,7 @@ export function TransportViewControls({
 				<LayerOpacityKnobs settings={settings} onSettingsChange={onSettingsChange} />
 
 				<div className="flex flex-col items-stretch gap-0.5 min-[1400px]:flex-row min-[1400px]:items-center min-[1400px]:gap-1">
-					<Select variant="chip" value="mel" options={MEL_SELECT_OPTIONS} onChange={noop} />
+					<span className="px-2 font-technical text-[length:var(--text-sm)] text-chrome-text-secondary">Mel</span>
 					<Select
 						variant="chip"
 						value={String(settings.fftSize)}
@@ -186,15 +184,6 @@ export function TransportViewControls({
 						}}
 					/>
 				</div>
-
-				<Divider />
-				<KnobControl
-					value={settings.loudnessOpacity}
-					icon="lucide:activity"
-					onChange={(loudnessOpacity) => {
-						onSettingsChange({ ...settings, loudnessOpacity });
-					}}
-				/>
 			</div>
 		);
 	}
@@ -202,8 +191,6 @@ export function TransportViewControls({
 	if (activeView === "timeline") {
 		return (
 			<div className="flex items-center gap-3.5">
-				<SyncToggle enabled={syncEnabled} onEnabledChange={onSyncEnabledChange} />
-				<Divider />
 				<KnobControl
 					value={settings.gridOpacity}
 					icon="lucide:grid-3x3"

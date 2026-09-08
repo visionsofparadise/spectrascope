@@ -12,15 +12,12 @@ export const FREQUENCY_TICK_LABELS: ReadonlyArray<{ hz: number; label: string }>
 ];
 
 export function majorTickIntervalMs(spanMs: number): number {
-	if (spanMs < 2000) return 200;
+	if (spanMs <= 0 || !Number.isFinite(spanMs)) return 1;
 
-	if (spanMs < 5000) return 500;
+	const target = spanMs / 8;
+	const magnitude = Math.pow(10, Math.floor(Math.log10(target)));
+	const normalized = target / magnitude;
+	const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
 
-	if (spanMs < 10000) return 1000;
-
-	if (spanMs < 30000) return 2000;
-
-	if (spanMs < 60000) return 5000;
-
-	return 10000;
+	return step * magnitude;
 }
