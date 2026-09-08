@@ -1,5 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { computeBandMappings, getBandFrequencies } from "./band-mapping";
+import {
+	computeBandMappings,
+	getBandFrequencies,
+	frequencyToScalePosition,
+	scalePositionToFrequency,
+} from "./band-mapping";
+
+describe("display frequency conversions", () => {
+	it.each(["linear", "log", "mel", "erb"] as const)(
+		"matches %s band positions and preserves out-of-range ticks",
+		(scale) => {
+			const rate = 48000;
+			const fftSize = 2048;
+			const minimum = scale === "linear" ? 0 : 20;
+			expect(frequencyToScalePosition(minimum, rate, scale)).toBe(0);
+			expect(frequencyToScalePosition(rate / 2, rate, scale)).toBe(1);
+			expect(scalePositionToFrequency(0, rate, scale)).toBeCloseTo(minimum, 8);
+			expect(scalePositionToFrequency(1, rate, scale)).toBeCloseTo(rate / 2, 8);
+			expect(frequencyToScalePosition(30000, rate, scale)).toBeGreaterThan(1);
+			const frequencies = getBandFrequencies(scale, 64, rate, fftSize);
+			for (const [index, frequency] of frequencies.entries()) {
+				const position = scale === "linear" ? index / (frequencies.length - 1) : (index + 0.5) / frequencies.length;
+				expect(frequencyToScalePosition(frequency, rate, scale)).toBeCloseTo(position, 6);
+				expect(scalePositionToFrequency(frequencyToScalePosition(frequency, rate, scale), rate, scale)).toBeCloseTo(
+					frequency,
+					6,
+				);
+			}
+		},
+	);
+});
 
 describe("computeBandMappings", () => {
 	it("returns empty array for linear scale", () => {

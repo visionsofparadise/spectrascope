@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WaveformCanvas } from "./WaveformCanvas";
 import { resolveConfig } from "./engine/SpectralEngine";
 import type { ComputeResultReady } from "./useSpectralCompute";
+import type { TextureVerticalRange } from "./engine/blit";
 
 const runtime = vi.hoisted(() => ({
 	index: 0,
@@ -10,6 +11,7 @@ const runtime = vi.hoisted(() => ({
 	cleanups: [] as Array<() => void>,
 	canvas: { width: 0, height: 0 },
 	resize: vi.fn(),
+	render: vi.fn(),
 }));
 
 vi.mock("react", () => ({
@@ -21,7 +23,7 @@ vi.mock("./useCanvasRef", () => ({ useCanvasRef: () => [{ current: runtime.canva
 vi.mock("./engine/blit", () => ({
 	BlitRenderer: class {
 		resize = runtime.resize;
-		render = vi.fn();
+		render = runtime.render;
 		destroy = vi.fn();
 	},
 }));
@@ -73,9 +75,9 @@ function resultOf(): {
 	};
 }
 
-function render(result: ComputeResultReady, onRendered = vi.fn()) {
+function render(result: ComputeResultReady, onRendered = vi.fn(), verticalRange?: TextureVerticalRange) {
 	runtime.index = 0;
-	WaveformCanvas({ computeResult: result, onRendered });
+	WaveformCanvas({ computeResult: result, onRendered, verticalRange });
 	for (const effect of runtime.effects.splice(0)) {
 		const cleanup = effect();
 		if (cleanup) runtime.cleanups.push(cleanup);
@@ -88,6 +90,7 @@ beforeEach(() => {
 	runtime.effects = [];
 	runtime.cleanups = [];
 	runtime.resize.mockClear();
+	runtime.render.mockClear();
 	vi.stubGlobal("GPUBufferUsage", { STORAGE: 128, COPY_DST: 8, UNIFORM: 64 });
 	vi.stubGlobal("GPUTextureUsage", { STORAGE_BINDING: 8, TEXTURE_BINDING: 4, COPY_SRC: 1 });
 });
@@ -97,6 +100,18 @@ afterEach(() => {
 });
 
 describe("waveform physical sample coordinates", () => {
+	it("crops the waveform blit without replacing sample buffers or changing measured values", () => {
+		const { result, buffers } = resultOf();
+		const waveform = result.waveformBuffer?.slice();
+		render(result);
+		const bufferCount = buffers.length;
+		const verticalRange = { top: 0.25, bottom: 0.75 };
+		render(result, vi.fn(), verticalRange);
+		expect(runtime.render).toHaveBeenLastCalledWith(expect.anything(), verticalRange);
+		expect(buffers).toHaveLength(bufferCount);
+		expect(result.waveformBuffer).toEqual(waveform);
+	});
+
 	it("keeps fractional sample offsets precise an hour into the source", () => {
 		const { result, writes } = resultOf();
 		render(result);

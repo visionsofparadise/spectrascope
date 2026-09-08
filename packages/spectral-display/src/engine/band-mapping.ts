@@ -23,6 +23,32 @@ function erbToFreq(erb: number): number {
 	return (Math.pow(10, erb / 21.4) - 1) / 0.00437;
 }
 
+function frequencyTransform(scale: FrequencyScale): [(value: number) => number, (value: number) => number] {
+	if (scale === "linear") return [(value) => value, (value) => value];
+
+	if (scale === "log") return [Math.log, Math.exp];
+
+	if (scale === "mel") return [freqToMel, melToFreq];
+
+	return [freqToErb, erbToFreq];
+}
+
+export function frequencyToScalePosition(frequencyHz: number, sampleRate: number, scale: FrequencyScale): number {
+	const [toScale] = frequencyTransform(scale);
+	const minimum = toScale(scale === "linear" ? 0 : 20);
+	const maximum = toScale(sampleRate / 2);
+
+	return (toScale(frequencyHz) - minimum) / (maximum - minimum);
+}
+
+export function scalePositionToFrequency(position: number, sampleRate: number, scale: FrequencyScale): number {
+	const [toScale, fromScale] = frequencyTransform(scale);
+	const minimum = toScale(scale === "linear" ? 0 : 20);
+	const maximum = toScale(sampleRate / 2);
+
+	return fromScale(minimum + position * (maximum - minimum));
+}
+
 function computeScaledBandMappings(
 	numBands: number,
 	minFreq: number,

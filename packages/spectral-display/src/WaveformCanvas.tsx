@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { BlitRenderer } from "./engine/blit";
+import { BlitRenderer, type TextureVerticalRange } from "./engine/blit";
 import { WAVEFORM_VISUALIZE_SHADER } from "./engine/shaders";
 import { useCanvasRef } from "./useCanvasRef";
 import type { ComputeResult } from "./useSpectralCompute";
@@ -8,6 +8,7 @@ interface WaveformCanvasProps {
 	computeResult: ComputeResult;
 	ref?: React.Ref<HTMLCanvasElement>;
 	color?: [number, number, number];
+	verticalRange?: TextureVerticalRange;
 	onRendered?: () => void;
 }
 
@@ -17,6 +18,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 	computeResult,
 	ref,
 	color = DEFAULT_WAVEFORM_COLOR,
+	verticalRange,
 	onRendered,
 }) => {
 	const [internalCanvasReference, canvasCallback] = useCanvasRef(ref);
@@ -170,10 +172,10 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 		device.queue.submit([commandEncoder.finish()]);
 
 		blitReference.current.resize(width, height);
-		blitReference.current.render(outputTextureRef.current!);
+		blitReference.current.render(outputTextureRef.current!, verticalRange);
 
 		onRenderedRef.current?.();
-	}, [computeResult, color[0], color[1], color[2], releaseGpuResources]);
+	}, [computeResult, color[0], color[1], color[2], verticalRange?.top, verticalRange?.bottom, releaseGpuResources]);
 
 	useEffect(() => releaseGpuResources, [releaseGpuResources]);
 

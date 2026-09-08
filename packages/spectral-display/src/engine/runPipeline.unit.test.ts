@@ -58,8 +58,8 @@ function waveformOptions(samples: Float32Array): PipelineOptions {
 				},
 			} as GPUDevice,
 			signal: new AbortController().signal,
-			spectrogram: true,
-			ltas: true,
+			spectrogram: false,
+			ltas: false,
 			fftSize: 2048,
 			loudness: false,
 			truePeak: false,
@@ -87,7 +87,7 @@ describe("runPipeline sample boundaries", () => {
 		expect(result.options.sampleQuery).toMatchObject({ width: 8192, height: 2048 });
 		expect(options.sampleQuery.width).toBe(16384);
 	});
-	it("returns sample-resolution waveform and unavailable spectra for a 10ms query", async () => {
+	it("returns sample-resolution waveform without FFT work when spectral outputs are disabled", async () => {
 		const samples = new Float32Array(480);
 		samples[479] = 1;
 		const result = await runPipeline(waveformOptions(samples), new ThrowingEngine({} as GPUDevice));
@@ -136,6 +136,7 @@ describe("runPipeline sample boundaries", () => {
 
 	it("cleans a prepared context once when its read aborts", async () => {
 		const options = waveformOptions(new Float32Array(2048));
+		options.config.spectrogram = true;
 		const controller = new AbortController();
 		options.config.signal = controller.signal;
 		options.readSamples = async () => {
@@ -155,6 +156,7 @@ describe("runPipeline sample boundaries", () => {
 
 	it("destroys a texture returned after cancellation during GPU readback", async () => {
 		const options = waveformOptions(new Float32Array(2048));
+		options.config.spectrogram = true;
 		const controller = new AbortController();
 		options.config.signal = controller.signal;
 		const engine = new SpectralEngine(options.config.device);
@@ -179,6 +181,90 @@ describe("runPipeline sample boundaries", () => {
 		});
 		await rejected;
 		expect(destroy).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe("contextual FFT at deep zoom", () => {
+	function fixture(channels: ReadonlyArray<Float32Array>, start: number, end: number) {
+		const options = waveformOptions(channels[0]!);
+		options.metadata.channelCount = channels.length;
+		options.sampleQuery.startSample = start;
+		options.sampleQuery.endSample = end;
+		options.config.fftSize = 8;
+		options.config.spectrogram = true;
+		options.config.ltas = true;
+		options.config.loudness = true;
+		options.readSamples = vi.fn(async (channel, offset, count) => channels[channel]!.slice(offset, offset + count));
+		const engine = new SpectralEngine(options.config.device);
+		const context = {} as SpectralProcessContext;
+		const prepare = vi.spyOn(engine, "prepare").mockResolvedValue(context);
+		const submitted: Array<Float32Array> = [];
+		const submit = vi.spyOn(engine, "submitChunk").mockImplementation((samples, count) => {
+			submitted.push(samples.slice(0, count));
+		});
+		const cleanup = vi.spyOn(engine, "cleanupContext").mockImplementation(() => undefined);
+		const texture = { destroy: vi.fn() } as unknown as GPUTexture;
+		vi.spyOn(engine, "finalize").mockResolvedValue({
+			spectrogramTexture: texture,
+			ltas: new Float32Array([1]),
+			width: 800,
+			height: 200,
+		});
+		return { options, engine, prepare, submit, submitted, context, cleanup, texture };
+	}
+
+	it.each(["mono", "mid", "side"] as const)(
+		"uses bounded %s context while preserving visible statistics",
+		async (channelInput) => {
+			const channels = [Float32Array.from({ length: 20 }, (_, index) => index), new Float32Array(20).fill(2)];
+			const test = fixture(channels, 9, 11);
+			test.options.config.channelInput = channelInput;
+			const baseline = await runPipeline(
+				{ ...test.options, config: { ...test.options.config, spectrogram: false, ltas: false } },
+				new ThrowingEngine(test.options.config.device),
+			);
+			vi.mocked(test.options.readSamples).mockClear();
+			const result = await runPipeline(test.options, test.engine);
+			expect(test.prepare).toHaveBeenCalledWith(8, 48000, { width: 800, height: 200 }, expect.anything());
+			expect(vi.mocked(test.options.readSamples).mock.calls).toEqual([
+				[0, 9, 2],
+				[1, 9, 2],
+				[0, 6, 8],
+				[1, 6, 8],
+			]);
+			expect(test.submitted).toEqual([
+				Float32Array.from({ length: 8 }, (_, index) => (6 + index + (channelInput === "side" ? -2 : 2)) / 2),
+			]);
+			expect(result.waveformBuffer).toEqual(baseline.waveformBuffer);
+			expect(result.loudnessData).toEqual(baseline.loudnessData);
+			expect(result.options.sampleQuery).toEqual(test.options.sampleQuery);
+			expect(result.spectrogramTexture).toBe(test.texture);
+			expect(result.ltas).toEqual(new Float32Array([1]));
+		},
+	);
+
+	it("centers and pads a whole short file without reading outside it", async () => {
+		const test = fixture([new Float32Array([1, 2, 3])], 2, 3);
+		const result = await runPipeline(test.options, test.engine);
+		expect(vi.mocked(test.options.readSamples).mock.calls).toEqual([
+			[0, 2, 1],
+			[0, 0, 3],
+		]);
+		expect(test.submitted).toEqual([new Float32Array([0, 0, 0, 1, 2, 3, 0, 0])]);
+		expect(result.waveformBuffer).toEqual(new Float32Array([3, 3]));
+	});
+
+	it.each(["abort", "truncate"])("cleans prepared resources when supplemental reads %s", async (failure) => {
+		const test = fixture([new Float32Array(20)], 9, 11);
+		const controller = new AbortController();
+		test.options.config.signal = controller.signal;
+		test.options.readSamples = async (_channel, _offset, count) => {
+			if (count === 8 && failure === "abort") controller.abort();
+			return new Float32Array(count === 8 && failure === "truncate" ? 1 : count);
+		};
+		await expect(runPipeline(test.options, test.engine)).rejects.toThrow();
+		expect(test.cleanup).toHaveBeenCalledExactlyOnceWith(test.context);
+		expect(test.submit).not.toHaveBeenCalled();
 	});
 });
 

@@ -1,5 +1,6 @@
 import { resolveRenderDimensions } from "../utils/resolveRenderDimensions";
 import { getMaxFftSize } from "./device";
+import { resolveFftContext } from "./fft-context";
 import { computeLoudnessData, WAVEFORM_POINTS_PER_SECOND } from "./loudness";
 import { createScanContext, finalizeScan, scanSamples } from "./sample-scan";
 import { resolveConfig, type Dimensions, type SpectralConfig, type SpectralEngine } from "./SpectralEngine";
@@ -102,10 +103,18 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 		{ pointCount: waveformPointCount, samplesPerPoint: waveformSamplesPerPoint },
 	);
 
+	const fftWindow = resolveFftContext(
+		startSample,
+		endSample,
+		metadata.sampleCount,
+		Math.min(resolvedConfig.fftSize, getMaxFftSize(config.device)),
+	);
+	const fftSampleCount = fftWindow.endSample - fftWindow.startSample;
+	const supplementalFft = fftSampleCount > sampleCount;
 	const spectralContext =
-		(spectrogram || ltas) && sampleCount >= Math.min(resolvedConfig.fftSize, getMaxFftSize(config.device))
+		(spectrogram || ltas) && sampleCount > 0
 			? await engine.prepare(
-					sampleCount,
+					fftSampleCount,
 					sampleRate,
 					{ width: sampleQuery.width, height: sampleQuery.height },
 					resolvedConfig,
@@ -134,7 +143,7 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 
 			scanSamples(channelBuffers, chunkFrames, scanContext);
 
-			if (spectralContext) {
+			if (spectralContext && !supplementalFft) {
 				const fftInput = channelInput === "mono" ? scanContext.monoBuffer : scanContext.channelInputBuffer;
 
 				engine.submitChunk(fftInput, chunkFrames, spectralContext);
@@ -148,6 +157,45 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 		}
 
 		signal.throwIfAborted();
+
+		if (spectralContext && supplementalFft) {
+			const readStart = Math.max(0, fftWindow.startSample);
+			const readEnd = Math.min(metadata.sampleCount, fftWindow.endSample);
+			const readCount = readEnd - readStart;
+			const channelBuffers = await Promise.all(
+				Array.from({ length: channelCount }, async (_, channel) => {
+					const samples = await readSamples(channel, readStart, readCount);
+
+					signal.throwIfAborted();
+
+					if (samples.length < readCount) throw new Error(`Audio reader returned fewer than ${readCount} samples`);
+
+					const padded = new Float32Array(fftSampleCount);
+
+					padded.set(samples.subarray(0, readCount), readStart - fftWindow.startSample);
+
+					return padded;
+				}),
+			);
+			const fftScan = createScanContext(
+				metadata,
+				1,
+				fftSampleCount,
+				fftSampleCount,
+				false,
+				false,
+				false,
+				channelInput,
+			);
+
+			signal.throwIfAborted();
+			scanSamples(channelBuffers, fftSampleCount, fftScan);
+			engine.submitChunk(
+				channelInput === "mono" ? fftScan.monoBuffer : fftScan.channelInputBuffer,
+				fftSampleCount,
+				spectralContext,
+			);
+		}
 	} catch (error: unknown) {
 		if (spectralContext) engine.cleanupContext(spectralContext);
 

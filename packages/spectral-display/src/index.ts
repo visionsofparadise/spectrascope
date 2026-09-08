@@ -1,4 +1,4 @@
-export { getBandFrequencies } from "./engine/band-mapping";
+export { getBandFrequencies, frequencyToScalePosition, scalePositionToFrequency } from "./engine/band-mapping";
 export type { FrequencyScale } from "./engine/band-mapping";
 export { BlitRenderer } from "./engine/blit";
 export type { TextureVerticalRange } from "./engine/blit";
