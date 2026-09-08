@@ -226,7 +226,7 @@ describe("parseWavHeader + readFrames", () => {
 		}
 	});
 
-	it("reads a mid-file frame range with a single positioned read", async () => {
+	it("reads a positioned mid-file frame range", async () => {
 		const data = Buffer.alloc(8);
 		[100, 200, 300, 400].forEach((value, index) => data.writeInt16LE(value, index * 2));
 
@@ -241,6 +241,45 @@ describe("parseWavHeader + readFrames", () => {
 			const frames = await readFrames(handle, header, 1, 2);
 
 			expect(Array.from(frames)).toEqual([200 / 32768, 300 / 32768]);
+		} finally {
+			await handle.close();
+		}
+	});
+
+	it("completes fragmented header and PCM reads at the requested positions", async () => {
+		const data = Buffer.alloc(12);
+		[0.25, -0.75, 1].forEach((value, index) => data.writeFloatLE(value, index * 4));
+		const filePath = writeFixture(
+			"fragmented.wav",
+			riff("RIFF", Buffer.concat([chunk("fmt ", fmtChunk(3, 1, 44100, 32)), chunk("data", data)])),
+		);
+		const handle = await fsPromises.open(filePath, "r");
+		const fragmented = {
+			read: async (buffer: Buffer, offset: number, length: number, position: number) =>
+				handle.read(buffer, offset, Math.min(length, 3), position),
+		} as unknown as fsPromises.FileHandle;
+
+		try {
+			const header = await parseWavHeader(fragmented);
+			expect(header.frameCount).toBe(3);
+			expect(Array.from(await readFrames(fragmented, header, 1, 2))).toEqual([-0.75, 1]);
+			expect(Array.from(await readFrames(fragmented, header, 3, 1))).toEqual([]);
+		} finally {
+			await handle.close();
+		}
+	});
+
+	it("rejects an incomplete PCM sample after the source is truncated", async () => {
+		const filePath = writeFixture(
+			"truncated.wav",
+			riff("RIFF", Buffer.concat([chunk("fmt ", fmtChunk(3, 1, 44100, 32)), chunk("data", Buffer.alloc(8))])),
+		);
+		const handle = await fsPromises.open(filePath, "r+");
+
+		try {
+			const header = await parseWavHeader(handle);
+			await handle.truncate(header.dataOffset + 7);
+			await expect(readFrames(handle, header, 0, 2)).rejects.toThrow("Unexpected end of WAV");
 		} finally {
 			await handle.close();
 		}

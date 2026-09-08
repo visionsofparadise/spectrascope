@@ -1,9 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { VectorscopeCanvas } from "spectral-display";
 import { hexToRgb255 } from "../spectral/colorUtil";
 import { ComputeProgress } from "../spectral/ComputeProgress";
 import { useFirstComputeProgress, useReportComputeState } from "../spectral/firstComputeProgress";
 import { useTraceCompute } from "../spectral/traceCompute";
+import { useContainerSize } from "../spectral/useContainerSize";
 import { useDisabledTransport } from "../spectral/viewScaffold";
 import { resolveVisibleSourceAudio } from "./viewAudio";
 import type { Source } from "../source";
@@ -96,11 +97,14 @@ function SourceCloud({ source, audioData, onComputeState }: SourceCloudProps) {
 
 	useReportComputeState(source.id, computeResult, onComputeState);
 
+	const containerRef = useRef<HTMLDivElement>(null);
+	const size = useContainerSize(containerRef, { width: 256, height: 256 });
+	const canvasScale = Math.max(1, Math.min(size.width, size.height)) / 256;
 	const tint = useMemo(() => hexToRgb255(source.layerColor.primary), [source.layerColor.primary]);
 
 	return (
-		<div className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full">
-			<VectorscopeCanvas computeResult={renderable ?? computeResult} tint={tint} />
+		<div ref={containerRef} className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full">
+			<VectorscopeCanvas canvasScale={canvasScale} computeResult={renderable ?? computeResult} tint={tint} />
 		</div>
 	);
 }

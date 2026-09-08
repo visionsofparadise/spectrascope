@@ -1,9 +1,10 @@
 import { Icon } from "@iconify/react";
 import { useCallback, useRef } from "react";
 import { IconButton } from "../components/IconButton";
+import { formatInspectionTime } from "./utils/formatInspectionTime";
 import type { ReactNode } from "react";
 
-export interface TransportCursorReadout {
+interface TransportCursorReadout {
 	readonly time: string;
 	readonly freq?: string;
 	readonly amp: string;
@@ -17,11 +18,13 @@ export interface TransportControl {
 	readonly onPlayToggle: () => void;
 	readonly onSeek: (sec: number) => void;
 	readonly cursorReadout?: TransportCursorReadout;
+	readonly readoutSourceName?: string;
+	readonly amplitudeLabel?: string;
 	/**
 	 * Selection range — the In / Out columns of the transport's readout panel.
 	 * Times are in seconds (the transport formats them to a timecode);
 	 * amplitudes are pre-formatted strings. Optional — unset fields render an
-	 * em-dash. Views publish these from their (placeholder) selection range.
+	 * em-dash. Views publish measurements for the shared selection range.
 	 */
 	readonly selectionInSec?: number;
 	readonly selectionOutSec?: number;
@@ -119,11 +122,15 @@ function ReadoutPanel({
 	cursor,
 	selectionIn,
 	selectionOut,
+	readoutSourceName,
+	amplitudeLabel,
 	disabled,
 }: {
 	readonly cursor: PointReadout;
 	readonly selectionIn: PointReadout;
 	readonly selectionOut: PointReadout;
+	readonly readoutSourceName?: string;
+	readonly amplitudeLabel?: string;
 	readonly disabled?: boolean;
 }) {
 	const headClass =
@@ -135,9 +142,17 @@ function ReadoutPanel({
 
 	return (
 		<div
-			className="hidden shrink-0 items-baseline gap-x-3 gap-y-1 leading-none min-[1400px]:grid"
+			className="grid min-w-0 max-w-xl flex-1 items-baseline gap-x-3 gap-y-1 leading-none"
 			style={{ gridTemplateColumns: "auto repeat(3, minmax(0, 1fr))" }}
 		>
+			{readoutSourceName && (
+				<span
+					className="col-span-4 max-w-72 truncate text-right font-technical text-[length:var(--text-xs)] text-chrome-text-secondary"
+					title={readoutSourceName}
+				>
+					{readoutSourceName}
+				</span>
+			)}
 			<span />
 			<span className={headClass}>Cursor</span>
 			<span className={headClass}>In</span>
@@ -153,7 +168,9 @@ function ReadoutPanel({
 			<span />
 			<span />
 
-			<span className={rowLabelClass}>Amp</span>
+			<span className={`${rowLabelClass} max-w-28`} title={amplitudeLabel}>
+				{amplitudeLabel ?? "Amp"}
+			</span>
 			<span className={valueClass}>{cursor.amp}</span>
 			<span className={valueClass}>{selectionIn.amp}</span>
 			<span className={valueClass}>{selectionOut.amp}</span>
@@ -280,17 +297,19 @@ export function Transport({
 		selectionOutSec,
 		selectionInAmp,
 		selectionOutAmp,
+		readoutSourceName,
+		amplitudeLabel,
 	} = control;
 
 	const timecodeMainClass = disabled ? "text-chrome-text-dim" : "text-chrome-text";
 	const timecodeSecondaryClass = disabled ? "text-chrome-text-dim" : "text-chrome-text-secondary";
 
-	const selectionInLabel = selectionInSec !== undefined ? formatTimecode(selectionInSec) : "—";
-	const selectionOutLabel = selectionOutSec !== undefined ? formatTimecode(selectionOutSec) : "—";
+	const selectionInLabel = selectionInSec !== undefined ? formatInspectionTime(selectionInSec * 1000) : "—";
+	const selectionOutLabel = selectionOutSec !== undefined ? formatInspectionTime(selectionOutSec * 1000) : "—";
 
 	return (
-		<div className="flex h-full items-center bg-void px-4">
-			<div className="flex min-w-0 flex-1 items-center">{viewControls}</div>
+		<div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-chrome-border-subtle bg-void px-4 py-3">
+			<div className="flex min-w-0 basis-80 flex-1 items-center overflow-x-auto">{viewControls}</div>
 
 			<div className="flex shrink-0 flex-col items-center justify-center gap-1.5">
 				<div className="flex items-center gap-2">
@@ -377,25 +396,25 @@ export function Transport({
 				</div>
 			</div>
 
-			<div className="flex min-w-0 flex-1 items-center">
-				<div className="min-w-4 flex-1" />
+			<div className="flex w-full min-w-0 items-center justify-between gap-4">
 				<ReadoutPanel
+					readoutSourceName={readoutSourceName}
+					amplitudeLabel={amplitudeLabel}
 					cursor={{
 						time: cursorReadout?.time ?? "—",
 						freq: cursorReadout?.freq ?? "— Hz",
-						amp: cursorReadout?.amp ?? "— dB",
+						amp: cursorReadout?.amp ?? "—",
 					}}
 					selectionIn={{
 						time: selectionInLabel,
-						amp: selectionInAmp ?? "— dB",
+						amp: selectionInAmp ?? "—",
 					}}
 					selectionOut={{
 						time: selectionOutLabel,
-						amp: selectionOutAmp ?? "— dB",
+						amp: selectionOutAmp ?? "—",
 					}}
 					disabled={disabled}
 				/>
-				<div className="min-w-4 flex-1" />
 				<div className="flex shrink-0 items-center justify-end">
 					<VolumeSlider volume={volume} onVolumeChange={onVolumeChange} />
 				</div>

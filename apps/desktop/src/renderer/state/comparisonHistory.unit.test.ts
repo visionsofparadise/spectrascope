@@ -1,5 +1,6 @@
 import type { Snapshot } from "valtio/vanilla";
 import { describe, expect, it } from "vitest";
+import { createComparison } from "../comparison/createComparison";
 import type { Comparison } from "../models/State/App";
 import type { ComparisonHistoryState } from "./comparisonHistory";
 import { ComparisonHistory, classifyEdit, historyStatesEqual, toHistoryState } from "./comparisonHistory";
@@ -21,6 +22,7 @@ const EMPTY_SOURCES: ComparisonHistoryState["sources"] = [];
 function makeState(overrides: Partial<ComparisonHistoryState> = {}): ComparisonHistoryState {
 	return {
 		id: "comparison-1",
+		name: "New Session",
 		sources: EMPTY_SOURCES,
 		activeView: "overlay",
 		channelInput: "mono",
@@ -56,6 +58,7 @@ function makeSource(
  */
 function makeComparison(overrides: Partial<Comparison> = {}): Snapshot<Comparison> {
 	return {
+		...createComparison([]),
 		id: "comparison-1",
 		sources: [],
 		activeView: "overlay",

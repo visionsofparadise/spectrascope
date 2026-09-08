@@ -18,7 +18,7 @@ export function AppShell({ sidebar, workspace, transport }: AppShellProps) {
 		<div
 			className="grid h-full w-full bg-void text-chrome-text"
 			style={{
-				gridTemplateColumns: "240px 1fr",
+				gridTemplateColumns: "240px minmax(0, 1fr)",
 				gridTemplateRows: hasTransport ? "minmax(0, 1fr) auto" : "minmax(0, 1fr)",
 			}}
 		>
@@ -33,7 +33,11 @@ export function AppShell({ sidebar, workspace, transport }: AppShellProps) {
 				{workspace}
 			</main>
 
-			{hasTransport && <div style={{ gridColumn: "2", gridRow: "2", height: "92px" }}>{transport}</div>}
+			{hasTransport && (
+				<div className="min-w-0" style={{ gridColumn: "2", gridRow: "2" }}>
+					{transport}
+				</div>
+			)}
 		</div>
 	);
 }

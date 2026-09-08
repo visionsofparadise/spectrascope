@@ -3,27 +3,16 @@ import { Curtain } from "../spectral/Curtain";
 import { StripLayout, StripOverlays, StripSourceRender, useStripView } from "../spectral/stripView";
 import { curtainBounds, defaultCurtainPositions, stripClipPath } from "./sliderClip";
 import { useTimelineChromeSources } from "./viewAudio";
-import type { Source } from "../source";
-import type { AudioData } from "../spectral/types";
-import type { TransportControl } from "../Transport";
-import type { ViewControlSettings } from "../viewSettings";
-import type { ChannelInput } from "spectral-display";
-
-interface SliderViewProps {
-	readonly sources: ReadonlyArray<Source>;
-	readonly sourceAudio: ReadonlyMap<string, AudioData>;
-	readonly channelInput: ChannelInput;
-	readonly settings: ViewControlSettings;
-	readonly onTransportControlChange?: (control: TransportControl) => void;
-}
+import type { PerSourceSpectralViewProps } from "./viewProps";
 
 export function SliderView({
 	sources,
 	sourceAudio,
 	channelInput,
 	settings,
+	onFrequencyRangeChange,
 	onTransportControlChange,
-}: SliderViewProps) {
+}: PerSourceSpectralViewProps) {
 	const { renderableSources, chromeAudio, layerColor } = useTimelineChromeSources(sources, sourceAudio);
 
 	const sourceCount = renderableSources.length;
@@ -48,7 +37,14 @@ export function SliderView({
 		});
 	}, []);
 
-	const view = useStripView("slider", chromeAudio, layerColor, onTransportControlChange);
+	const view = useStripView(
+		"slider",
+		chromeAudio,
+		layerColor,
+		settings.frequencyRange,
+		onFrequencyRangeChange,
+		onTransportControlChange,
+	);
 
 	const hasSources = sourceCount >= 2;
 

@@ -1,7 +1,18 @@
 import type { Comparison } from "../models/State/App";
 import type { Snapshot } from "valtio/vanilla";
 
-export type ComparisonHistoryState = Omit<Snapshot<Comparison>, "positionSec">;
+export type ComparisonHistoryState = Pick<
+	Snapshot<Comparison>,
+	| "id"
+	| "name"
+	| "sources"
+	| "activeView"
+	| "channelInput"
+	| "selection"
+	| "canonicalSampleRate"
+	| "differenceA"
+	| "differenceB"
+>;
 
 export type EditKind = "sources" | "view" | "channelInput" | "selection" | "sampleRate" | "difference" | "unknown";
 
@@ -137,9 +148,10 @@ export function classifyEdit(previous: ComparisonHistoryState, next: ComparisonH
 }
 
 export function toHistoryState(comparison: Snapshot<Comparison>): ComparisonHistoryState {
-	const { positionSec: _positionSec, ...rest } = comparison;
+	const { id, name, sources, activeView, channelInput, selection, canonicalSampleRate, differenceA, differenceB } =
+		comparison;
 
-	return rest;
+	return { id, name, sources, activeView, channelInput, selection, canonicalSampleRate, differenceA, differenceB };
 }
 
 function selectionsEqual(
@@ -160,6 +172,7 @@ export function historyStatesEqual(left: ComparisonHistoryState, right: Comparis
 
 	if (
 		left.id !== right.id ||
+		left.name !== right.name ||
 		left.activeView !== right.activeView ||
 		left.channelInput !== right.channelInput ||
 		left.canonicalSampleRate !== right.canonicalSampleRate ||

@@ -18,6 +18,7 @@ interface SourceRowProps {
 	readonly status?: SourceStreamStatus;
 	readonly error?: string;
 	readonly onRetry?: () => void;
+	readonly onRelink?: () => void;
 	readonly onChange: (next: Source) => void;
 	readonly onRemove: () => void;
 	readonly active?: boolean;
@@ -33,7 +34,17 @@ function fileNameOf(source: Source): string {
 	return segment && segment.length > 0 ? segment : source.name;
 }
 
-export function SourceRow({ source, status, error, onRetry, onChange, onRemove, active, onActivate }: SourceRowProps) {
+export function SourceRow({
+	source,
+	status,
+	error,
+	onRetry,
+	onRelink,
+	onChange,
+	onRemove,
+	active,
+	onActivate,
+}: SourceRowProps) {
 	const [pickerOpen, setPickerOpen] = useState(false);
 
 	const rowRef = useRef<HTMLDivElement | null>(null);
@@ -159,6 +170,18 @@ export function SourceRow({ source, status, error, onRetry, onChange, onRemove, 
 				{status === "error" && (
 					<div className="flex flex-col gap-1 text-xs text-state-error" role="status">
 						<span className="break-words">{error ?? "Audio preparation failed."}</span>
+						{onRelink && (
+							<button
+								type="button"
+								className="text-primary"
+								onClick={(event) => {
+									event.stopPropagation();
+									onRelink();
+								}}
+							>
+								Locate audio…
+							</button>
+						)}
 						{onRetry && source.audioFilePath.length > 0 && (
 							<button
 								type="button"
@@ -237,6 +260,7 @@ export function SourceRow({ source, status, error, onRetry, onChange, onRemove, 
 							</button>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="start">
+							{onRelink && <DropdownMenuItem onSelect={onRelink}>Replace audio…</DropdownMenuItem>}
 							<DropdownMenuItem
 								disabled
 								className="text-chrome-text-dim"

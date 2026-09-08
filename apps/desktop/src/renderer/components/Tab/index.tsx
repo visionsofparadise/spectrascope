@@ -1,5 +1,6 @@
 import { HomeScreen } from "../HomeScreen";
 import { ComparisonTab } from "./Comparison";
+import type { ExportControl } from "../../export/ExportControl";
 import type { AppContext } from "../../models/Context";
 import type { HistoryControl } from "../../state/useComparisonHistory";
 
@@ -12,9 +13,10 @@ interface Props {
 	 * clears the control when no tab is active.
 	 */
 	readonly onHistoryControlChange: (control: HistoryControl | null) => void;
+	readonly onExportControlChange: (control: ExportControl | null) => void;
 }
 
-export function TabContent({ context, onHistoryControlChange }: Props) {
+export function TabContent({ context, onHistoryControlChange, onExportControlChange }: Props) {
 	const activeTab = context.app.activeTabId
 		? context.app.tabs.find((tab) => tab.id === context.app.activeTabId)
 		: null;
@@ -35,6 +37,7 @@ export function TabContent({ context, onHistoryControlChange }: Props) {
 			context={context}
 			comparison={comparison}
 			onHistoryControlChange={onHistoryControlChange}
+			onExportControlChange={onExportControlChange}
 		/>
 	);
 }

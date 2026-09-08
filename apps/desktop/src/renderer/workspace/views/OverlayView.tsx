@@ -1,29 +1,25 @@
 import { StripLayout, StripOverlays, StripSourceRender, useStripView } from "../spectral/stripView";
 import { useTimelineChromeSources } from "./viewAudio";
-import type { Source } from "../source";
-import type { AudioData } from "../spectral/types";
-import type { TransportControl } from "../Transport";
-import type { ViewControlSettings } from "../viewSettings";
-import type { ChannelInput } from "spectral-display";
-
-interface OverlayViewProps {
-	readonly sources: ReadonlyArray<Source>;
-	readonly sourceAudio: ReadonlyMap<string, AudioData>;
-	readonly channelInput: ChannelInput;
-	readonly settings: ViewControlSettings;
-	readonly onTransportControlChange?: (control: TransportControl) => void;
-}
+import type { PerSourceSpectralViewProps } from "./viewProps";
 
 export function OverlayView({
 	sources,
 	sourceAudio,
 	channelInput,
 	settings,
+	onFrequencyRangeChange,
 	onTransportControlChange,
-}: OverlayViewProps) {
+}: PerSourceSpectralViewProps) {
 	const { renderableSources, chromeAudio, layerColor } = useTimelineChromeSources(sources, sourceAudio);
 
-	const view = useStripView("overlay", chromeAudio, layerColor, onTransportControlChange);
+	const view = useStripView(
+		"overlay",
+		chromeAudio,
+		layerColor,
+		settings.frequencyRange,
+		onFrequencyRangeChange,
+		onTransportControlChange,
+	);
 
 	return (
 		<StripLayout channelInput={channelInput} view={view}>

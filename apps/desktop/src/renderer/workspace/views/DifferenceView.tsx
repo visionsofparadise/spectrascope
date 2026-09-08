@@ -3,37 +3,16 @@ import { Select } from "../../components/Select";
 import { NEUTRAL_LAYER_COLOR } from "../layers";
 import { StripLayout, StripOverlays, StripSourceRender, useStripView } from "../spectral/stripView";
 import type { Source } from "../source";
-import type { AudioData } from "../spectral/types";
-import type { TransportControl } from "../Transport";
-import type { ViewControlSettings } from "../viewSettings";
-import type { ChannelInput } from "spectral-display";
+import type { DerivedSpectralViewProps, DifferenceSelectionProps } from "./viewProps";
 
-interface DifferenceViewProps {
-	readonly sources: ReadonlyArray<Source>;
-	/**
-	 * The A−B difference signal as a single PCM reader, backed by the registered
-	 * diff stream (`EMPTY_DERIVED_AUDIO` until A and B both resolve).
-	 */
-	readonly derivedAudio: AudioData;
-	readonly channelInput: ChannelInput;
-	readonly settings: ViewControlSettings;
-	/**
-	 * The A/B source selection (source ids), or `null` until the sticky default
-	 * is written. `A − B`: A is the reference, B is polarity-inverted. A `null`
-	 * or dangling (removed-source) field falls back to the default first-two in
-	 * the selector display.
-	 */
-	readonly differenceA: string | null;
-	readonly differenceB: string | null;
-	readonly onDifferenceChange: (differenceA: string, differenceB: string) => void;
-	readonly onTransportControlChange?: (control: TransportControl) => void;
-}
+interface DifferenceViewProps extends DerivedSpectralViewProps, DifferenceSelectionProps {}
 
 export function DifferenceView({
 	sources,
 	derivedAudio,
 	channelInput,
 	settings,
+	onFrequencyRangeChange,
 	differenceA,
 	differenceB,
 	onDifferenceChange,
@@ -43,7 +22,14 @@ export function DifferenceView({
 
 	const layerColor = visibleSources[0]?.layerColor ?? NEUTRAL_LAYER_COLOR;
 
-	const view = useStripView("difference", derivedAudio, layerColor, onTransportControlChange);
+	const view = useStripView(
+		"difference",
+		derivedAudio,
+		layerColor,
+		settings.frequencyRange,
+		onFrequencyRangeChange,
+		onTransportControlChange,
+	);
 
 	const differenceSource = useMemo<Source>(
 		() => ({

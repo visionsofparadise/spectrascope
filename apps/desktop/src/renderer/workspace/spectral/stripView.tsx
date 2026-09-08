@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { SourceRender } from "../SourceRender";
 import { useViewSync } from "../sync";
 import { timeToFraction } from "../views/viewCursor";
@@ -8,13 +8,14 @@ import { CursorSurface } from "./CursorSurface";
 import { FrequencyMinimap } from "./FrequencyMinimap";
 import { GridOverlay } from "./GridOverlay";
 import { MinimapDisplay } from "./MinimapDisplay";
+import { useWaveformReadouts } from "./useWaveformReadouts";
 import { usePublishedTransportControl, useTransportPlayback, useViewportScrub } from "./viewScaffold";
 import type { LayerColor } from "../layers";
 import type { Source } from "../source";
-import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { TransportControl } from "../Transport";
 import type { ViewControlSettings } from "../viewSettings";
 import type { AudioData } from "./types";
+import type { TextureVerticalRange } from "spectral-display";
 import type { ChannelInput } from "spectral-display";
 
 const EMPTY_VIEW_SYNC = {
@@ -22,21 +23,17 @@ const EMPTY_VIEW_SYNC = {
 	selection: null,
 } as const;
 
-const DEFAULT_CURSOR: SourceRenderCursorReadout = {
-	time: "00:00.000",
-	freq: "— Hz",
-	amp: "— dB",
-};
-
 type StripView = ReturnType<typeof useStripView>;
 
 export function useStripView(
 	viewId: string,
 	chromeAudio: AudioData,
 	layerColor: LayerColor,
+	frequencyRange: TextureVerticalRange,
+	onFrequencyRangeChange: (range: TextureVerticalRange) => void,
 	onTransportControlChange?: (control: TransportControl) => void,
 ) {
-	const [cursorReadout, setCursorReadout] = useState<SourceRenderCursorReadout>(DEFAULT_CURSOR);
+	const readouts = useWaveformReadouts();
 
 	const viewSync = useViewSync(viewId, EMPTY_VIEW_SYNC);
 
@@ -49,11 +46,11 @@ export function useStripView(
 	const control = useMemo<TransportControl>(
 		() => ({
 			...playback,
-			cursorReadout,
+			...readouts.control,
 			selectionInSec: viewSync.selection !== null ? viewSync.selection.start / 1000 : undefined,
 			selectionOutSec: viewSync.selection !== null ? viewSync.selection.end / 1000 : undefined,
 		}),
-		[playback, cursorReadout, viewSync.selection],
+		[playback, readouts.control, viewSync.selection],
 	);
 
 	usePublishedTransportControl(control, onTransportControlChange);
@@ -65,7 +62,9 @@ export function useStripView(
 		...scrub,
 		startMs,
 		endMs,
-		setCursorReadout,
+		...readouts,
+		frequencyRange,
+		onFrequencyRangeChange,
 		cursorFrac: timeToFraction(viewSync.cursor, scrub.viewport.startMs, scrub.viewport.endMs),
 	};
 }
@@ -83,6 +82,7 @@ export function StripOverlays({ view, settings }: StripOverlaysProps) {
 				endMs={view.viewport.endMs}
 				mode={settings.gridMode}
 				sampleRate={view.chromeAudio.sampleRate}
+				frequencyRange={view.frequencyRange}
 				opacity={settings.gridOpacity}
 			/>
 			{view.cursorFrac !== null && view.cursorFrac >= 0 && view.cursorFrac <= 1 && (
@@ -125,7 +125,7 @@ export function StripLayout({ view, header, children, channelInput }: StripLayou
 				<div className="bg-void" />
 				<div className="bg-void" />
 
-				<FrequencyAxis sampleRate={view.chromeAudio.sampleRate} />
+				<FrequencyAxis sampleRate={view.chromeAudio.sampleRate} frequencyRange={view.frequencyRange} />
 
 				<CursorSurface
 					surfaceRef={view.viewport.wheelHandlers.ref}
@@ -139,6 +139,8 @@ export function StripLayout({ view, header, children, channelInput }: StripLayou
 				</CursorSurface>
 
 				<FrequencyMinimap
+					frequencyRange={view.frequencyRange}
+					onFrequencyRangeChange={view.onFrequencyRangeChange}
 					audioData={view.chromeAudio}
 					startMs={view.startMs}
 					endMs={view.endMs}
@@ -184,6 +186,8 @@ export function StripSourceRender({
 }: StripSourceRenderProps) {
 	return (
 		<SourceRender
+			frequencyRange={view.frequencyRange}
+			onDisplayedResultChange={view.onDisplayedResultChange}
 			source={source}
 			audioData={audioData}
 			startMs={view.startMs}

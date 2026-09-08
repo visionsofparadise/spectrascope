@@ -19,11 +19,18 @@ const WAVE_FORMAT_EXTENSIBLE = 0xfffe;
 
 const readExact = async (fileHandle: fs.FileHandle, position: number, length: number): Promise<Buffer> => {
 	const buffer = Buffer.alloc(length);
+	let completed = 0;
 
-	const { bytesRead } = await fileHandle.read(buffer, 0, length, position);
+	while (completed < length) {
+		const { bytesRead } = await fileHandle.read(buffer, completed, length - completed, position + completed);
 
-	if (bytesRead < length)
-		throw new Error(`Expected ${String(length)} bytes at offset ${String(position)} but read ${String(bytesRead)}`);
+		if (bytesRead === 0)
+			throw new Error(
+				`Unexpected end of WAV: expected ${String(length)} bytes at offset ${String(position)} but read ${String(completed)}`,
+			);
+
+		completed += bytesRead;
+	}
 
 	return buffer;
 };
@@ -142,12 +149,9 @@ export const readFrames = async (
 
 	if (byteLength === 0) return output;
 
-	const buffer = Buffer.alloc(byteLength);
-	const { bytesRead } = await fileHandle.read(buffer, 0, byteLength, byteStart);
+	const buffer = await readExact(fileHandle, byteStart, byteLength);
 
-	const sampleCount = Math.floor(bytesRead / header.bytesPerSample);
-
-	for (let index = 0; index < sampleCount; index++) {
+	for (let index = 0; index < output.length; index++) {
 		output[index] = readSample(buffer, index * header.bytesPerSample, header);
 	}
 

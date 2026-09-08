@@ -5,7 +5,7 @@ import type { TransportControl } from "../Transport";
 import type { AudioData } from "./types";
 
 export function useViewportScrub(chromeAudio: AudioData) {
-	const viewport = useTimeViewport(0, chromeAudio.durationMs);
+	const viewport = useTimeViewport(0, chromeAudio.durationMs, false, 1000 / chromeAudio.sampleRate);
 
 	const setViewportToFraction = useCallback(
 		(fraction: number) => {

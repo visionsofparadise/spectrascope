@@ -4,7 +4,9 @@ import { resolveAudibleSources, useDerivedStreams } from "../../audio/useDerived
 import { usePlayer } from "../../audio/usePlayer";
 import { useSourceStreams } from "../../audio/useSourceStreams";
 import { createSourceFromFile, isBareAddSource, toSourceState } from "../../comparison/createComparison";
+import { AUDIO_FILE_EXTENSIONS } from "../../comparison/createComparison";
 import { pickAudioFiles } from "../../comparison/pickAudioFiles";
+import { relinkSource } from "../../comparison/utils/relinkSource";
 import { useComparisonHistory } from "../../state/useComparisonHistory";
 import { AppShell } from "../../workspace/AppShell";
 import { WorkspacePlaybackProvider } from "../../workspace/playback";
@@ -13,14 +15,15 @@ import { SyncProvider } from "../../workspace/sync";
 import { Transport } from "../../workspace/Transport";
 import { TransportViewControls } from "../../workspace/TransportViewControls";
 import { normalizeSelection } from "../../workspace/utils/selection";
-import { INITIAL_VIEW_CONTROL_SETTINGS } from "../../workspace/viewSettings";
 import { Workspace } from "../../workspace/Workspace";
+import type { ExportControl } from "../../export/ExportControl";
 import type { AppContext } from "../../models/Context";
 import type { Comparison } from "../../models/State/App";
 import type { HistoryControl } from "../../state/useComparisonHistory";
 import type { Source } from "../../workspace/source";
 import type { SyncState } from "../../workspace/sync";
 import type { TransportControl } from "../../workspace/Transport";
+import type { ViewControlSettings } from "../../workspace/viewSettings";
 import type { ViewId } from "../../workspace/Workspace";
 import type { ChannelInput } from "spectral-display";
 import type { Snapshot } from "valtio/vanilla";
@@ -39,9 +42,8 @@ interface Props {
 	 * every change and with `null` on unmount.
 	 */
 	readonly onHistoryControlChange: (control: HistoryControl | null) => void;
+	readonly onExportControlChange: (control: ExportControl | null) => void;
 }
-
-const INITIAL_VOLUME = 0.8;
 
 const INITIAL_SYNC_STATE: SyncState = {
 	cursor: null,
@@ -57,18 +59,71 @@ const INITIAL_TRANSPORT_CONTROL: TransportControl = {
 	onSeek: () => {},
 };
 
-export function ComparisonTab({ context, comparison, onHistoryControlChange }: Props) {
+export function ComparisonTab({ context, comparison, onHistoryControlChange, onExportControlChange }: Props) {
 	const { app, appStore } = context;
 
 	const [transportControl, setTransportControl] = useState<TransportControl>(INITIAL_TRANSPORT_CONTROL);
 
-	const [volume, setVolume] = useState(INITIAL_VOLUME);
-	const [playbackRate, setPlaybackRate] = useState(1);
-	const [looping, setLooping] = useState(false);
+	const { volume, playbackRate, looping, syncEnabled, viewSettings } = comparison;
+	const [relinkError, setRelinkError] = useState<string | null>(null);
+	const updateSettings = useCallback(
+		(changes: Partial<Comparison>): void => {
+			appStore.mutate(app, (proxy) => {
+				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
 
-	const [syncEnabled, setSyncEnabled] = useState(false);
+				if (target) Object.assign(target, changes);
+			});
+		},
+		[app, appStore, comparison.id],
+	);
+	const setVolume = useCallback((value: number) => updateSettings({ volume: value }), [updateSettings]);
+	const setPlaybackRate = useCallback((value: number) => updateSettings({ playbackRate: value }), [updateSettings]);
+	const setLooping = useCallback((value: boolean) => updateSettings({ looping: value }), [updateSettings]);
+	const setSyncEnabled = useCallback((value: boolean) => updateSettings({ syncEnabled: value }), [updateSettings]);
+	const setViewSettings = useCallback(
+		(value: ViewControlSettings) => updateSettings({ viewSettings: value }),
+		[updateSettings],
+	);
+	const onRelinkSource = useCallback(
+		(sourceId: string): void => {
+			void (async () => {
+				setRelinkError(null);
 
-	const [viewSettings, setViewSettings] = useState(INITIAL_VIEW_CONTROL_SETTINGS);
+				try {
+					const source = comparison.sources.find((entry) => entry.id === sourceId);
+
+					if (!source) return;
+
+					const paths = await context.main.showOpenDialog({
+						title: "Locate Audio",
+						defaultPath: source.audioFilePath,
+						filters: [{ name: "Audio", extensions: [...AUDIO_FILE_EXTENSIONS] }],
+						properties: ["openFile"],
+					});
+
+					if (!paths?.[0]) return;
+
+					const replacement = await relinkSource(context.main, source, paths[0], comparison.canonicalSampleRate);
+
+					appStore.mutate(app, (proxy) => {
+						const targetComparison = proxy.comparisons.find((entry) => entry.id === comparison.id);
+						const target = targetComparison?.sources.find((entry) => entry.id === sourceId);
+
+						if (
+							target?.audioFilePath === source.audioFilePath &&
+							targetComparison?.canonicalSampleRate === comparison.canonicalSampleRate
+						) {
+							target.audioFilePath = replacement.audioFilePath;
+							target.name = replacement.name;
+						}
+					});
+				} catch (cause) {
+					setRelinkError(cause instanceof Error ? cause.message : String(cause));
+				}
+			})();
+		},
+		[comparison, context.main, appStore, app],
+	);
 
 	const sources: ReadonlyArray<Source> = comparison.sources;
 
@@ -141,6 +196,33 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 				: null,
 		[comparison.selection, comparisonDurationMs],
 	);
+	const exportStream = activeView === "difference" ? diffInfo : sumInfo;
+
+	useEffect(() => {
+		onExportControlChange({
+			name: comparison.name,
+			streamKey: exportStream?.key ?? null,
+			streamLabel: activeView === "difference" ? "Difference of the selected A/B sources" : "Sum of audible sources",
+			selection,
+			protectedPaths: [
+				...sources.map((source) => source.audioFilePath),
+				...Array.from(prepared.values(), (source) => source.pcmPath),
+				...(comparison.sessionFilePath ? [comparison.sessionFilePath] : []),
+			],
+		});
+
+		return () => onExportControlChange(null);
+	}, [
+		comparison.name,
+		comparison.sessionFilePath,
+		sources,
+		prepared,
+		exportStream?.key,
+		activeView,
+		selection,
+		onExportControlChange,
+	]);
+
 	const handleSelectionChange = useCallback(
 		(next: { start: number; end: number } | null) => {
 			appStore.mutate(app, (proxy) => {
@@ -220,7 +302,7 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 			setVolume(next);
 			player.onVolumeChange(next);
 		},
-		[player],
+		[player, setVolume],
 	);
 
 	const boundTransportControl = useMemo<TransportControl>(
@@ -234,8 +316,6 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 			onSeek: player.onSeek,
 			selectionInSec: selection ? selection.start / 1000 : undefined,
 			selectionOutSec: selection ? selection.end / 1000 : undefined,
-			selectionInAmp: undefined,
-			selectionOutAmp: undefined,
 		}),
 		[transportControl, playbackStreamUrl, player, selection],
 	);
@@ -296,6 +376,10 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 				if (!target) return;
 
 				target.sources = next.map(toSourceState);
+
+				if (!target.sources.some((source) => source.id === target.differenceA)) target.differenceA = null;
+
+				if (!target.sources.some((source) => source.id === target.differenceB)) target.differenceB = null;
 			});
 		},
 		[app, appStore, comparison.id, sources, addSourcesFromDialog],
@@ -386,6 +470,7 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 							sourceStatus={status}
 							sourceErrors={sourceErrors}
 							onRetrySource={retrySource}
+							onRelinkSource={onRelinkSource}
 							onSourcesChange={handleSourcesChange}
 						/>
 					}
@@ -398,6 +483,9 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 								activeView={activeView}
 								channelInput={comparison.channelInput}
 								settings={viewSettings}
+								onFrequencyRangeChange={(frequencyRange) =>
+									setViewSettings({ ...viewSettings, frequencyRange })
+								}
 								differenceA={comparison.differenceA}
 								differenceB={comparison.differenceB}
 								onDifferenceChange={setDifference}
@@ -435,6 +523,17 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange }: P
 						<span className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-secondary">
 							Preparing audio…
 						</span>
+					</div>
+				)}
+				{relinkError && (
+					<div
+						role="alert"
+						className="absolute right-3 top-20 z-50 max-w-md bg-chrome-raised p-3 text-sm text-chrome-text"
+					>
+						<p>{relinkError}</p>
+						<button type="button" onClick={() => setRelinkError(null)}>
+							Dismiss
+						</button>
 					</div>
 				)}
 				{(derivedError ?? player.error) && (

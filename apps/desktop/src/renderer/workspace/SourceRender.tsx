@@ -5,12 +5,18 @@ import { hexToRgb255 } from "./spectral/colorUtil";
 import { ComputeProgress } from "./spectral/ComputeProgress";
 import { useContainerSize } from "./spectral/useContainerSize";
 import { computeWindowTransform } from "./useTimeViewport";
+import { formatInspectionTime } from "./utils/formatInspectionTime";
 import { fractionToFrequency } from "./utils/frequencyScale";
 import type { Source } from "./source";
 import type { AudioData } from "./spectral/types";
+import type { DisplayedWaveform } from "./spectral/useWaveformReadouts";
+import type { TextureVerticalRange } from "spectral-display";
 import type { ChannelInput, ColormapDefinition, ComputeResultReady, SpectralOptions } from "spectral-display";
 
 export interface SourceRenderCursorReadout {
+	readonly sourceId: string;
+	readonly timeMs: number;
+	readonly frequencyHz: number;
 	readonly time: string;
 	readonly freq: string;
 	readonly amp: string;
@@ -18,6 +24,8 @@ export interface SourceRenderCursorReadout {
 
 export interface SourceRenderProps {
 	readonly source: Source;
+	readonly frequencyRange?: TextureVerticalRange;
+	readonly onDisplayedResultChange?: (sourceId: string, displayed: DisplayedWaveform | null) => void;
 	readonly audioData: AudioData;
 	readonly startMs: number;
 	readonly endMs: number;
@@ -45,6 +53,8 @@ export interface SourceRenderProps {
 
 export function SourceRender({
 	source,
+	frequencyRange,
+	onDisplayedResultChange,
 	audioData,
 	startMs,
 	endMs,
@@ -85,20 +95,24 @@ export function SourceRender({
 			const cursorStartMs = liveStartMs ?? startMs;
 			const cursorEndMs = liveEndMs ?? endMs;
 			const timeMs = readoutTimeOffsetMs + cursorStartMs + xFrac * (cursorEndMs - cursorStartMs);
-			const totalSec = timeMs / 1000;
-			const mins = Math.floor(totalSec / 60);
-			const secs = Math.floor(totalSec % 60);
-			const ms = Math.floor((totalSec % 1) * 1000);
-			const timeStr = `${mins.toString().padStart(2, "0")}:${secs
-				.toString()
-				.padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
+			const timeStr = formatInspectionTime(timeMs);
 
-			const freqHz = fractionToFrequency(yFrac, audioData.sampleRate);
+			const freqHz = fractionToFrequency(yFrac, audioData.sampleRate, frequencyRange);
 			const freqStr = freqHz >= 1000 ? `${(freqHz / 1000).toFixed(1)} kHz` : `${Math.round(freqHz)} Hz`;
 
-			onCursorMove({ time: timeStr, freq: freqStr, amp: "— dB" });
+			onCursorMove({ sourceId: source.id, timeMs, frequencyHz: freqHz, time: timeStr, freq: freqStr, amp: "—" });
 		},
-		[onCursorMove, startMs, endMs, liveStartMs, liveEndMs, readoutTimeOffsetMs, audioData.sampleRate],
+		[
+			onCursorMove,
+			startMs,
+			endMs,
+			liveStartMs,
+			liveEndMs,
+			readoutTimeOffsetMs,
+			audioData.sampleRate,
+			frequencyRange,
+			source.id,
+		],
 	);
 
 	const spectralOptions = useMemo<SpectralOptions>(
@@ -146,6 +160,14 @@ export function SourceRender({
 
 	const [held, setHeld] = useState<ComputeResultReady | null>(null);
 	const front = computeResult.status === "idle" ? null : held;
+
+	useEffect(() => {
+		onDisplayedResultChange?.(
+			source.id,
+			front ? { result: front, sourceName: source.name, timeOffsetMs: readoutTimeOffsetMs } : null,
+		);
+	}, [source.id, source.name, front, readoutTimeOffsetMs, onDisplayedResultChange]);
+	useEffect(() => () => onDisplayedResultChange?.(source.id, null), [source.id, onDisplayedResultChange]);
 
 	useEffect(() => {
 		if (computeResult.status === "idle") setHeld(null);
@@ -213,7 +235,11 @@ export function SourceRender({
 						className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full"
 						style={{ opacity: spectrogramOpacity }}
 					>
-						<SpectrogramCanvas computeResult={result} onRendered={isFront ? undefined : handleBackRendered} />
+						<SpectrogramCanvas
+							frequencyRange={frequencyRange}
+							computeResult={result}
+							onRendered={isFront ? undefined : handleBackRendered}
+						/>
 					</div>
 					<div
 						className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full"

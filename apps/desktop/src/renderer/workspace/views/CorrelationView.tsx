@@ -1,13 +1,13 @@
-import { useMemo } from "react";
+import { useMemo, useEffect } from "react";
 import { ChartSvg, HorizontalGridlines, TraceGroup } from "../spectral/chartMarks";
 import { ChartLayout, useChartView, type ChartAxis, type ChartCanvasBaseProps } from "../spectral/chartView";
-import { useReportComputeState, type ComputeState } from "../spectral/firstComputeProgress";
+import { useReportComputeState } from "../spectral/firstComputeProgress";
 import { useTraceCompute } from "../spectral/traceCompute";
 import { buildPolylineSegments } from "./chartTrace";
 import { useTimelineChromeSources } from "./viewAudio";
-import type { Source } from "../source";
-import type { AudioData } from "../spectral/types";
-import type { TransportControl } from "../Transport";
+import type { SourceViewProps } from "./viewProps";
+import type { ChartTraceProps } from "../spectral/chartTraceProps";
+import type { ChartReadoutTrace } from "../spectral/useChartReadouts";
 import type { SpectralOptions } from "spectral-display";
 
 const CORRELATION_CONFIG: SpectralOptions["config"] = {
@@ -16,12 +16,6 @@ const CORRELATION_CONFIG: SpectralOptions["config"] = {
 	truePeak: false,
 	stereo: true,
 };
-
-interface CorrelationViewProps {
-	readonly sources: ReadonlyArray<Source>;
-	readonly sourceAudio: ReadonlyMap<string, AudioData>;
-	readonly onTransportControlChange?: (control: TransportControl) => void;
-}
 
 const CORR_MAX = 1;
 const CORR_MIN = -1;
@@ -41,16 +35,6 @@ function corrToY(corr: number): number {
 	return (CORR_MAX - clamped) / (CORR_MAX - CORR_MIN);
 }
 
-interface SourceCorrelationTraceProps {
-	readonly source: Source;
-	readonly audioData: AudioData;
-	readonly startMs: number;
-	readonly endMs: number;
-	readonly liveStartMs: number;
-	readonly liveEndMs: number;
-	readonly onComputeState?: (sourceId: string, state: ComputeState | null) => void;
-}
-
 function SourceCorrelationTrace({
 	source,
 	audioData,
@@ -59,10 +43,32 @@ function SourceCorrelationTrace({
 	liveStartMs,
 	liveEndMs,
 	onComputeState,
-}: SourceCorrelationTraceProps) {
+	onTraceChange,
+}: ChartTraceProps) {
 	const { computeResult, renderable } = useTraceCompute(audioData, startMs, endMs, CORRELATION_CONFIG);
 
 	const envelope = renderable ? renderable.correlationEnvelope : null;
+	const readout = useMemo<ChartReadoutTrace | null>(
+		() =>
+			renderable && envelope
+				? {
+						sourceId: source.id,
+						sourceName: source.name,
+						query: renderable.query,
+						values: envelope,
+						valueToY: corrToY,
+						formatValue: (value) => value.toFixed(2),
+						amplitudeLabel: "Correlation r",
+					}
+				: null,
+		[source.id, source.name, renderable, envelope],
+	);
+
+	useEffect(() => {
+		onTraceChange(source.id, readout);
+
+		return () => onTraceChange(source.id, null);
+	}, [source.id, readout, onTraceChange]);
 
 	const segments = useMemo(() => (envelope ? buildPolylineSegments(envelope, corrToY) : []), [envelope]);
 
@@ -100,6 +106,7 @@ function ChartCanvas({ chart, renderableSources }: ChartCanvasBaseProps) {
 						liveStartMs={liveStartMs}
 						liveEndMs={liveEndMs}
 						onComputeState={chart.progress.handleComputeState}
+						onTraceChange={chart.onTraceChange}
 					/>
 				))}
 			</ChartSvg>
@@ -107,7 +114,7 @@ function ChartCanvas({ chart, renderableSources }: ChartCanvasBaseProps) {
 	);
 }
 
-export function CorrelationView({ sources, sourceAudio, onTransportControlChange }: CorrelationViewProps) {
+export function CorrelationView({ sources, sourceAudio, onTransportControlChange }: SourceViewProps) {
 	const { renderableSources, chromeAudio, layerColor } = useTimelineChromeSources(sources, sourceAudio);
 
 	const chart = useChartView(chromeAudio, layerColor, CORR_AXIS, onTransportControlChange);

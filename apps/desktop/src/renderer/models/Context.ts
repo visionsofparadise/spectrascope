@@ -1,12 +1,13 @@
 import type { Main } from "./Main";
 import type { MainEvents } from "./MainEvents";
+import type { SessionActions } from "../hooks/useSessionActions";
 import type { ProxyStore } from "./ProxyStore/ProxyStore";
 import type { AppState } from "./State/App";
 import type { Logger } from "../../shared/models/Logger";
 import type { QueryClient } from "@tanstack/react-query";
 import type { Snapshot } from "valtio/vanilla";
 
-export interface AppContext {
+export interface AppContext extends SessionActions {
 	readonly app: Snapshot<AppState>;
 	readonly appStore: ProxyStore;
 	readonly logger: Logger;
@@ -15,9 +16,4 @@ export interface AppContext {
 	readonly queryClient: QueryClient;
 	readonly userDataPath: string;
 	readonly windowId: string;
-	readonly tabNames: Map<string, string>;
-	readonly renameCallbacks: Map<string, (name: string) => void>;
-	readonly openComparison: () => Promise<void>;
-	readonly newComparison: () => Promise<void>;
-	readonly renameTab: (tabId: string, newName: string) => void;
 }

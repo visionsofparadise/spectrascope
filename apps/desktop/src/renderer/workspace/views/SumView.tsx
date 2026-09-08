@@ -2,30 +2,29 @@ import { useMemo } from "react";
 import { StripLayout, StripOverlays, StripSourceRender, useStripView } from "../spectral/stripView";
 import type { LayerColor } from "../layers";
 import type { Source } from "../source";
-import type { AudioData } from "../spectral/types";
-import type { TransportControl } from "../Transport";
-import type { ViewControlSettings } from "../viewSettings";
-import type { ChannelInput } from "spectral-display";
-
-interface SumViewProps {
-	readonly sources: ReadonlyArray<Source>;
-	/**
-	 * The derived (summed) signal as a single PCM reader, backed by the
-	 * registered sum `media://` stream (`EMPTY_DERIVED_AUDIO` until audible).
-	 */
-	readonly derivedAudio: AudioData;
-	readonly channelInput: ChannelInput;
-	readonly settings: ViewControlSettings;
-	readonly onTransportControlChange?: (control: TransportControl) => void;
-}
+import type { DerivedSpectralViewProps } from "./viewProps";
 
 const SUM_LAYER_COLOR: LayerColor = {
 	primary: "#A3E635",
 	secondary: "#440154",
 };
 
-export function SumView({ sources, derivedAudio, channelInput, settings, onTransportControlChange }: SumViewProps) {
-	const view = useStripView("sum", derivedAudio, SUM_LAYER_COLOR, onTransportControlChange);
+export function SumView({
+	sources,
+	derivedAudio,
+	channelInput,
+	settings,
+	onFrequencyRangeChange,
+	onTransportControlChange,
+}: DerivedSpectralViewProps) {
+	const view = useStripView(
+		"sum",
+		derivedAudio,
+		SUM_LAYER_COLOR,
+		settings.frequencyRange,
+		onFrequencyRangeChange,
+		onTransportControlChange,
+	);
 
 	const visibleSources = useMemo(() => sources.filter((source) => source.visible), [sources]);
 

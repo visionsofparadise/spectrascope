@@ -16,6 +16,7 @@ interface SidebarProps {
 	readonly sourceStatus?: ReadonlyMap<string, SourceStreamStatus>;
 	readonly sourceErrors?: ReadonlyMap<string, string>;
 	readonly onRetrySource?: (sourceId: string) => void;
+	readonly onRelinkSource?: (sourceId: string) => void;
 	readonly onSourcesChange: (next: ReadonlyArray<Source>) => void;
 }
 
@@ -52,6 +53,7 @@ export function Sidebar({
 	sourceStatus,
 	sourceErrors,
 	onRetrySource,
+	onRelinkSource,
 	onSourcesChange,
 }: SidebarProps) {
 	const rateValues =
@@ -110,6 +112,7 @@ export function Sidebar({
 					sourceStatus={sourceStatus}
 					sourceErrors={sourceErrors}
 					onRetrySource={onRetrySource}
+					onRelinkSource={onRelinkSource}
 					onChange={onSourcesChange}
 				/>
 			</div>

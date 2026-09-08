@@ -1,7 +1,11 @@
+import { ShowMessageBoxRendererIpc } from "./Dialog/showMessageBox/Renderer";
 import { ShowOpenDialogRendererIpc } from "./Dialog/showOpenDialog/Renderer";
 import { ShowSaveDialogRendererIpc } from "./Dialog/showSaveDialog/Renderer";
+import { ExportImageRendererIpc } from "./Export/exportImage/Renderer";
+import { ExportStreamRendererIpc } from "./Export/exportStream/Renderer";
 import { DeleteFileRendererIpc } from "./FileSystem/deleteFile/Renderer";
 import { EnsureDirectoryRendererIpc } from "./FileSystem/ensureDirectory/Renderer";
+import { MapFilePathsRendererIpc } from "./FileSystem/mapFilePaths/Renderer";
 import { ReadDirectoryRendererIpc } from "./FileSystem/readDirectory/Renderer";
 import { ReadFileRendererIpc } from "./FileSystem/readFile/Renderer";
 import { ReadFileChunkRendererIpc } from "./FileSystem/readFileChunk/Renderer";
@@ -22,6 +26,10 @@ import { SetBoundsRendererIpc } from "./System/setBounds/Renderer";
 import type { IpcHandlerAction, IpcHandlerParameters, IpcHandlerReturn } from "../models/AsyncRendererIpc";
 
 export const ASYNC_RENDERER_IPCS = [
+	ExportImageRendererIpc,
+	ExportStreamRendererIpc,
+	MapFilePathsRendererIpc,
+	ShowMessageBoxRendererIpc,
 	DeleteFileRendererIpc,
 	EnsureDirectoryRendererIpc,
 	ReadDirectoryRendererIpc,

@@ -1,6 +1,7 @@
 import { frequencyToFraction } from "../utils/frequencyScale";
 import { majorTickIntervalMs } from "./timeTicks";
 import type { GridMode } from "../viewSettings";
+import type { TextureVerticalRange } from "spectral-display";
 
 interface GridOverlayProps {
 	readonly startMs: number;
@@ -8,9 +9,10 @@ interface GridOverlayProps {
 	readonly opacity: number;
 	readonly mode?: GridMode;
 	readonly sampleRate?: number;
+	readonly frequencyRange?: TextureVerticalRange;
 }
 
-export function GridOverlay({ startMs, endMs, opacity, mode, sampleRate = 48000 }: GridOverlayProps) {
+export function GridOverlay({ startMs, endMs, opacity, mode, sampleRate = 48000, frequencyRange }: GridOverlayProps) {
 	const spanMs = endMs - startMs;
 
 	if (spanMs <= 0 || !Number.isFinite(spanMs)) return null;
@@ -28,7 +30,9 @@ export function GridOverlay({ startMs, endMs, opacity, mode, sampleRate = 48000 
 
 	if (mode === "freq") {
 		for (const hz of [100, 200, 500, 1000, 2000, 5000, 10000, 20000]) {
-			if (hz <= sampleRate / 2) hLines.push(frequencyToFraction(hz, sampleRate));
+			const fraction = frequencyToFraction(hz, sampleRate, frequencyRange);
+
+			if (fraction >= 0 && fraction <= 1) hLines.push(fraction);
 		}
 	} else if (mode === "amp") {
 		const dbToLinear = (db: number) => Math.pow(10, db / 20);

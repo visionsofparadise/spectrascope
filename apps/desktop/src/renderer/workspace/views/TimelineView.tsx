@@ -6,6 +6,7 @@ import { GridOverlay } from "../spectral/GridOverlay";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
 import { trackPointerDrag } from "../spectral/pointerDrag";
 import { SelectionSurface } from "../spectral/SelectionSurface";
+import { useWaveformReadouts } from "../spectral/useWaveformReadouts";
 import { useTransportPlayback } from "../spectral/viewScaffold";
 import { useTimeViewport } from "../useTimeViewport";
 import { placeAudioOnTimeline } from "../utils/placeAudioOnTimeline";
@@ -15,15 +16,10 @@ import type { Source } from "../source";
 import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { TimelineDrag } from "./timelineExtent";
 import type { AudioData } from "../spectral/types";
+import type { DisplayedWaveform } from "../spectral/useWaveformReadouts";
 import type { TransportControl } from "../Transport";
 import type { ViewControlSettings } from "../viewSettings";
 import type { ChannelInput } from "spectral-display";
-
-const DEFAULT_CURSOR: SourceRenderCursorReadout = {
-	time: "00:00.000",
-	freq: "— Hz",
-	amp: "— dB",
-};
 
 function TimelineTrack({
 	source,
@@ -43,6 +39,7 @@ function TimelineTrack({
 	draggable,
 	dragging,
 	onCursorMove,
+	onDisplayedResultChange,
 	onDragMove,
 	onCommit,
 }: {
@@ -65,6 +62,7 @@ function TimelineTrack({
 	readonly draggable: boolean;
 	readonly dragging: boolean;
 	readonly onCursorMove: (readout: SourceRenderCursorReadout) => void;
+	readonly onDisplayedResultChange: (sourceId: string, displayed: DisplayedWaveform | null) => void;
 	readonly onDragMove: (offsetMs: number) => void;
 	/** Emits the final (floored ≥ 0) offset — once per drag (pointer-up) and once
 	 *  per arrow-key nudge. */
@@ -162,6 +160,7 @@ function TimelineTrack({
 				<div className="absolute inset-y-0" style={{ left: `${leftPct}%`, width: `${widthPct}%` }}>
 					{computeWindow && (
 						<SourceRender
+							onDisplayedResultChange={onDisplayedResultChange}
 							source={source}
 							audioData={audioData}
 							startMs={computeWindow.startMs}
@@ -242,7 +241,7 @@ export function TimelineView({
 	onSourceOffsetChange,
 	onTransportControlChange,
 }: TimelineViewProps) {
-	const [cursorReadout, setCursorReadout] = useState<SourceRenderCursorReadout>(DEFAULT_CURSOR);
+	const readouts = useWaveformReadouts();
 	const [drag, setDrag] = useState<TimelineDrag | null>(null);
 
 	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
@@ -272,7 +271,12 @@ export function TimelineView({
 		[renderableSources],
 	);
 
-	const viewport = useTimeViewport(extent.startMs, extent.endMs, drag !== null);
+	const viewport = useTimeViewport(
+		extent.startMs,
+		extent.endMs,
+		drag !== null,
+		1000 / (renderableSources[0]?.audioData.sampleRate ?? 48000),
+	);
 	const windowStartMs = viewport.startMs;
 	const windowEndMs = viewport.endMs;
 
@@ -307,9 +311,9 @@ export function TimelineView({
 	const transportControl = useMemo<TransportControl>(
 		() => ({
 			...playback,
-			cursorReadout,
+			...readouts.control,
 		}),
-		[playback, cursorReadout],
+		[playback, readouts.control],
 	);
 
 	useEffect(() => {
@@ -375,7 +379,8 @@ export function TimelineView({
 										spectrogramOpacity={settings.spectrogramOpacity}
 										draggable={onSourceOffsetChange !== undefined}
 										dragging={drag?.id === source.id}
-										onCursorMove={setCursorReadout}
+										onCursorMove={readouts.setCursorReadout}
+										onDisplayedResultChange={readouts.onDisplayedResultChange}
 										onDragMove={(offsetMs) => {
 											setDrag({ id: source.id, offsetMs });
 										}}

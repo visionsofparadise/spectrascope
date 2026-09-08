@@ -1,5 +1,6 @@
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isComparisonDirty } from "../comparison/utils/comparisonFingerprint";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -18,12 +19,15 @@ interface Props {
 	 * `null` on Home (no active comparison) — both buttons render disabled.
 	 */
 	readonly historyControl: HistoryControl | null;
+	readonly canExport: boolean;
+	readonly onExport: () => void;
+	readonly onPreferences: () => void;
 }
 
 const DRAG = { WebkitAppRegion: "drag" } as React.CSSProperties;
 const NO_DRAG = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
 
-export function AppBar({ context, historyControl }: Props) {
+export function AppBar({ context, historyControl, canExport, onExport, onPreferences }: Props) {
 	const { app, appStore } = context;
 
 	const [editingTabId, setEditingTabId] = useState<string | null>(null);
@@ -34,7 +38,12 @@ export function AppBar({ context, historyControl }: Props) {
 
 	const tabs = app.tabs.map((tab) => ({
 		id: tab.id,
-		label: context.tabNames.get(tab.id) ?? "Comparison",
+		label: app.comparisons.find((entry) => entry.id === tab.comparisonId)?.name ?? "Session",
+		dirty: (() => {
+			const comparison = app.comparisons.find((entry) => entry.id === tab.comparisonId);
+
+			return comparison ? isComparisonDirty(comparison) : false;
+		})(),
 	}));
 
 	const selectTab = (id: string): void => {
@@ -45,22 +54,9 @@ export function AppBar({ context, historyControl }: Props) {
 
 	const closeTab = useCallback(
 		(id: string): void => {
-			appStore.mutate(app, (proxy) => {
-				const index = proxy.tabs.findIndex((tab) => tab.id === id);
-
-				if (index === -1) return;
-
-				proxy.tabs.splice(index, 1);
-
-				if (proxy.activeTabId === id) {
-					proxy.activeTabId = proxy.tabs[index]?.id ?? proxy.tabs[index - 1]?.id ?? null;
-				}
-			});
-
-			context.tabNames.delete(id);
-			context.renameCallbacks.delete(id);
+			void context.closeComparison(id);
 		},
-		[app, appStore, context.tabNames, context.renameCallbacks],
+		[context],
 	);
 
 	const closeActiveTab = useCallback((): void => {
@@ -106,15 +102,27 @@ export function AppBar({ context, historyControl }: Props) {
 						<DropdownMenuItem onSelect={() => void context.newComparison()}>New Session</DropdownMenuItem>
 						<DropdownMenuItem onSelect={() => void context.openComparison()}>Open…</DropdownMenuItem>
 						<DropdownMenuSeparator />
-						<DropdownMenuItem disabled>Save</DropdownMenuItem>
-						<DropdownMenuItem disabled>Save As…</DropdownMenuItem>
+						<DropdownMenuItem
+							disabled={!hasActiveTab || context.busy}
+							onSelect={() => void context.saveComparison()}
+						>
+							Save
+						</DropdownMenuItem>
+						<DropdownMenuItem
+							disabled={!hasActiveTab || context.busy}
+							onSelect={() => void context.saveComparison(true)}
+						>
+							Save As…
+						</DropdownMenuItem>
 						<DropdownMenuSeparator />
-						<DropdownMenuItem disabled>Export…</DropdownMenuItem>
+						<DropdownMenuItem disabled={!canExport} onSelect={onExport}>
+							Export…
+						</DropdownMenuItem>
 						<DropdownMenuItem disabled={!hasActiveTab} onSelect={closeActiveTab}>
 							Close Session
 						</DropdownMenuItem>
 						<DropdownMenuSeparator />
-						<DropdownMenuItem disabled>Preferences</DropdownMenuItem>
+						<DropdownMenuItem onSelect={onPreferences}>Preferences</DropdownMenuItem>
 					</DropdownMenuContent>
 				</DropdownMenu>
 			</div>
@@ -180,6 +188,7 @@ export function AppBar({ context, historyControl }: Props) {
 									}}
 								>
 									{tab.label}
+									{tab.dirty ? " •" : ""}
 								</span>
 							)}
 							<button

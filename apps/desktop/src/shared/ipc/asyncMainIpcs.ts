@@ -1,7 +1,11 @@
+import { ShowMessageBoxMainIpc } from "./Dialog/showMessageBox/Main";
 import { ShowOpenDialogMainIpc } from "./Dialog/showOpenDialog/Main";
 import { ShowSaveDialogMainIpc } from "./Dialog/showSaveDialog/Main";
+import { ExportImageMainIpc } from "./Export/exportImage/Main";
+import { ExportStreamMainIpc } from "./Export/exportStream/Main";
 import { DeleteFileMainIpc } from "./FileSystem/deleteFile/Main";
 import { EnsureDirectoryMainIpc } from "./FileSystem/ensureDirectory/Main";
+import { MapFilePathsMainIpc } from "./FileSystem/mapFilePaths/Main";
 import { ReadDirectoryMainIpc } from "./FileSystem/readDirectory/Main";
 import { ReadFileMainIpc } from "./FileSystem/readFile/Main";
 import { ReadFileChunkMainIpc } from "./FileSystem/readFileChunk/Main";
@@ -21,6 +25,10 @@ import { QuitAppMainIpc } from "./System/quitApp/Main";
 import { SetBoundsMainIpc } from "./System/setBounds/Main";
 
 export const ASYNC_MAIN_IPCS = [
+	ExportImageMainIpc,
+	ExportStreamMainIpc,
+	MapFilePathsMainIpc,
+	ShowMessageBoxMainIpc,
 	DeleteFileMainIpc,
 	EnsureDirectoryMainIpc,
 	ReadDirectoryMainIpc,

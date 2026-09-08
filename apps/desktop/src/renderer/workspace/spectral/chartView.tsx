@@ -1,13 +1,14 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { LinearDbAxis, TimeRuler } from "./Axes";
 import { hexToRgb255 } from "./colorUtil";
 import { ComputeProgress } from "./ComputeProgress";
 import { useFirstComputeProgress } from "./firstComputeProgress";
 import { MinimapDisplay } from "./MinimapDisplay";
 import { SelectionSurface } from "./SelectionSurface";
+import { useChartReadouts } from "./useChartReadouts";
 import { usePublishedTransportControl, useTransportPlayback, useViewportScrub } from "./viewScaffold";
 import type { LayerColor } from "../layers";
-import type { TransportControl, TransportCursorReadout } from "../Transport";
+import type { TransportControl } from "../Transport";
 import type { AudioData } from "./types";
 import type { SourceWithAudio } from "../views/viewAudio";
 
@@ -23,7 +24,7 @@ type ChartView = ReturnType<typeof useChartView>;
 export function useChartView(
 	chromeAudio: AudioData,
 	layerColor: LayerColor,
-	axis: ChartAxis,
+	_axis: ChartAxis,
 	onTransportControlChange?: (control: TransportControl) => void,
 	controlExtras?: Partial<TransportControl>,
 ) {
@@ -33,10 +34,7 @@ export function useChartView(
 
 	const playback = useTransportPlayback(chromeAudio.durationMs / 1000);
 
-	const [cursorReadout, setCursorReadout] = useState<TransportCursorReadout>({
-		time: "00:00.000",
-		amp: axis.emptyValue,
-	});
+	const readouts = useChartReadouts();
 
 	const { startMs, endMs } = scrub.viewport;
 
@@ -49,27 +47,19 @@ export function useChartView(
 			const xFrac = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
 			const yFrac = Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height));
 
-			const totalSec = (startMs + xFrac * (endMs - startMs)) / 1000;
-			const mins = Math.floor(totalSec / 60);
-			const secs = Math.floor(totalSec % 60);
-			const ms = Math.floor((totalSec % 1) * 1000);
-			const time = `${mins.toString().padStart(2, "0")}:${secs
-				.toString()
-				.padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
-
-			setCursorReadout({ time, amp: axis.formatValue(axis.max - yFrac * (axis.max - axis.min)) });
+			readouts.setCursor({ timeMs: startMs + xFrac * (endMs - startMs), y: yFrac });
 		},
-		[startMs, endMs, axis],
+		[startMs, endMs, readouts.setCursor],
 	);
 
 	const control = useMemo<TransportControl>(
-		() => ({ disabled: false, ...playback, cursorReadout, ...controlExtras }),
-		[playback, cursorReadout, controlExtras],
+		() => ({ disabled: false, ...playback, ...readouts.control, ...controlExtras }),
+		[playback, readouts.control, controlExtras],
 	);
 
 	usePublishedTransportControl(control, onTransportControlChange);
 
-	return { chromeAudio, layerColor, progress, ...scrub, handleChartMouseMove };
+	return { chromeAudio, layerColor, progress, ...scrub, handleChartMouseMove, onTraceChange: readouts.onTraceChange };
 }
 
 export interface ChartCanvasBaseProps {

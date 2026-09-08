@@ -11,6 +11,7 @@ interface SourcesPanelProps {
 	readonly sourceStatus?: ReadonlyMap<string, SourceStreamStatus>;
 	readonly sourceErrors?: ReadonlyMap<string, string>;
 	readonly onRetrySource?: (sourceId: string) => void;
+	readonly onRelinkSource?: (sourceId: string) => void;
 	readonly activeSourceId?: string;
 	readonly onActiveSourceChange?: (id: string) => void;
 }
@@ -21,6 +22,7 @@ export function SourcesPanel({
 	sourceStatus,
 	sourceErrors,
 	onRetrySource,
+	onRelinkSource,
 	activeSourceId,
 	onActiveSourceChange,
 }: SourcesPanelProps) {
@@ -67,6 +69,7 @@ export function SourcesPanel({
 								status={sourceStatus?.get(source.id)}
 								error={sourceErrors?.get(source.id)}
 								onRetry={onRetrySource ? () => onRetrySource(source.id) : undefined}
+								onRelink={onRelinkSource ? () => onRelinkSource(source.id) : undefined}
 								onChange={replaceSource}
 								onRemove={() => removeSource(source.id)}
 								active={source.id === activeSourceId}

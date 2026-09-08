@@ -1,14 +1,17 @@
+import { formatInspectionTime } from "../utils/formatInspectionTime";
 import { frequencyToFraction } from "../utils/frequencyScale";
 import { SelectionSurface } from "./SelectionSurface";
 import { FREQUENCY_TICK_LABELS, majorTickIntervalMs } from "./timeTicks";
+import type { TextureVerticalRange } from "spectral-display";
 
 const FREQ_LABELS = FREQUENCY_TICK_LABELS.filter((tick) => tick.hz >= 100);
 
 interface FrequencyAxisProps {
 	readonly sampleRate: number;
+	readonly frequencyRange?: TextureVerticalRange;
 }
 
-export function FrequencyAxis({ sampleRate }: FrequencyAxisProps) {
+export function FrequencyAxis({ sampleRate, frequencyRange }: FrequencyAxisProps) {
 	return (
 		<div
 			className="relative bg-void font-technical text-chrome-text-secondary"
@@ -19,7 +22,9 @@ export function FrequencyAxis({ sampleRate }: FrequencyAxisProps) {
 			}}
 		>
 			{FREQ_LABELS.filter(({ hz }) => hz <= sampleRate / 2).map(({ hz, label }) => {
-				const yPct = frequencyToFraction(hz, sampleRate) * 100;
+				const yPct = frequencyToFraction(hz, sampleRate, frequencyRange) * 100;
+
+				if (yPct < 0 || yPct > 100) return null;
 
 				return (
 					<div
@@ -101,12 +106,9 @@ interface TimeRulerProps {
 }
 
 function formatRulerTime(ms: number, majorMs: number): string {
-	const roundedMs = Math.round(ms);
-	const minutes = Math.floor(roundedMs / 60000);
-	const precision = majorMs >= 100 ? 1 : majorMs >= 10 ? 2 : 3;
-	const seconds = ((roundedMs % 60000) / 1000).toFixed(precision);
+	const precision = Math.max(1, Math.min(6, -Math.floor(Math.log10(majorMs / 1000))));
 
-	return `${minutes}:${seconds.padStart(3 + precision, "0")}`;
+	return formatInspectionTime(ms, precision);
 }
 
 export function TimeRuler({ startMs, endMs }: TimeRulerProps) {

@@ -1,4 +1,6 @@
+import { ComparisonSchema, INITIAL_PREFERENCES, type Preferences } from "../models/State/App";
 import { createDefaultSource } from "../workspace/source";
+import { comparisonFingerprint } from "./utils/comparisonFingerprint";
 import type { Comparison, SourceState } from "../models/State/App";
 import type { Source } from "../workspace/source";
 
@@ -45,18 +47,29 @@ export function createSourceFromFile(filePath: string, index: number): SourceSta
 	);
 }
 
-export function createComparison(filePaths: ReadonlyArray<string>): Comparison {
-	return {
+export function createComparison(
+	filePaths: ReadonlyArray<string>,
+	preferences: Preferences = INITIAL_PREFERENCES,
+): Comparison {
+	const comparison = ComparisonSchema.parse({
 		id: generateId(),
+		name: filePaths[0] ? fileNameOf(filePaths[0]).slice(0, 200) : "New Session",
+		volume: preferences.monitorVolume,
+		playbackRate: preferences.playbackRate,
+		viewSettings: { fftSize: preferences.fftSize, hopOverlap: preferences.hopOverlap },
 		sources: filePaths.map((filePath, index) => createSourceFromFile(filePath, index)),
 		activeView: "overlay",
 		channelInput: "mono",
 		positionSec: 0,
 		selection: null,
-		canonicalSampleRate: null,
+		canonicalSampleRate: preferences.sampleRate,
 		differenceA: null,
 		differenceB: null,
-	};
+	});
+
+	if (filePaths.length === 0) comparison.savedFingerprint = comparisonFingerprint(comparison);
+
+	return comparison;
 }
 
 export function createTabId(): string {

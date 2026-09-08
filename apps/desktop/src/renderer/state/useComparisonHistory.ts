@@ -56,6 +56,7 @@ export function useComparisonHistory(
 
 				if (!target) return;
 
+				target.name = state.name;
 				target.sources = state.sources.map((source) => toSourceState(source));
 				target.activeView = state.activeView;
 				target.channelInput = state.channelInput;

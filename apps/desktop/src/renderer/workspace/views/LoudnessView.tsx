@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChartSvg, HorizontalGridlines, TracePolylines } from "../spectral/chartMarks";
 import { ChartLayout, useChartView, type ChartAxis, type ChartCanvasBaseProps } from "../spectral/chartView";
-import { useReportComputeState, type ComputeState } from "../spectral/firstComputeProgress";
+import { useReportComputeState } from "../spectral/firstComputeProgress";
 import { useTraceCompute } from "../spectral/traceCompute";
 import { computeWindowTransform } from "../useTimeViewport";
 import { METRICS } from "../viewSettings";
 import { buildPolylineSegments } from "./chartTrace";
 import { useTimelineChromeSources } from "./viewAudio";
 import type { Source } from "../source";
-import type { AudioData } from "../spectral/types";
-import type { TransportControl } from "../Transport";
+import type { SourceViewProps } from "./viewProps";
+import type { ChartTraceProps } from "../spectral/chartTraceProps";
+import type { ChartReadoutTrace } from "../spectral/useChartReadouts";
 import type { LoudnessMetric, MetricSpec, ViewControlSettings } from "../viewSettings";
 import type { LoudnessData, SpectralOptions } from "spectral-display";
 
@@ -19,11 +20,8 @@ const LOUDNESS_CONFIG: SpectralOptions["config"] = {
 	truePeak: true,
 };
 
-interface LoudnessViewProps {
-	readonly sources: ReadonlyArray<Source>;
-	readonly sourceAudio: ReadonlyMap<string, AudioData>;
+interface LoudnessViewProps extends SourceViewProps {
 	readonly settings: ViewControlSettings;
-	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
 const DEFAULT_METRIC: MetricSpec = METRICS[2] ?? {
@@ -93,16 +91,9 @@ function scalarMetricValue(
 	return null;
 }
 
-interface SourceLoudnessTraceProps {
-	readonly source: Source;
-	readonly audioData: AudioData;
-	readonly startMs: number;
-	readonly endMs: number;
-	readonly liveStartMs: number;
-	readonly liveEndMs: number;
+interface SourceLoudnessTraceProps extends ChartTraceProps {
 	readonly metric: MetricSpec;
 	readonly onLoudnessData: (sourceId: string, data: LoudnessData | null) => void;
-	readonly onComputeState?: (sourceId: string, state: ComputeState | null) => void;
 }
 
 function SourceLoudnessTrace({
@@ -115,10 +106,49 @@ function SourceLoudnessTrace({
 	metric,
 	onLoudnessData,
 	onComputeState,
+	onTraceChange,
 }: SourceLoudnessTraceProps) {
 	const { computeResult, renderable } = useTraceCompute(audioData, startMs, endMs, LOUDNESS_CONFIG);
 
 	const loudnessData = renderable ? renderable.loudnessData : null;
+	const readout = useMemo<ChartReadoutTrace | null>(() => {
+		if (!renderable || !loudnessData) return null;
+
+		const scalar = scalarMetricValue(loudnessData, metric.id);
+		const series = pickSeriesForMetric(loudnessData, metric.id);
+		const values = scalar
+			? scalar.value
+			: series
+				? metric.id === "rms"
+					? series.map((value) => (value > 0 ? 20 * Math.log10(value) : -Infinity))
+					: series
+				: null;
+
+		if (values === null) return null;
+
+		const units =
+			metric.id === "integrated" || metric.id === "momentary" || metric.id === "shortTerm"
+				? "LUFS"
+				: metric.id === "truePeak"
+					? "dBTP"
+					: "dBFS";
+
+		return {
+			sourceId: source.id,
+			sourceName: source.name,
+			query: renderable.query,
+			values,
+			valueToY: (value) => dbToY(value, metric.axisMin),
+			formatValue: (value) => (value === -Infinity ? "−∞" : value.toFixed(1)),
+			amplitudeLabel: `${scalar ? "Window " : ""}${metric.label} ${units}`,
+		};
+	}, [source.id, source.name, renderable, loudnessData, metric]);
+
+	useEffect(() => {
+		onTraceChange(source.id, readout);
+
+		return () => onTraceChange(source.id, null);
+	}, [source.id, readout, onTraceChange]);
 
 	useEffect(() => {
 		onLoudnessData(source.id, loudnessData);
@@ -280,6 +310,7 @@ function ChartCanvas({ chart, renderableSources, metric }: ChartCanvasProps) {
 						metric={metric}
 						onLoudnessData={handleLoudnessData}
 						onComputeState={chart.progress.handleComputeState}
+						onTraceChange={chart.onTraceChange}
 					/>
 				))}
 			</ChartSvg>

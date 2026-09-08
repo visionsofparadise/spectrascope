@@ -9,9 +9,7 @@ import { TimelineView } from "./views/TimelineView";
 import { VectorscopeView } from "./views/VectorscopeView";
 import type { Source } from "./source";
 import type { AudioData } from "./spectral/types";
-import type { TransportControl } from "./Transport";
-import type { ViewControlSettings } from "./viewSettings";
-import type { ChannelInput } from "spectral-display";
+import type { SpectralViewControls, DifferenceSelectionProps } from "./views/viewProps";
 
 export type ViewId =
 	| "timeline"
@@ -24,7 +22,7 @@ export type ViewId =
 	| "correlation"
 	| "vectorscope";
 
-interface WorkspaceProps {
+interface WorkspaceProps extends SpectralViewControls, DifferenceSelectionProps {
 	/**
 	 * Per-source PCM readers, keyed by `Source.id`. Each source carries its own
 	 * decoded audio rather than the whole workspace sharing one buffer — the
@@ -48,39 +46,12 @@ interface WorkspaceProps {
 	 */
 	readonly activeView: ViewId;
 	/**
-	 * The global Mono/Mid/Side channel-input mode. Controlled — persisted on the
-	 * comparison and threaded into every per-source spectrogram view plus
-	 * Frequency Distribution (whose LTAS folds the same channel input). Inert on
-	 * Correlation and Vectorscope, which are not passed it.
-	 */
-	readonly channelInput: ChannelInput;
-	/**
-	 * The shared display-control settings, owned by the comparison host and
-	 * consumed by the five SourceStrip views + Loudness + Frequency Distribution
-	 * (FFT size / hop overlap). Correlation and Vectorscope take none.
-	 */
-	readonly settings: ViewControlSettings;
-	/**
-	 * The Difference view's A/B source selection (source ids), or `null` until the
-	 * sticky default is written. Threaded into `DifferenceView`'s selector row;
-	 * the other views ignore it.
-	 */
-	readonly differenceA: string | null;
-	readonly differenceB: string | null;
-	/**
-	 * Emitted when the Difference A/B selection changes — `(differenceA,
-	 * differenceB)` source ids. The host persists both fields as one
-	 * history-participating `"difference"` edit, and the diff stream re-registers.
-	 */
-	readonly onDifferenceChange: (differenceA: string, differenceB: string) => void;
-	/**
 	 * Emitted when a source is dragged on the Timeline view — `(sourceId,
 	 * offsetMs)` with `offsetMs ≥ 0`. Forwarded straight to `TimelineView`; the
 	 * other views do not place strips by offset. When omitted, the Timeline
 	 * still lays strips out by offset but renders no drag affordance.
 	 */
 	readonly onSourceOffsetChange?: (sourceId: string, offsetMs: number) => void;
-	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
 export function Workspace({
@@ -90,6 +61,7 @@ export function Workspace({
 	activeView,
 	channelInput,
 	settings,
+	onFrequencyRangeChange,
 	differenceA,
 	differenceB,
 	onDifferenceChange,
@@ -110,6 +82,7 @@ export function Workspace({
 			)}
 			{activeView === "overlay" && (
 				<OverlayView
+					onFrequencyRangeChange={onFrequencyRangeChange}
 					sources={sources}
 					sourceAudio={sourceAudio}
 					channelInput={channelInput}
@@ -119,6 +92,7 @@ export function Workspace({
 			)}
 			{activeView === "slider" && (
 				<SliderView
+					onFrequencyRangeChange={onFrequencyRangeChange}
 					sources={sources}
 					sourceAudio={sourceAudio}
 					channelInput={channelInput}
@@ -128,6 +102,7 @@ export function Workspace({
 			)}
 			{activeView === "difference" && (
 				<DifferenceView
+					onFrequencyRangeChange={onFrequencyRangeChange}
 					sources={sources}
 					derivedAudio={derivedAudio}
 					channelInput={channelInput}
@@ -140,6 +115,7 @@ export function Workspace({
 			)}
 			{activeView === "sum" && (
 				<SumView
+					onFrequencyRangeChange={onFrequencyRangeChange}
 					sources={sources}
 					derivedAudio={derivedAudio}
 					channelInput={channelInput}

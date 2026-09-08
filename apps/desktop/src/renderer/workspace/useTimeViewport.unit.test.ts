@@ -47,6 +47,17 @@ describe("panWindow", () => {
 });
 
 describe("zoomWindow", () => {
+	it.each([44100, 48000, 192000])("reaches a sample at %i Hz after an hour", (rate) => {
+		const result = zoomWindow(
+			{ startMs: 3600000, endMs: 3600010 },
+			0.00001,
+			0.5,
+			{ startMs: 0, endMs: 7200000 },
+			1000 / rate,
+		);
+		expect(result.endMs - result.startMs).toBeCloseTo(1000 / rate, 7);
+		expect((result.startMs + result.endMs) / 2).toBeCloseTo(3600005, 6);
+	});
 	it("keeps the cursor's time fixed across a zoom (interior)", () => {
 		const window: TimeWindow = { startMs: 200, endMs: 400 };
 		const cursorFrac = 0.25;
