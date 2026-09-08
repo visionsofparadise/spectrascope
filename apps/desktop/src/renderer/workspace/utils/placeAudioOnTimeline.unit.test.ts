@@ -17,8 +17,44 @@ describe("placeAudioOnTimeline", () => {
 		const placed = placeAudioOnTimeline(audio, 3, 10);
 
 		expect(Array.from(await placed.readSamples(0, 1, 8))).toEqual([0, 0, 1, 2, 3, 4, 0, 0]);
-		expect(readSamples).toHaveBeenCalledExactlyOnceWith(0, 0, 4);
+		expect(readSamples).toHaveBeenCalledExactlyOnceWith(0, 0, 4, undefined);
 		expect(placed.durationMs).toBe(10);
+	});
+	it("forwards the same signal with the offset-adjusted sample range", async () => {
+		const { audio, readSamples } = fixture();
+		const controller = new AbortController();
+		const placed = placeAudioOnTimeline(audio, 3, 10);
+		expect([...(await placed.readSamples(0, 1, 8, controller.signal))]).toEqual([0, 0, 1, 2, 3, 4, 0, 0]);
+		expect(readSamples).toHaveBeenCalledExactlyOnceWith(0, 0, 4, controller.signal);
+	});
+	it("rejects canceled silence reads before touching the source", async () => {
+		const { audio, readSamples } = fixture();
+		const controller = new AbortController();
+		controller.abort();
+		await expect(placeAudioOnTimeline(audio, 3, 10).readSamples(0, 0, 3, controller.signal)).rejects.toMatchObject({
+			name: "AbortError",
+		});
+		expect(readSamples).not.toHaveBeenCalled();
+	});
+	it("discards a source response that settles after cancellation", async () => {
+		const { audio } = fixture();
+		const controller = new AbortController();
+		let resolveRead: ((value: Float32Array) => void) | undefined;
+		const placed = placeAudioOnTimeline(
+			{
+				...audio,
+				readSamples: () =>
+					new Promise<Float32Array>((resolve) => {
+						resolveRead = resolve;
+					}),
+			},
+			3,
+			10,
+		);
+		const pending = placed.readSamples(0, 1, 8, controller.signal);
+		controller.abort();
+		resolveRead?.(new Float32Array([1, 2, 3, 4]));
+		await expect(pending).rejects.toMatchObject({ name: "AbortError" });
 	});
 
 	it("preserves clip-local samples across consecutive chunk reads", async () => {

@@ -22,7 +22,12 @@ export interface SampleQuery extends Dimensions {
 export interface PipelineOptions {
 	metadata: SpectralMetadata;
 	sampleQuery: SampleQuery;
-	readSamples: (channel: number, sampleOffset: number, sampleCount: number) => Promise<Float32Array>;
+	readSamples: (
+		channel: number,
+		sampleOffset: number,
+		sampleCount: number,
+		signal?: AbortSignal,
+	) => Promise<Float32Array>;
 	config: RequiredProperties<SpectralConfig, "device" | "signal">;
 	onProgress?: (fraction: number) => void;
 }
@@ -131,7 +136,7 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 
 			const channelBuffers = await Promise.all(
 				Array.from({ length: channelCount }, (_, channel) =>
-					readSamples(channel, startSample + offset, chunkFrames),
+					readSamples(channel, startSample + offset, chunkFrames, signal),
 				),
 			);
 
@@ -164,7 +169,7 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 			const readCount = readEnd - readStart;
 			const channelBuffers = await Promise.all(
 				Array.from({ length: channelCount }, async (_, channel) => {
-					const samples = await readSamples(channel, readStart, readCount);
+					const samples = await readSamples(channel, readStart, readCount, signal);
 
 					signal.throwIfAborted();
 

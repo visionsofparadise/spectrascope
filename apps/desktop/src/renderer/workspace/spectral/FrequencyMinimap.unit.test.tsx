@@ -3,13 +3,12 @@ import { FrequencyMinimap } from "./FrequencyMinimap";
 import { EMPTY_AUDIO_DATA } from "../views/viewAudio";
 import { SpectrogramCanvas } from "spectral-display";
 import type { ComponentProps, ReactElement } from "react";
-import type { SpectralOptions, FrequencyScale } from "spectral-display";
+import type { ComputeResultReady, FrequencyScale } from "spectral-display";
 
 const runtime = vi.hoisted(() => ({
 	index: 0,
 	refs: [] as Array<{ current: unknown }>,
-	result: { status: "idle" } as unknown,
-	options: null as SpectralOptions | null,
+	result: null as ComputeResultReady | null,
 }));
 vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
@@ -24,10 +23,9 @@ vi.mock("react", async (importOriginal) => ({
 vi.mock("./useContainerSize", () => ({ useContainerSize: () => ({ width: 64, height: 800 }) }));
 vi.mock("spectral-display", async (importOriginal) => ({
 	...(await importOriginal<typeof import("spectral-display")>()),
-	useSpectralCompute: (options: SpectralOptions) => {
-		runtime.options = options;
-		return runtime.result;
-	},
+	useSpectralCompute: vi.fn(() => {
+		throw new Error("Minimap must reuse displayed spectrum");
+	}),
 	SpectrogramCanvas: () => null,
 }));
 
@@ -43,11 +41,8 @@ function buttons(node: unknown): Array<ReactElement<ComponentProps<"button">>> {
 function renderTree(change: ReturnType<typeof vi.fn>, frequencyScale: FrequencyScale = "mel") {
 	runtime.index = 0;
 	return FrequencyMinimap({
-		audioData: EMPTY_AUDIO_DATA,
-		startMs: 0,
-		endMs: 1000,
-		layerColor: { primary: "#ffffff", secondary: "#000000" },
-		channelInput: "mono",
+		sampleRate: EMPTY_AUDIO_DATA.sampleRate,
+		computeResult: runtime.result,
 		frequencyRange: { top: 0.25, bottom: 0.75 },
 		frequencyScale,
 		onFrequencyRangeChange: change,
@@ -65,23 +60,21 @@ function hasCanvas(node: unknown): boolean {
 beforeEach(() => {
 	runtime.refs = [];
 	runtime.index = 0;
-	runtime.result = { status: "idle" };
-	runtime.options = null;
+	runtime.result = null;
 });
 describe("frequency minimap controls", () => {
-	it("uses the selected scale for compute and accessible frequency values", () => {
+	it("uses the selected scale for accessible frequency values", () => {
 		const controls = buttons(renderTree(vi.fn(), "linear"));
-		expect(runtime.options?.config?.frequencyScale).toBe("linear");
 		const pan = controls.find((button) => button.props["aria-label"] === "Frequency range");
 		const nyquist = EMPTY_AUDIO_DATA.sampleRate / 2;
 		expect(pan?.props["aria-valuetext"]).toBe(`${Math.round(nyquist * 0.25)} to ${Math.round(nyquist * 0.75)} Hz`);
 	});
 	it("hides held pixels from a different scale until matching output is ready", () => {
 		const previous = { status: "ready", options: { config: { frequencyScale: "mel" } } };
-		runtime.result = { status: "computing", previous };
+		runtime.result = previous as ComputeResultReady;
 		expect(hasCanvas(renderTree(vi.fn(), "linear"))).toBe(false);
 		expect(hasCanvas(renderTree(vi.fn(), "mel"))).toBe(true);
-		runtime.result = { status: "ready", options: { config: { frequencyScale: "linear" } } };
+		runtime.result = { status: "ready", options: { config: { frequencyScale: "linear" } } } as ComputeResultReady;
 		expect(hasCanvas(renderTree(vi.fn(), "linear"))).toBe(true);
 	});
 	it("zooms and resets through keyboard and the named reset action", () => {

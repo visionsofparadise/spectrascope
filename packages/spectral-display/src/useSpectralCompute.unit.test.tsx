@@ -110,6 +110,73 @@ afterEach(() => {
 });
 
 describe("analysis lifecycle", () => {
+	it("revisits an exact overview without pipeline work and cancels obsolete zoom work", async () => {
+		vi.mocked(runPipeline).mockImplementation(async (options) => resultFor(options));
+		const options = optionsOf();
+		render(options);
+		await settle();
+		const overview = render(options);
+		const pending = deferred<PipelineResult>();
+		vi.mocked(runPipeline).mockReturnValueOnce(pending.promise);
+		const zoom = { ...options, query: { ...options.query, startMs: 100, endMs: 500 } };
+		render(zoom);
+		await settle();
+		const interrupted = vi.mocked(runPipeline).mock.calls[1]![0];
+		render(options);
+		await settle();
+		expect(render(options)).toBe(overview);
+		expect(runPipeline).toHaveBeenCalledTimes(2);
+		expect(interrupted.config.signal.aborted).toBe(true);
+		const destroy = vi.fn();
+		pending.resolve(resultFor(interrupted, { destroy } as unknown as GPUTexture));
+		await settle();
+		expect(destroy).toHaveBeenCalledOnce();
+	});
+
+	it("keeps fractional times and dimensions distinct and ignores caller signal identity for cache keys", async () => {
+		vi.mocked(runPipeline).mockImplementation(async (options) => resultFor(options));
+		const options = optionsOf();
+		const first = { ...options, query: { ...options.query, startMs: 0.001 } };
+		for (const query of [first.query, { ...first.query, startMs: 0.002 }, { ...first.query, width: 801 }]) {
+			render({ ...first, query });
+			await settle();
+		}
+		expect(runPipeline).toHaveBeenCalledTimes(3);
+		render({ ...first, config: { signal: new AbortController().signal } });
+		await settle();
+		expect(runPipeline).toHaveBeenCalledTimes(3);
+		const aborted = new AbortController();
+		aborted.abort();
+		const stopped = { ...options, config: { signal: aborted.signal } };
+		render(stopped);
+		await settle();
+		expect(render(stopped).status).toBe("computing");
+		expect(runPipeline).toHaveBeenCalledTimes(3);
+	});
+
+	it.each(["reader", "metadata", "weights", "config", "device"])(
+		"invalidates cached results when %s changes",
+		async (kind) => {
+			vi.mocked(runPipeline).mockImplementation(async (options) => resultFor(options));
+			const options = optionsOf();
+			render(options);
+			await settle();
+			const changed = {
+				...options,
+				...(kind === "reader" ? { readSamples: async () => new Float32Array(1) } : {}),
+				...(kind === "metadata" ? { metadata: { ...options.metadata, sampleRate: 44100 } } : {}),
+				...(kind === "weights" ? { metadata: { ...options.metadata, channelWeights: [0.5] } } : {}),
+				...(kind === "config" ? { config: { frequencyScale: "mel" as const } } : {}),
+			};
+			if (kind === "device") vi.mocked(getDevice).mockResolvedValue({} as GPUDevice);
+			render({ ...changed, query: { ...changed.query, endMs: 500 } });
+			await settle();
+			render(changed);
+			await settle();
+			expect(runPipeline).toHaveBeenCalledTimes(3);
+		},
+	);
+
 	it("invalidates equal-sized reader replacements and destroys their late obsolete output", async () => {
 		const first = deferred<PipelineResult>();
 		const second = deferred<PipelineResult>();

@@ -1,6 +1,5 @@
-import { useRef, useEffect, useMemo, useCallback } from "react";
-import { SpectrogramCanvas, useSpectralCompute } from "spectral-display";
-import { buildLayerColormap } from "../layers";
+import { useRef, useEffect, useCallback } from "react";
+import { SpectrogramCanvas } from "spectral-display";
 import {
 	constrainFrequencyRange,
 	FULL_FREQUENCY_RANGE,
@@ -10,38 +9,25 @@ import {
 	zoomFrequencyRange,
 } from "../utils/frequencyRange";
 import { fractionToFrequency } from "../utils/frequencyScale";
-import { ComputeProgress } from "./ComputeProgress";
-import { heldComputeResult } from "./computeResult";
-import { useContainerSize } from "./useContainerSize";
-import type { LayerColor } from "../layers";
-import type { AudioData } from "./types";
 import type { FrequencyScale } from "spectral-display";
-import type { ChannelInput, SpectralOptions, TextureVerticalRange } from "spectral-display";
+import type { ComputeResultReady, TextureVerticalRange } from "spectral-display";
 
 interface FrequencyMinimapProps {
-	readonly audioData: AudioData;
-	readonly startMs: number;
-	readonly endMs: number;
-	readonly layerColor: LayerColor;
-	readonly channelInput: ChannelInput;
+	readonly sampleRate: number;
+	readonly computeResult: ComputeResultReady | null;
 	readonly frequencyScale?: FrequencyScale;
 	readonly frequencyRange: TextureVerticalRange;
 	readonly onFrequencyRangeChange: (range: TextureVerticalRange) => void;
 }
 
 export function FrequencyMinimap({
-	audioData,
-	startMs,
-	endMs,
-	layerColor,
-	channelInput,
+	sampleRate,
+	computeResult,
 	frequencyScale = "mel",
 	frequencyRange,
 	onFrequencyRangeChange,
 }: FrequencyMinimapProps) {
-	const colormap = useMemo(() => buildLayerColormap(layerColor), [layerColor]);
 	const containerRef = useRef<HTMLDivElement>(null);
-	const size = useContainerSize(containerRef, { width: 32, height: 400 });
 	const range = constrainFrequencyRange(frequencyRange);
 	const rangeRef = useRef(range);
 	const changeRef = useRef(onFrequencyRangeChange);
@@ -134,31 +120,8 @@ export function FrequencyMinimap({
 			onFrequencyRangeChange(next);
 		}
 	};
-	const spectralOptions = useMemo<SpectralOptions>(
-		() => ({
-			metadata: {
-				sampleRate: audioData.sampleRate,
-				sampleCount: audioData.totalSamples,
-				channelCount: audioData.channels,
-			},
-			query: { startMs, endMs, width: size.width, height: size.height },
-			readSamples: audioData.readSamples,
-			config: {
-				fftSize: 2048,
-				frequencyScale,
-				colormap,
-				waveform: false,
-				loudness: false,
-				truePeak: false,
-				channelInput,
-			},
-		}),
-		[audioData, startMs, endMs, size.width, size.height, colormap, channelInput, frequencyScale],
-	);
-	const computeResult = useSpectralCompute(spectralOptions);
-	const held = heldComputeResult(computeResult);
-	const renderable = held?.options.config.frequencyScale === frequencyScale ? held : null;
-	const label = `${Math.round(fractionToFrequency(range.bottom, audioData.sampleRate, undefined, frequencyScale))} to ${Math.round(fractionToFrequency(range.top, audioData.sampleRate, undefined, frequencyScale))} Hz`;
+	const renderable = computeResult?.options.config.frequencyScale === frequencyScale ? computeResult : null;
+	const label = `${Math.round(fractionToFrequency(range.bottom, sampleRate, undefined, frequencyScale))} to ${Math.round(fractionToFrequency(range.top, sampleRate, undefined, frequencyScale))} Hz`;
 
 	return (
 		<div ref={containerRef} className="relative w-8 bg-void">
@@ -167,7 +130,6 @@ export function FrequencyMinimap({
 					<SpectrogramCanvas computeResult={renderable} />
 				</div>
 			)}
-			{computeResult.status === "computing" && renderable === null && <ComputeProgress />}
 			<div
 				className="pointer-events-none absolute inset-x-0 top-0 bg-black/65"
 				style={{ height: `${range.top * 100}%` }}
@@ -208,7 +170,7 @@ export function FrequencyMinimap({
 					aria-valuemin={0}
 					aria-valuemax={1}
 					aria-valuenow={range[edge]}
-					aria-valuetext={`${Math.round(fractionToFrequency(range[edge], audioData.sampleRate, undefined, frequencyScale))} Hz`}
+					aria-valuetext={`${Math.round(fractionToFrequency(range[edge], sampleRate, undefined, frequencyScale))} Hz`}
 					onPointerDown={(event) => pointerDown(event, edge)}
 					onPointerMove={pointerMove}
 					onPointerUp={() => {

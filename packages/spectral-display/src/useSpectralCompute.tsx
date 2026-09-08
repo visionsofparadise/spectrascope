@@ -8,6 +8,7 @@ import {
 	type SpectralMetadata,
 } from "./engine/runPipeline";
 import { type Dimensions, type SpectralConfig, SpectralEngine } from "./engine/SpectralEngine";
+import { ComputeResultCache } from "./utils/ComputeResultCache";
 import { retainTexture } from "./utils/textureOwnership";
 import type { LoudnessData } from "./engine/loudness";
 
@@ -19,7 +20,12 @@ export interface SpectralQuery extends Dimensions {
 export interface SpectralOptions {
 	metadata: SpectralMetadata;
 	query: SpectralQuery;
-	readSamples: (channel: number, sampleOffset: number, sampleCount: number) => Promise<Float32Array>;
+	readSamples: (
+		channel: number,
+		sampleOffset: number,
+		sampleCount: number,
+		signal?: AbortSignal,
+	) => Promise<Float32Array>;
 	config?: Partial<SpectralConfig>;
 }
 
@@ -58,11 +64,18 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 	const engineDeviceRef = useRef<GPUDevice | null>(null);
 	const textureOwnersRef = useRef(new Map<GPUTexture, () => void>());
 	const lastReadyRef = useRef<ComputeResultReady | null>(null);
+	const cacheRef = useRef(new ComputeResultCache());
+	const cacheScopeRef = useRef<{
+		device: GPUDevice;
+		readSamples: SpectralOptions["readSamples"];
+		key: string;
+	} | null>(null);
 
 	const [result, setResult] = useState<ComputeResult>(EMPTY_RESULT);
 
 	const configKey = JSON.stringify(config ?? null);
 	const channelWeightsKey = JSON.stringify(metadata.channelWeights ?? null);
+	const semanticConfigKey = JSON.stringify({ ...config, device: undefined, signal: undefined });
 
 	useEffect(() => {
 		const sampleQuery: SampleQuery = {
@@ -73,6 +86,8 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 		};
 
 		if (sampleQuery.endSample <= sampleQuery.startSample || width <= 0 || height <= 0 || channelCount <= 0) {
+			cacheRef.current.clear();
+			cacheScopeRef.current = null;
 			lastReadyRef.current = null;
 			setResult(EMPTY_RESULT);
 
@@ -123,6 +138,35 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 
 				if (obsolete()) return;
 
+				const scopeKey = JSON.stringify([
+					sampleRate,
+					sampleCount,
+					channelCount,
+					channelWeightsKey,
+					semanticConfigKey,
+				]);
+				const scope = cacheScopeRef.current;
+
+				if (scope?.device !== device || scope.readSamples !== readSamples || scope.key !== scopeKey) {
+					cacheRef.current.clear();
+					cacheScopeRef.current = { device, readSamples, key: scopeKey };
+				}
+
+				const queryKey = JSON.stringify([startMs, endMs, width, height]);
+				const cached = cacheRef.current.get(queryKey);
+
+				if (cached) {
+					if (cached.spectrogramTexture && !textureOwnersRef.current.has(cached.spectrogramTexture)) {
+						textureOwnersRef.current.set(cached.spectrogramTexture, retainTexture(cached.spectrogramTexture));
+					}
+
+					settled = true;
+					lastReadyRef.current = cached;
+					setResult(cached);
+
+					return;
+				}
+
 				const pipelineOptions: PipelineOptions = {
 					metadata,
 					sampleQuery,
@@ -167,6 +211,7 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 				};
 
 				lastReadyRef.current = readyResult;
+				cacheRef.current.set(queryKey, readyResult);
 
 				setResult(readyResult);
 			} catch (error: unknown) {
@@ -203,6 +248,7 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 		providedDevice,
 		providedSignal,
 		configKey,
+		semanticConfigKey,
 		channelWeightsKey,
 		readSamples,
 	]);
@@ -220,6 +266,7 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 
 	useEffect(
 		() => () => {
+			cacheRef.current.clear();
 			engineReference.current?.destroy();
 			engineReference.current = null;
 

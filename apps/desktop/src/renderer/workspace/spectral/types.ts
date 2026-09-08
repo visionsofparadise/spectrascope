@@ -3,5 +3,10 @@ export interface AudioData {
 	channels: number;
 	totalSamples: number;
 	durationMs: number;
-	readSamples: (channel: number, sampleOffset: number, sampleCount: number) => Promise<Float32Array>;
+	readSamples: (
+		channel: number,
+		sampleOffset: number,
+		sampleCount: number,
+		signal?: AbortSignal,
+	) => Promise<Float32Array>;
 }

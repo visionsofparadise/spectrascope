@@ -17,7 +17,9 @@ export function createStreamAudioData(info: StreamInfo): AudioData {
 		channels: info.channelCount,
 		totalSamples: info.totalFrames,
 		durationMs: info.durationMs,
-		readSamples: async (channel, sampleOffset, sampleCount) => {
+		readSamples: async (channel, sampleOffset, sampleCount, signal) => {
+			signal?.throwIfAborted();
+
 			if (!Number.isInteger(channel) || channel < 0 || channel >= info.channelCount)
 				throw new Error("Invalid audio channel");
 
@@ -35,11 +37,16 @@ export function createStreamAudioData(info: StreamInfo): AudioData {
 
 			const response = await fetch(streamUrl(info.key, "raw", channel), {
 				headers: { Range: `bytes=${String(startByte)}-${String(endByte)}` },
+				signal,
 			});
+
+			signal?.throwIfAborted();
 
 			if (!response.ok) throw new Error(`Audio read failed (${String(response.status)} ${response.statusText})`);
 
 			const buffer = await response.arrayBuffer();
+
+			signal?.throwIfAborted();
 
 			if (buffer.byteLength !== (end - start) * 4) throw new Error("Audio read returned an incomplete sample range");
 

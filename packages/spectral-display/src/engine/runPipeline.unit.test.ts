@@ -68,6 +68,24 @@ function waveformOptions(samples: Float32Array): PipelineOptions {
 }
 
 describe("runPipeline sample boundaries", () => {
+	it("passes cancellation into a pending sample read", async () => {
+		const options = waveformOptions(new Float32Array(480));
+		const controller = new AbortController();
+		options.config.signal = controller.signal;
+		const read = vi.fn(
+			(_channel: number, _offset: number, _count: number, signal?: AbortSignal) =>
+				new Promise<Float32Array>((_resolve, reject) => {
+					signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+				}),
+		);
+		options.readSamples = read;
+		const pending = runPipeline(options, new ThrowingEngine(options.config.device));
+		expect(read).toHaveBeenCalledWith(0, 0, 480, controller.signal);
+		controller.abort();
+		await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+		expect(read).toHaveBeenCalledOnce();
+	});
+
 	it("keeps sample waveform detail while loudness retains measurement buckets", async () => {
 		const samples = Float32Array.from({ length: 480 }, (_, index) => (index % 2 ? -0.5 : 0.5));
 		const options = waveformOptions(samples);
@@ -227,10 +245,10 @@ describe("contextual FFT at deep zoom", () => {
 			const result = await runPipeline(test.options, test.engine);
 			expect(test.prepare).toHaveBeenCalledWith(8, 48000, { width: 800, height: 200 }, expect.anything());
 			expect(vi.mocked(test.options.readSamples).mock.calls).toEqual([
-				[0, 9, 2],
-				[1, 9, 2],
-				[0, 6, 8],
-				[1, 6, 8],
+				[0, 9, 2, test.options.config.signal],
+				[1, 9, 2, test.options.config.signal],
+				[0, 6, 8, test.options.config.signal],
+				[1, 6, 8, test.options.config.signal],
 			]);
 			expect(test.submitted).toEqual([
 				Float32Array.from({ length: 8 }, (_, index) => (6 + index + (channelInput === "side" ? -2 : 2)) / 2),
@@ -247,8 +265,8 @@ describe("contextual FFT at deep zoom", () => {
 		const test = fixture([new Float32Array([1, 2, 3])], 2, 3);
 		const result = await runPipeline(test.options, test.engine);
 		expect(vi.mocked(test.options.readSamples).mock.calls).toEqual([
-			[0, 2, 1],
-			[0, 0, 3],
+			[0, 2, 1, test.options.config.signal],
+			[0, 0, 3, test.options.config.signal],
 		]);
 		expect(test.submitted).toEqual([new Float32Array([0, 0, 0, 1, 2, 3, 0, 0])]);
 		expect(result.waveformBuffer).toEqual(new Float32Array([3, 3]));

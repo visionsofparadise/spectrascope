@@ -78,5 +78,5 @@ export function useWaveformReadouts() {
 		[active, cursor, selection],
 	);
 
-	return { control, setCursorReadout: setCursor, onDisplayedResultChange };
+	return { control, displayed, setCursorReadout: setCursor, onDisplayedResultChange };
 }

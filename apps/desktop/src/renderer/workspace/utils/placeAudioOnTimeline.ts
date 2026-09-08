@@ -8,7 +8,9 @@ export function placeAudioOnTimeline(audioData: AudioData, offsetMs: number, dur
 		...audioData,
 		totalSamples,
 		durationMs: (totalSamples * 1000) / audioData.sampleRate,
-		readSamples: async (channel, sampleOffset, sampleCount) => {
+		readSamples: async (channel, sampleOffset, sampleCount, signal) => {
+			signal?.throwIfAborted();
+
 			const count = Math.max(0, Math.min(sampleCount, totalSamples - sampleOffset));
 			const output = new Float32Array(count);
 			const start = Math.max(sampleOffset, offsetSamples);
@@ -16,7 +18,9 @@ export function placeAudioOnTimeline(audioData: AudioData, offsetMs: number, dur
 
 			if (end <= start) return output;
 
-			const samples = await audioData.readSamples(channel, start - offsetSamples, end - start);
+			const samples = await audioData.readSamples(channel, start - offsetSamples, end - start, signal);
+
+			signal?.throwIfAborted();
 
 			output.set(samples.subarray(0, end - start), start - sampleOffset);
 

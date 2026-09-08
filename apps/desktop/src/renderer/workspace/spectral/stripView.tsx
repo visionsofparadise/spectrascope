@@ -150,11 +150,12 @@ export function StripLayout({ view, header, children, channelInput }: StripLayou
 					frequencyRange={view.frequencyRange}
 					frequencyScale={view.frequencyScale}
 					onFrequencyRangeChange={view.onFrequencyRangeChange}
-					audioData={view.chromeAudio}
-					startMs={view.startMs}
-					endMs={view.endMs}
-					layerColor={view.layerColor}
-					channelInput={channelInput}
+					sampleRate={view.chromeAudio.sampleRate}
+					computeResult={
+						[...view.displayed.values()].find(
+							(entry) => entry.result.options.readSamples === view.chromeAudio.readSamples,
+						)?.result ?? null
+					}
 				/>
 				<DbAxis verticalRange={view.frequencyRange} />
 
