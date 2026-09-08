@@ -171,14 +171,12 @@ function ReadoutPanel({
 	cursor,
 	selectionIn,
 	selectionOut,
-	readoutSourceName,
 	amplitudeLabel,
 	disabled,
 }: {
 	readonly cursor: PointReadout;
 	readonly selectionIn: PointReadout;
 	readonly selectionOut: PointReadout;
-	readonly readoutSourceName?: string;
 	readonly amplitudeLabel?: string;
 	readonly disabled?: boolean;
 }) {
@@ -194,14 +192,6 @@ function ReadoutPanel({
 			className="grid min-w-0 max-w-xl flex-1 items-baseline gap-x-3 gap-y-1 leading-none"
 			style={{ gridTemplateColumns: "auto repeat(3, minmax(0, 1fr))" }}
 		>
-			{readoutSourceName && (
-				<span
-					className="col-span-4 max-w-72 truncate text-right font-technical text-[length:var(--text-xs)] text-chrome-text-secondary"
-					title={readoutSourceName}
-				>
-					{readoutSourceName}
-				</span>
-			)}
 			<span />
 			<span className={headClass}>Cursor</span>
 			<span className={headClass}>In</span>
@@ -346,7 +336,6 @@ export function Transport({
 		selectionOutSec,
 		selectionInAmp,
 		selectionOutAmp,
-		readoutSourceName,
 		amplitudeLabel,
 	} = control;
 
@@ -467,7 +456,6 @@ export function Transport({
 				>
 					<div className="w-[420px] max-w-[calc(100vw-48px)]">
 						<ReadoutPanel
-							readoutSourceName={readoutSourceName}
 							amplitudeLabel={amplitudeLabel}
 							cursor={{
 								time: cursorReadout?.time ?? "—",
