@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
-import { BlitRenderer } from "./engine/blit";
+import { BlitRenderer, type TextureVerticalRange } from "./engine/blit";
 import { useCanvasRef } from "./useCanvasRef";
+import { resolveRenderDimensions } from "./utils/resolveRenderDimensions";
 import { retainTexture } from "./utils/textureOwnership";
 import type { ComputeResult } from "./useSpectralCompute";
 
@@ -8,6 +9,7 @@ interface SpectrogramCanvasProps {
 	computeResult: ComputeResult;
 	ref?: React.Ref<HTMLCanvasElement>;
 	canvasScale?: number;
+	frequencyRange?: TextureVerticalRange;
 	onRendered?: () => void;
 }
 
@@ -15,6 +17,7 @@ export const SpectrogramCanvas: React.FC<SpectrogramCanvasProps> = ({
 	computeResult,
 	ref,
 	canvasScale = 1,
+	frequencyRange,
 	onRendered,
 }) => {
 	const [internalCanvasReference, canvasCallback] = useCanvasRef(ref);
@@ -24,6 +27,20 @@ export const SpectrogramCanvas: React.FC<SpectrogramCanvasProps> = ({
 
 	onRenderedRef.current = onRendered;
 
+	const scale = Number.isFinite(canvasScale) && canvasScale > 0 ? canvasScale : 1;
+	const dimensions =
+		computeResult.status === "ready"
+			? resolveRenderDimensions(
+					{
+						width: computeResult.options.sampleQuery.width * scale,
+						height: computeResult.options.sampleQuery.height * scale,
+					},
+					computeResult.options.config.device,
+					computeResult.options.config.fftSize,
+				)
+			: { width: 0, height: 0 };
+	const { width: canvasWidth, height: canvasHeight } = dimensions;
+
 	useEffect(() => {
 		const canvas = internalCanvasReference.current;
 
@@ -32,14 +49,14 @@ export const SpectrogramCanvas: React.FC<SpectrogramCanvasProps> = ({
 		}
 
 		if (!computeResult.spectrogramTexture) {
-			canvas.width = Math.round(computeResult.options.sampleQuery.width * canvasScale);
+			canvas.width = canvasWidth;
+			canvas.height = canvasHeight;
 			onRenderedRef.current?.();
 
 			return;
 		}
 
 		const { device } = computeResult.options.config;
-		const { width, height } = computeResult.options.sampleQuery;
 
 		if (blitReference.current && blitDeviceRef.current !== device) {
 			blitReference.current.destroy();
@@ -49,14 +66,11 @@ export const SpectrogramCanvas: React.FC<SpectrogramCanvasProps> = ({
 		blitReference.current ??= new BlitRenderer(device, canvas);
 		blitDeviceRef.current = device;
 
-		const canvasWidth = Math.round(width * canvasScale);
-		const canvasHeight = Math.round(height * canvasScale);
-
 		blitReference.current.resize(canvasWidth, canvasHeight);
-		blitReference.current.render(computeResult.spectrogramTexture);
+		blitReference.current.render(computeResult.spectrogramTexture, frequencyRange);
 
 		onRenderedRef.current?.();
-	}, [computeResult, canvasScale]);
+	}, [computeResult, canvasWidth, canvasHeight, frequencyRange?.top, frequencyRange?.bottom]);
 
 	const texture = computeResult.status === "ready" ? computeResult.spectrogramTexture : null;
 
@@ -71,11 +85,6 @@ export const SpectrogramCanvas: React.FC<SpectrogramCanvasProps> = ({
 		},
 		[],
 	);
-
-	const { width, height } =
-		computeResult.status === "ready" ? computeResult.options.sampleQuery : { width: 0, height: 0 };
-	const canvasWidth = Math.round(width * canvasScale);
-	const canvasHeight = Math.round(height * canvasScale);
 
 	return <canvas ref={canvasCallback} width={canvasWidth} height={canvasHeight} />;
 };

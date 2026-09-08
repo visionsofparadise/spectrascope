@@ -56,6 +56,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 
 		if (!computeResult.waveformBuffer || computeResult.waveformPointCount === 0) {
 			canvas.width = computeResult.options.sampleQuery.width;
+			canvas.height = computeResult.options.sampleQuery.height;
 			onRenderedRef.current?.();
 
 			return;
@@ -111,7 +112,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 			});
 
 			const uniformBuffer = device.createBuffer({
-				size: 32,
+				size: 48,
 				usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 			});
 
@@ -132,7 +133,7 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 			lastDimensionsRef.current = { width, height };
 		}
 
-		const uniformData = new ArrayBuffer(32);
+		const uniformData = new ArrayBuffer(48);
 		const uniforms = new DataView(uniformData);
 
 		uniforms.setUint32(0, waveformPointCount, true);
@@ -147,6 +148,14 @@ export const WaveformCanvas: React.FC<WaveformCanvasProps> = ({
 			true,
 		);
 		uniforms.setFloat32(28, computeResult.waveformSamplesPerPoint, true);
+
+		const sampleRate = computeResult.options.metadata.sampleRate;
+		const relativeStartSample =
+			(computeResult.query.startMs * sampleRate) / 1000 - computeResult.options.sampleQuery.startSample;
+		const visibleSampleCount = ((computeResult.query.endMs - computeResult.query.startMs) * sampleRate) / 1000;
+
+		uniforms.setFloat32(32, relativeStartSample, true);
+		uniforms.setFloat32(36, visibleSampleCount, true);
 
 		device.queue.writeBuffer(uniformBufferRef.current!, 0, uniformData);
 

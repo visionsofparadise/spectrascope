@@ -404,11 +404,20 @@ struct Uniforms {
   waveform_color_b: f32,
   total_samples: f32,
   samples_per_point: f32,
+  relative_start_sample: f32,
+  visible_sample_count: f32,
 }
 
 @group(0) @binding(0) var<storage, read> waveform_buffer: array<f32>;
 @group(0) @binding(1) var output_texture: texture_storage_2d<rgba8unorm, write>;
 @group(0) @binding(2) var<uniform> uniforms: Uniforms;
+
+fn waveform_sample_at(position: f32) -> f32 {
+  let clamped = clamp(position, 0.0, f32(uniforms.total_points - 1u));
+  let first = u32(floor(clamped));
+  let second = min(first + 1u, uniforms.total_points - 1u);
+  return mix(waveform_buffer[first * 2u], waveform_buffer[second * 2u], fract(clamped));
+}
 
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -418,18 +427,33 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     return;
   }
 
-  let stride = uniforms.total_samples / (uniforms.samples_per_point * f32(uniforms.output_width));
-  let point_start = min(u32(f32(column) * stride), uniforms.total_points - 1u);
-  let point_end = max(point_start + 1u, min(u32(ceil(f32(column + 1u) * stride)), uniforms.total_points));
+  let stride = uniforms.visible_sample_count / f32(uniforms.output_width);
+  let sample_start = uniforms.relative_start_sample + f32(column) * stride;
+  let sample_end = uniforms.relative_start_sample + f32(column + 1u) * stride;
+  let covered = sample_end > 0.0 && sample_start < uniforms.total_samples;
+  var min_val: f32 = 0.0;
+  var max_val: f32 = 0.0;
 
-  var min_val: f32 = 1.0;
-  var max_val: f32 = -1.0;
-
-  for (var point: u32 = point_start; point < point_end; point = point + 1u) {
-    let min_sample = waveform_buffer[point * 2u];
-    let max_sample = waveform_buffer[point * 2u + 1u];
-    min_val = min(min_val, min_sample);
-    max_val = max(max_val, max_sample);
+  if (covered && uniforms.samples_per_point == 1.0 && stride < 1.0) {
+    let first = waveform_sample_at(sample_start);
+    let last = waveform_sample_at(sample_end);
+    min_val = min(first, last);
+    max_val = max(first, last);
+    let interior = ceil(max(0.0, sample_start));
+    if (interior <= sample_end && interior < uniforms.total_samples) {
+      let value = waveform_sample_at(interior);
+      min_val = min(min_val, value);
+      max_val = max(max_val, value);
+    }
+  } else if (covered) {
+    let point_start = min(u32(max(0.0, sample_start) / uniforms.samples_per_point), uniforms.total_points - 1u);
+    let point_end = max(point_start + 1u, min(u32(ceil(max(0.0, sample_end) / uniforms.samples_per_point)), uniforms.total_points));
+    min_val = waveform_buffer[point_start * 2u];
+    max_val = waveform_buffer[point_start * 2u + 1u];
+    for (var point: u32 = point_start + 1u; point < point_end; point = point + 1u) {
+      min_val = min(min_val, waveform_buffer[point * 2u]);
+      max_val = max(max_val, waveform_buffer[point * 2u + 1u]);
+    }
   }
 
   let half_height = f32(uniforms.output_height) / 2.0;
@@ -446,7 +470,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
   let transparent = vec4<f32>(0.0, 0.0, 0.0, 0.0);
 
   for (var pixel_y: u32 = 0u; pixel_y < uniforms.output_height; pixel_y = pixel_y + 1u) {
-    if (pixel_y >= y_min_pixel && pixel_y <= y_max_pixel) {
+    if (covered && pixel_y >= y_min_pixel && pixel_y <= y_max_pixel) {
       textureStore(output_texture, vec2<i32>(i32(column), i32(pixel_y)), color);
     } else {
       textureStore(output_texture, vec2<i32>(i32(column), i32(pixel_y)), transparent);
@@ -492,11 +516,19 @@ fn main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 
 export const BLIT_FRAGMENT_SHADER = `
 
+struct TextureRange {
+  top: f32,
+  bottom: f32,
+  padding: vec2<f32>,
+}
+
 @group(0) @binding(0) var source_texture: texture_2d<f32>;
 @group(0) @binding(1) var source_sampler: sampler;
+@group(0) @binding(2) var<uniform> texture_range: TextureRange;
 
 @fragment
 fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-  return textureSample(source_texture, source_sampler, uv);
+  let cropped_uv = vec2<f32>(uv.x, mix(texture_range.top, texture_range.bottom, uv.y));
+  return textureSample(source_texture, source_sampler, cropped_uv);
 }
 `;

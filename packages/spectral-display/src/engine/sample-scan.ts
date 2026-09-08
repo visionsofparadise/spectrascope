@@ -15,6 +15,8 @@ const CORRELATION_SILENCE_FLOOR = 1e-12;
 interface ScanState {
 	pointIndex: number;
 	samplesInCurrentPoint: number;
+	waveformPointIndex: number;
+	samplesInWaveformPoint: number;
 	pointMin: number;
 	pointMax: number;
 	pointSumSq: number;
@@ -35,6 +37,7 @@ export interface ScanContext {
 	channelCount: number;
 	channelWeights: Float32Array;
 	samplesPerPoint: number;
+	waveformSamplesPerPoint: number;
 	computeLoudness: boolean;
 	computeTruePeak: boolean;
 	computeStereo: boolean;
@@ -68,6 +71,7 @@ export function createScanContext(
 	computeTruePeak = true,
 	computeStereo = false,
 	channelInput: ChannelInput = "mono",
+	waveform?: { readonly pointCount: number; readonly samplesPerPoint: number },
 ): ScanContext {
 	const { channelCount, sampleRate, channelWeights: weights } = metadata;
 	const biquadStates: Array<{ stage1: BiquadState; stage2: BiquadState }> = [];
@@ -99,6 +103,7 @@ export function createScanContext(
 		channelCount,
 		channelWeights,
 		samplesPerPoint,
+		waveformSamplesPerPoint: waveform?.samplesPerPoint ?? samplesPerPoint,
 		computeLoudness,
 		computeTruePeak,
 		computeStereo,
@@ -107,6 +112,8 @@ export function createScanContext(
 		state: {
 			pointIndex: 0,
 			samplesInCurrentPoint: 0,
+			waveformPointIndex: 0,
+			samplesInWaveformPoint: 0,
 			pointMin: Infinity,
 			pointMax: -Infinity,
 			pointSumSq: 0,
@@ -127,7 +134,7 @@ export function createScanContext(
 		lBuffer: new Float32Array(lrBufferSize),
 		rBuffer: new Float32Array(lrBufferSize),
 		channelInputBuffer: new Float32Array(channelInputBufferSize),
-		waveformBuffer: new Float32Array(pointCount * 2),
+		waveformBuffer: new Float32Array((waveform?.pointCount ?? pointCount) * 2),
 		rmsEnvelope: new Float32Array(pointCount),
 		peakEnvelope: new Float32Array(pointCount),
 		kWeightedMeanSquare: new Float32Array(pointCount),
@@ -140,9 +147,16 @@ export function finalizeScan(context: ScanContext): { overallPeak: number; overa
 	const { state } = context;
 	const { pointIndex, samplesInCurrentPoint } = state;
 
-	if (samplesInCurrentPoint > 0 && pointIndex < context.waveformBuffer.length / 2) {
-		context.waveformBuffer[pointIndex * 2] = state.pointMin;
-		context.waveformBuffer[pointIndex * 2 + 1] = state.pointMax;
+	if (state.samplesInWaveformPoint > 0 && state.waveformPointIndex < context.waveformBuffer.length / 2) {
+		context.waveformBuffer[state.waveformPointIndex * 2] = state.pointMin;
+		context.waveformBuffer[state.waveformPointIndex * 2 + 1] = state.pointMax;
+		state.waveformPointIndex++;
+		state.samplesInWaveformPoint = 0;
+		state.pointMin = Infinity;
+		state.pointMax = -Infinity;
+	}
+
+	if (samplesInCurrentPoint > 0 && pointIndex < context.rmsEnvelope.length) {
 		context.rmsEnvelope[pointIndex] = Math.sqrt(state.pointSumSq / samplesInCurrentPoint);
 		context.peakEnvelope[pointIndex] = state.pointPeak;
 		context.kWeightedMeanSquare[pointIndex] = state.kWeightedPointSum / samplesInCurrentPoint;
@@ -202,6 +216,7 @@ export function scanSamples(
 		channelCount,
 		channelWeights,
 		samplesPerPoint,
+		waveformSamplesPerPoint,
 		computeLoudness,
 		computeTruePeak,
 		computeStereo,
@@ -223,7 +238,8 @@ export function scanSamples(
 	const invChannels = 1 / channelCount;
 	const { stage1: s1Coeffs, stage2: s2Coeffs } = kWeightingCoefficients;
 	const lastChannel = channelCount - 1;
-	const pointCount = Math.ceil(waveformBuffer.length / 2);
+	const pointCount = rmsEnvelope.length;
+	const waveformPointCount = waveformBuffer.length / 2;
 
 	const foldChannels = computeStereo || channelInput !== "mono";
 
@@ -286,6 +302,7 @@ export function scanSamples(
 	}
 
 	let { pointIndex, samplesInCurrentPoint } = state;
+	let { waveformPointIndex, samplesInWaveformPoint } = state;
 	let { pointMin, pointMax, pointSumSq, pointPeak, kWeightedPointSum } = state;
 	let { pointSumL2, pointSumR2, pointSumLR } = state;
 	let { overallPeakAbs, overallSumSquares, totalSampleValues, truePeakAbs } = state;
@@ -393,6 +410,17 @@ export function scanSamples(
 
 				if (waveformSample > pointMax) pointMax = waveformSample;
 
+				samplesInWaveformPoint++;
+
+				if (samplesInWaveformPoint >= waveformSamplesPerPoint && waveformPointIndex < waveformPointCount) {
+					waveformBuffer[waveformPointIndex * 2] = pointMin;
+					waveformBuffer[waveformPointIndex * 2 + 1] = pointMax;
+					waveformPointIndex++;
+					samplesInWaveformPoint = 0;
+					pointMin = Infinity;
+					pointMax = -Infinity;
+				}
+
 				pointSumSq += sq;
 
 				if (abs > pointPeak) pointPeak = abs;
@@ -414,11 +442,8 @@ export function scanSamples(
 				totalSampleValues++;
 
 				if (samplesInCurrentPoint >= samplesPerPoint && pointIndex < pointCount) {
-					const wo = pointIndex * 2;
 					const invSamples = 1 / samplesInCurrentPoint;
 
-					waveformBuffer[wo] = pointMin;
-					waveformBuffer[wo + 1] = pointMax;
 					rmsEnvelope[pointIndex] = Math.sqrt(pointSumSq * invSamples);
 					peakEnvelope[pointIndex] = pointPeak;
 					kWeightedMeanSquare[pointIndex] = kWeightedPointSum * invSamples;
@@ -433,8 +458,6 @@ export function scanSamples(
 						}
 					}
 
-					pointMin = Infinity;
-					pointMax = -Infinity;
 					pointSumSq = 0;
 					pointPeak = 0;
 					kWeightedPointSum = 0;
@@ -465,6 +488,8 @@ export function scanSamples(
 	state.truePeakAbs = truePeakAbs;
 	state.pointIndex = pointIndex;
 	state.samplesInCurrentPoint = samplesInCurrentPoint;
+	state.waveformPointIndex = waveformPointIndex;
+	state.samplesInWaveformPoint = samplesInWaveformPoint;
 	state.pointMin = pointMin;
 	state.pointMax = pointMax;
 	state.pointSumSq = pointSumSq;

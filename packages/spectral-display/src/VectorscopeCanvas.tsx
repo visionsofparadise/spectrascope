@@ -23,6 +23,17 @@ export const VectorscopeCanvas: React.FC<VectorscopeCanvasProps> = ({ computeRes
 	const blitReference = useRef<BlitRenderer | null>(null);
 	const rendererReference = useRef<VectorscopeRenderer | null>(null);
 	const deviceReference = useRef<GPUDevice | null>(null);
+	const scale = Number.isFinite(canvasScale) && canvasScale > 0 ? canvasScale : 1;
+	const size =
+		computeResult.status === "ready"
+			? Math.max(
+					1,
+					Math.min(
+						computeResult.options.config.device.limits.maxTextureDimension2D,
+						Math.round(VECTORSCOPE_GRID_SIZE * scale),
+					),
+				)
+			: 0;
 
 	useEffect(() => {
 		const canvas = internalCanvasReference.current;
@@ -33,7 +44,6 @@ export const VectorscopeCanvas: React.FC<VectorscopeCanvasProps> = ({ computeRes
 
 		const { device } = computeResult.options.config;
 		const { vectorscopeHistogram } = computeResult;
-		const size = Math.round(VECTORSCOPE_GRID_SIZE * canvasScale);
 
 		if (deviceReference.current !== device) {
 			blitReference.current?.destroy();
@@ -50,7 +60,7 @@ export const VectorscopeCanvas: React.FC<VectorscopeCanvasProps> = ({ computeRes
 
 		blitReference.current.resize(size, size);
 		blitReference.current.render(texture);
-	}, [computeResult, tint[0], tint[1], tint[2], canvasScale]);
+	}, [computeResult, tint[0], tint[1], tint[2], size]);
 
 	useEffect(
 		() => () => {
@@ -61,8 +71,6 @@ export const VectorscopeCanvas: React.FC<VectorscopeCanvasProps> = ({ computeRes
 		},
 		[],
 	);
-
-	const size = Math.round(VECTORSCOPE_GRID_SIZE * canvasScale);
 
 	return <canvas ref={canvasCallback} width={size} height={size} />;
 };

@@ -1,3 +1,4 @@
+import { resolveRenderDimensions } from "../utils/resolveRenderDimensions";
 import { getMaxFftSize } from "./device";
 import { computeLoudnessData, WAVEFORM_POINTS_PER_SECOND } from "./loudness";
 import { createScanContext, finalizeScan, scanSamples } from "./sample-scan";
@@ -67,9 +68,9 @@ function yieldControl(): Promise<void> {
 }
 
 export async function runPipeline(options: PipelineOptions, engine: SpectralEngine): Promise<PipelineResult> {
-	const { metadata, sampleQuery, readSamples, config } = options;
+	const { metadata, readSamples, config } = options;
 	const { sampleRate, channelCount } = metadata;
-	const { startSample, endSample } = sampleQuery;
+	const { startSample, endSample } = options.sampleQuery;
 	const { signal } = config;
 
 	const sampleCount = endSample - startSample;
@@ -79,8 +80,15 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 
 	signal.throwIfAborted();
 
+	const sampleQuery = {
+		...options.sampleQuery,
+		...resolveRenderDimensions(options.sampleQuery, config.device, resolvedConfig.fftSize),
+	};
+
 	const samplesPerPoint = computeSamplesPerPoint(sampleCount, sampleQuery.width, sampleRate, loudness);
 	const pointCount = Math.ceil(sampleCount / samplesPerPoint);
+	const waveformSamplesPerPoint = computeSamplesPerPoint(sampleCount, sampleQuery.width, sampleRate, false);
+	const waveformPointCount = Math.ceil(sampleCount / waveformSamplesPerPoint);
 
 	const scanContext = createScanContext(
 		metadata,
@@ -91,6 +99,7 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 		computeTruePeak,
 		stereo,
 		channelInput,
+		{ pointCount: waveformPointCount, samplesPerPoint: waveformSamplesPerPoint },
 	);
 
 	const spectralContext =
@@ -168,13 +177,14 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 
 	const resolvedOptions: ResolvedPipelineOptions = {
 		...options,
+		sampleQuery,
 		config: resolvedConfig,
 	};
 
 	return {
 		waveformBuffer: scanContext.waveformBuffer,
-		waveformPointCount: scanContext.state.pointIndex,
-		waveformSamplesPerPoint: samplesPerPoint,
+		waveformPointCount: scanContext.state.waveformPointIndex,
+		waveformSamplesPerPoint,
 		loudnessData,
 		spectrogramTexture,
 		ltas: ltasResult,

@@ -49,7 +49,14 @@ function waveformOptions(samples: Float32Array): PipelineOptions {
 		sampleQuery: { startSample: 0, endSample: samples.length, width: 800, height: 200 },
 		readSamples: (_channel, offset, count) => Promise.resolve(samples.slice(offset, offset + count)),
 		config: {
-			device: { limits: { maxComputeWorkgroupStorageSize: 32768 } } as GPUDevice,
+			device: {
+				limits: {
+					maxComputeWorkgroupStorageSize: 32768,
+					maxTextureDimension2D: 8192,
+					maxBufferSize: 268435456,
+					maxStorageBufferBindingSize: 134217728,
+				},
+			} as GPUDevice,
 			signal: new AbortController().signal,
 			spectrogram: true,
 			ltas: true,
@@ -61,6 +68,25 @@ function waveformOptions(samples: Float32Array): PipelineOptions {
 }
 
 describe("runPipeline sample boundaries", () => {
+	it("keeps sample waveform detail while loudness retains measurement buckets", async () => {
+		const samples = Float32Array.from({ length: 480 }, (_, index) => (index % 2 ? -0.5 : 0.5));
+		const options = waveformOptions(samples);
+		options.config.loudness = true;
+		const result = await runPipeline(options, new ThrowingEngine(options.config.device));
+		expect(result.waveformPointCount).toBe(480);
+		expect(result.waveformSamplesPerPoint).toBe(1);
+		expect(result.waveformBuffer.slice(0, 4)).toEqual(new Float32Array([0.5, 0.5, -0.5, -0.5]));
+		expect(result.loudnessData?.pointCount).toBe(5);
+	});
+
+	it("returns device-bounded physical dimensions used by waveform density", async () => {
+		const options = waveformOptions(new Float32Array(480));
+		options.sampleQuery.width = 16384;
+		options.sampleQuery.height = 4096;
+		const result = await runPipeline(options, new ThrowingEngine(options.config.device));
+		expect(result.options.sampleQuery).toMatchObject({ width: 8192, height: 2048 });
+		expect(options.sampleQuery.width).toBe(16384);
+	});
 	it("returns sample-resolution waveform and unavailable spectra for a 10ms query", async () => {
 		const samples = new Float32Array(480);
 		samples[479] = 1;
@@ -172,7 +198,7 @@ describe("runPipeline onProgress", () => {
 				loudness: false,
 				truePeak: false,
 				stereo: false,
-				device: {} as GPUDevice,
+				device: waveformOptions(new Float32Array()).config.device,
 				signal: new AbortController().signal,
 			},
 			onProgress: (fraction) => fractions.push(fraction),

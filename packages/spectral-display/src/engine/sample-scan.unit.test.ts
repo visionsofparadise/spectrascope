@@ -1,6 +1,40 @@
 import { describe, expect, it } from "vitest";
 import { createScanContext, finalizeScan, scanSamples } from "./sample-scan";
 
+describe("independent waveform density", () => {
+	it.each([1, 3, 8])(
+		"keeps measurement results unchanged with waveform buckets of %i samples",
+		(waveformSamplesPerPoint) => {
+			const samples = new Float32Array([0, 0.5, -0.75, 1, -1, 0.25, 0.125]);
+			const metadata = { sampleRate: 48000, sampleCount: samples.length, channelCount: 1 };
+			const baseline = createScanContext(metadata, 2, 4, 3, true, false, true);
+			const detail = createScanContext(metadata, 2, 4, 3, true, false, true, "mono", {
+				pointCount: Math.ceil(samples.length / waveformSamplesPerPoint),
+				samplesPerPoint: waveformSamplesPerPoint,
+			});
+			for (let offset = 0; offset < samples.length; offset += 3) {
+				const chunk = samples.subarray(offset, offset + 3);
+				scanSamples([chunk], chunk.length, baseline);
+				scanSamples([chunk], chunk.length, detail);
+			}
+			expect(finalizeScan(detail)).toEqual(finalizeScan(baseline));
+			expect(detail.rmsEnvelope).toEqual(baseline.rmsEnvelope);
+			expect(detail.kWeightedMeanSquare).toEqual(baseline.kWeightedMeanSquare);
+			expect(detail.correlationEnvelope).toEqual(baseline.correlationEnvelope);
+			expect(detail.state.pointIndex).toBe(2);
+			expect(detail.state.waveformPointIndex).toBe(Math.ceil(samples.length / waveformSamplesPerPoint));
+			for (let point = 0; point < detail.state.waveformPointIndex; point++) {
+				const bucket = samples.slice(point * waveformSamplesPerPoint, (point + 1) * waveformSamplesPerPoint);
+				expect(detail.waveformBuffer[point * 2]).toBe(Math.min(...bucket));
+				expect(detail.waveformBuffer[point * 2 + 1]).toBe(Math.max(...bucket));
+			}
+			const before = detail.waveformBuffer.slice();
+			finalizeScan(detail);
+			expect(detail.waveformBuffer).toEqual(before);
+		},
+	);
+});
+
 describe("waveform boundaries and channel selection", () => {
 	it.each([1, 4, 5, 7])("flushes %i samples exactly once including partial buckets", (length) => {
 		const samples = new Float32Array(length);

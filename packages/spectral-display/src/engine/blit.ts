@@ -1,10 +1,16 @@
 import { BLIT_FRAGMENT_SHADER, BLIT_VERTEX_SHADER } from "./shaders";
 
+export interface TextureVerticalRange {
+	readonly top: number;
+	readonly bottom: number;
+}
+
 export class BlitRenderer {
 	private readonly device: GPUDevice;
 	private readonly context: GPUCanvasContext;
 	private readonly pipeline: GPURenderPipeline;
 	private readonly sampler: GPUSampler;
+	private readonly rangeBuffer: GPUBuffer;
 	private canvasFormat: GPUTextureFormat;
 
 	constructor(device: GPUDevice, canvas: HTMLCanvasElement) {
@@ -48,9 +54,16 @@ export class BlitRenderer {
 				topology: "triangle-list",
 			},
 		});
+		this.rangeBuffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 	}
 
-	render(texture: GPUTexture): void {
+	render(texture: GPUTexture, range?: TextureVerticalRange): void {
+		const top = Math.max(0, Math.min(1, range?.top ?? 0));
+		const bottom = Math.max(0, Math.min(1, range?.bottom ?? 1));
+		const valid = Number.isFinite(range?.top ?? 0) && Number.isFinite(range?.bottom ?? 1) && bottom > top;
+
+		this.device.queue.writeBuffer(this.rangeBuffer, 0, new Float32Array([valid ? top : 0, valid ? bottom : 1, 0, 0]));
+
 		const textureView = texture.createView();
 
 		const bindGroup = this.device.createBindGroup({
@@ -58,6 +71,7 @@ export class BlitRenderer {
 			entries: [
 				{ binding: 0, resource: textureView },
 				{ binding: 1, resource: this.sampler },
+				{ binding: 2, resource: { buffer: this.rangeBuffer } },
 			],
 		});
 
@@ -83,10 +97,22 @@ export class BlitRenderer {
 	}
 
 	resize(width: number, height: number): void {
-		const canvas = this.context.canvas as HTMLCanvasElement;
+		if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+			throw new Error("Invalid canvas dimensions");
+		}
 
-		canvas.width = width;
-		canvas.height = height;
+		const canvas = this.context.canvas as HTMLCanvasElement;
+		const maximum = this.device.limits.maxTextureDimension2D;
+		const scale = Math.min(1, maximum / width, maximum / height);
+		const canvasWidth = Math.max(1, Math.floor(width * scale));
+		const canvasHeight = Math.max(1, Math.floor(height * scale));
+
+		if (!Number.isFinite(canvasWidth) || !Number.isFinite(canvasHeight)) throw new Error("Invalid canvas dimensions");
+
+		if (canvas.width === canvasWidth && canvas.height === canvasHeight) return;
+
+		canvas.width = canvasWidth;
+		canvas.height = canvasHeight;
 
 		this.context.configure({
 			device: this.device,
@@ -96,6 +122,7 @@ export class BlitRenderer {
 	}
 
 	destroy(): void {
+		this.rangeBuffer.destroy();
 		this.context.unconfigure();
 	}
 }

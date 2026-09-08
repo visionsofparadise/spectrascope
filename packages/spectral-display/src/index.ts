@@ -1,6 +1,7 @@
 export { getBandFrequencies } from "./engine/band-mapping";
 export type { FrequencyScale } from "./engine/band-mapping";
 export { BlitRenderer } from "./engine/blit";
+export type { TextureVerticalRange } from "./engine/blit";
 export type { ColormapDefinition } from "./engine/colormap";
 export { getDevice } from "./engine/device";
 export {
@@ -31,3 +32,5 @@ export { VectorscopeCanvas } from "./VectorscopeCanvas";
 export type { VectorscopeCanvasProps } from "./VectorscopeCanvas";
 export { viridisColormap } from "./utils/viridis";
 export { WaveformCanvas } from "./WaveformCanvas";
+export { readWaveformAmplitude } from "./utils/readWaveformAmplitude";
+export type { WaveformAmplitude } from "./utils/readWaveformAmplitude";
