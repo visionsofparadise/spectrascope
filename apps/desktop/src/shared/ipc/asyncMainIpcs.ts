@@ -10,7 +10,9 @@ import { UnwatchFileMainIpc } from "./FileSystem/unwatchFile/Main";
 import { WatchFileMainIpc } from "./FileSystem/watchFile/Main";
 import { WriteFileMainIpc } from "./FileSystem/writeFile/Main";
 import { PrepareSourceMainIpc } from "./Source/prepareSource/Main";
+import { ReleasePreparedSourceMainIpc } from "./Source/releasePreparedSource/Main";
 import { RegisterStreamMainIpc } from "./Stream/registerStream/Main";
+import { ReleaseStreamMainIpc } from "./Stream/releaseStream/Main";
 import { GetAllDisplaysMainIpc } from "./System/getAllDisplays/Main";
 import { GetAppVersionMainIpc } from "./System/getAppVersion/Main";
 import { GetUserDataPathMainIpc } from "./System/getUserDataPath/Main";
@@ -38,4 +40,6 @@ export const ASYNC_MAIN_IPCS = [
 	SetBoundsMainIpc,
 	PrepareSourceMainIpc,
 	RegisterStreamMainIpc,
+	ReleasePreparedSourceMainIpc,
+	ReleaseStreamMainIpc,
 ];

@@ -3,7 +3,7 @@ import path from "path";
 import { protocol } from "electron";
 import { renderRange, type ResolvedStream } from "./audio/streamDsp";
 import { buildWavHeader } from "./audio/wavHeader";
-import type { StreamManager } from "./StreamManager";
+import type { StreamManager, StreamLease } from "./StreamManager";
 
 const CONTENT_TYPE_BY_EXT: Readonly<Record<string, string>> = {
 	".wav": "audio/wav",
@@ -25,12 +25,15 @@ function contentTypeForPath(filePath: string): string {
 }
 
 function parseRangeHeader(range: string, fileSize: number): { start: number; end: number } {
-	const match = /bytes=(\d+)-(\d*)/.exec(range);
+	const match = /^bytes=(\d*)-(\d*)$/.exec(range);
 
-	if (!match) throw new Error(`Invalid Range header: ${range}`);
+	if (!match || (!match[1] && !match[2])) throw new RangeError(`Invalid Range header: ${range}`);
 
-	const start = parseInt(match[1] ?? "0", 10);
-	const end = match[2] ? parseInt(match[2], 10) : fileSize - 1;
+	const start = match[1] ? Number(match[1]) : Math.max(0, fileSize - Number(match[2]));
+	const end = match[1] && match[2] ? Math.min(Number(match[2]), fileSize - 1) : fileSize - 1;
+
+	if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || start > end || start >= fileSize)
+		throw new RangeError("Unsatisfiable audio byte range");
 
 	return { start, end };
 }
@@ -38,6 +41,50 @@ function parseRangeHeader(range: string, fileSize: number): { start: number; end
 const BYTES_PER_SAMPLE = 4;
 
 const STREAM_SEGMENT_FRAMES = 65536;
+
+function leasedResponse(response: Response, lease: StreamLease): Response {
+	if (!response.body) {
+		lease.release();
+
+		return response;
+	}
+
+	const reader = response.body.getReader();
+	let pending: Promise<ReadableStreamReadResult<Uint8Array>> | null = null;
+	let cancelled = false;
+	const body = new ReadableStream<Uint8Array>({
+		async pull(controller) {
+			try {
+				pending = reader.read();
+
+				const result = await pending;
+
+				if (cancelled) return;
+
+				if (result.done) {
+					lease.release();
+					controller.close();
+				} else controller.enqueue(result.value);
+			} catch (error) {
+				lease.release();
+
+				if (!cancelled) controller.error(error);
+			}
+		},
+		async cancel(reason) {
+			cancelled = true;
+
+			try {
+				await reader.cancel(reason);
+				await pending;
+			} finally {
+				lease.release();
+			}
+		},
+	});
+
+	return new Response(body, { status: response.status, headers: response.headers });
+}
 
 function deinterleaveChannel(
 	interleaved: Float32Array,
@@ -63,25 +110,56 @@ function bufferFromFloats(data: Float32Array, byteStart: number, byteLength: num
 	return body;
 }
 
-function rawChannelStream(resolved: ResolvedStream, channel: number): ReadableStream<Uint8Array> {
-	const total = resolved.totalFrames;
-	let frame = 0;
+function rangeBodyStream(
+	resolved: ResolvedStream,
+	header: Buffer | null,
+	channel: number | null,
+	start: number,
+	end: number,
+): ReadableStream<Uint8Array> {
+	const headerLength = header?.length ?? 0;
+	const blockAlign = (channel === null ? resolved.outputChannels : 1) * BYTES_PER_SAMPLE;
+	let position = start;
+	let pending: Promise<void> | null = null;
+	let cancelled = false;
 
 	return new ReadableStream<Uint8Array>({
-		async pull(controller) {
-			if (frame >= total) {
-				controller.close();
+		pull(controller) {
+			pending = (async () => {
+				if (position > end) {
+					controller.close();
 
-				return;
-			}
+					return;
+				}
 
-			const count = Math.min(STREAM_SEGMENT_FRAMES, total - frame);
-			const interleaved = await renderRange(resolved, frame, count);
-			const channelData = deinterleaveChannel(interleaved, resolved.outputChannels, channel, count);
+				const last = Math.min(end, position + STREAM_SEGMENT_FRAMES * blockAlign - 1);
+				const parts: Array<Buffer> = [];
 
-			controller.enqueue(new Uint8Array(channelData.buffer, channelData.byteOffset, channelData.byteLength));
+				if (header && position < headerLength)
+					parts.push(header.subarray(position, Math.min(last + 1, headerLength)));
 
-			frame += count;
+				if (last >= headerLength) {
+					const dataStart = Math.max(position, headerLength) - headerLength;
+					const dataEnd = last - headerLength;
+					const firstFrame = Math.floor(dataStart / blockAlign);
+					const frameCount = Math.floor(dataEnd / blockAlign) - firstFrame + 1;
+					const frames = await renderRange(resolved, firstFrame, frameCount);
+					const data =
+						channel === null ? frames : deinterleaveChannel(frames, resolved.outputChannels, channel, frameCount);
+
+					parts.push(bufferFromFloats(data, dataStart - firstFrame * blockAlign, dataEnd - dataStart + 1));
+				}
+
+				if (!cancelled) controller.enqueue(Buffer.concat(parts));
+
+				position = last + 1;
+			})();
+
+			return pending;
+		},
+		async cancel() {
+			cancelled = true;
+			await pending;
 		},
 	});
 }
@@ -102,99 +180,49 @@ function resolveRange(rangeHeader: string, total: number): { start: number; end:
 	return { start: parsed.start, end: Math.min(parsed.end, total - 1) };
 }
 
-async function serveRaw(resolved: ResolvedStream, channel: number, rangeHeader: string | null): Promise<Response> {
+function serveRaw(resolved: ResolvedStream, channel: number, rangeHeader: string | null): Response {
 	const total = resolved.totalFrames * BYTES_PER_SAMPLE;
 
-	if (!rangeHeader) return wholeBodyResponse(rawChannelStream(resolved, channel), "application/octet-stream", total);
+	if (!rangeHeader)
+		return wholeBodyResponse(
+			rangeBodyStream(resolved, null, channel, 0, total - 1),
+			"application/octet-stream",
+			total,
+		);
 
 	const { start, end } = resolveRange(rangeHeader, total);
 
-	const frameStart = Math.floor(start / BYTES_PER_SAMPLE);
-	const lastFrame = Math.floor(end / BYTES_PER_SAMPLE);
-	const frameCount = lastFrame - frameStart + 1;
-
-	const interleaved = await renderRange(resolved, frameStart, frameCount);
-	const channelData = deinterleaveChannel(interleaved, resolved.outputChannels, channel, frameCount);
-	const sliceStart = start - frameStart * BYTES_PER_SAMPLE;
-	const body = bufferFromFloats(channelData, sliceStart, end - start + 1);
+	const body = rangeBodyStream(resolved, null, channel, start, end);
 
 	return new Response(body, {
 		status: 206,
 		headers: {
 			"Content-Type": "application/octet-stream",
 			"Content-Range": `bytes ${start}-${end}/${total}`,
-			"Content-Length": String(body.length),
+			"Content-Length": String(end - start + 1),
 			"Accept-Ranges": "bytes",
 		},
 	});
 }
 
-function wavBodyStream(resolved: ResolvedStream, header: Buffer): ReadableStream<Uint8Array> {
-	const total = resolved.totalFrames;
-	let frame = 0;
-	let headerSent = false;
-
-	return new ReadableStream<Uint8Array>({
-		async pull(controller) {
-			if (!headerSent) {
-				controller.enqueue(new Uint8Array(header.buffer, header.byteOffset, header.byteLength));
-				headerSent = true;
-
-				return;
-			}
-
-			if (frame >= total) {
-				controller.close();
-
-				return;
-			}
-
-			const count = Math.min(STREAM_SEGMENT_FRAMES, total - frame);
-			const interleaved = await renderRange(resolved, frame, count);
-
-			controller.enqueue(new Uint8Array(interleaved.buffer, interleaved.byteOffset, interleaved.byteLength));
-
-			frame += count;
-		},
-	});
-}
-
-async function serveWav(resolved: ResolvedStream, rangeHeader: string | null): Promise<Response> {
+function serveWav(resolved: ResolvedStream, rangeHeader: string | null): Response {
 	const header = buildWavHeader(resolved.sampleRate, resolved.outputChannels, resolved.totalFrames);
 	const blockAlign = resolved.outputChannels * BYTES_PER_SAMPLE;
 	const dataBytes = resolved.totalFrames * blockAlign;
 	const total = header.length + dataBytes;
 
-	if (!rangeHeader) return wholeBodyResponse(wavBodyStream(resolved, header), "audio/wav", total);
+	if (!rangeHeader)
+		return wholeBodyResponse(rangeBodyStream(resolved, header, null, 0, total - 1), "audio/wav", total);
 
 	const { start, end } = resolveRange(rangeHeader, total);
-	const parts: Array<Buffer> = [];
-
-	if (start < header.length) {
-		parts.push(header.subarray(start, Math.min(end, header.length - 1) + 1));
-	}
-
-	if (end >= header.length) {
-		const dataStart = Math.max(start, header.length) - header.length;
-		const dataEnd = end - header.length;
-		const frameStart = Math.floor(dataStart / blockAlign);
-		const lastFrame = Math.floor(dataEnd / blockAlign);
-		const frameCount = lastFrame - frameStart + 1;
-
-		const interleaved = await renderRange(resolved, frameStart, frameCount);
-		const sliceStart = dataStart - frameStart * blockAlign;
-
-		parts.push(bufferFromFloats(interleaved, sliceStart, dataEnd - dataStart + 1));
-	}
-
-	const body = Buffer.concat(parts);
+	const body = rangeBodyStream(resolved, header, null, start, end);
 
 	return new Response(body, {
 		status: 206,
 		headers: {
 			"Content-Type": "audio/wav",
 			"Content-Range": `bytes ${start}-${end}/${total}`,
-			"Content-Length": String(body.length),
+			"Content-Length": String(end - start + 1),
 			"Accept-Ranges": "bytes",
 		},
 	});
@@ -206,26 +234,40 @@ async function handleStreamRequest(url: URL, request: Request, streamManager: St
 
 	if (key === undefined) return new Response("Malformed stream URL", { status: 404 });
 
-	const resolved = streamManager.get(key);
+	const lease = await streamManager.acquire(key);
 
-	if (resolved === undefined) return new Response(`Unknown stream key ${key}`, { status: 404 });
+	if (!lease) return new Response(`Unknown stream key ${key}`, { status: 404 });
 
-	const flavor = segments[1];
-	const rangeHeader = request.headers.get("Range");
+	const { resolved } = lease;
 
-	if (flavor === "raw") {
-		const channel = Number.parseInt(segments[2] ?? "", 10);
+	try {
+		const flavor = segments[1];
+		const rangeHeader = request.headers.get("Range");
 
-		if (!Number.isInteger(channel) || channel < 0 || channel >= resolved.outputChannels) {
-			return new Response(`Invalid stream channel "${segments[2] ?? ""}"`, { status: 404 });
+		if (flavor === "raw") {
+			const channel = Number.parseInt(segments[2] ?? "", 10);
+
+			if (!Number.isInteger(channel) || channel < 0 || channel >= resolved.outputChannels) {
+				lease.release();
+
+				return new Response(`Invalid stream channel "${segments[2] ?? ""}"`, { status: 404 });
+			}
+
+			return leasedResponse(serveRaw(resolved, channel, rangeHeader), lease);
 		}
 
-		return serveRaw(resolved, channel, rangeHeader);
+		if (flavor === "audio.wav") return leasedResponse(serveWav(resolved, rangeHeader), lease);
+
+		lease.release();
+
+		return new Response(`Unknown stream flavor "${flavor ?? ""}"`, { status: 404 });
+	} catch (error) {
+		lease.release();
+
+		if (error instanceof RangeError) return new Response(error.message, { status: 416 });
+
+		throw error;
 	}
-
-	if (flavor === "audio.wav") return serveWav(resolved, rangeHeader);
-
-	return new Response(`Unknown stream flavor "${flavor ?? ""}"`, { status: 404 });
 }
 
 async function handleFileRequest(url: URL, request: Request): Promise<Response> {

@@ -12,6 +12,17 @@ export interface StreamInfo {
 
 const MAX_STREAM_ENTRIES = 32;
 
+interface StreamEntry {
+	readonly spec: StreamSpec;
+	owners: number;
+	requests: number;
+}
+
+export interface StreamLease {
+	readonly resolved: ResolvedStream;
+	readonly release: () => void;
+}
+
 const toStreamInfo = (key: string, resolved: ResolvedStream): StreamInfo => ({
 	key,
 	sampleRate: resolved.sampleRate,
@@ -27,25 +38,90 @@ const closeHandles = (resolved: ResolvedStream): void => {
 };
 
 export class StreamManager {
+	private readonly entries = new Map<string, StreamEntry>();
 	private readonly cache = new Map<string, ResolvedStream>();
 	private readonly inFlight = new Map<string, Promise<ResolvedStream>>();
 	private disposed = false;
+	private generation = 0;
 
 	async registerStream(spec: StreamSpec): Promise<StreamInfo> {
-		if (this.disposed) throw new Error("StreamManager has been disposed");
+		this.assertActive();
+
+		const generation = this.generation;
 
 		const key = await this.computeKey(spec);
-		const resolved = await this.resolveForKey(key, spec);
 
-		return toStreamInfo(key, resolved);
+		this.assertActive();
+
+		if (generation !== this.generation) throw new Error("Stream registration was reset");
+
+		let entry = this.entries.get(key);
+
+		if (!entry) {
+			entry = { spec, owners: 0, requests: 0 };
+			this.entries.set(key, entry);
+		}
+
+		entry.owners++;
+
+		try {
+			const lease = await this.acquire(key);
+
+			if (!lease) throw new Error("Stream registration was released");
+
+			const info = toStreamInfo(key, lease.resolved);
+
+			lease.release();
+
+			if (generation !== this.generation) throw new Error("Stream registration was reset");
+
+			return info;
+		} catch (error) {
+			if (generation === this.generation) this.releaseStream(key);
+
+			throw error;
+		}
 	}
 
-	get(key: string): ResolvedStream | undefined {
-		const resolved = this.cache.get(key);
+	releaseStream(key: string): void {
+		const entry = this.entries.get(key);
 
-		if (resolved !== undefined) this.touch(key, resolved);
+		if (!entry) return;
 
-		return resolved;
+		entry.owners = Math.max(0, entry.owners - 1);
+		this.releaseUnused(key, entry);
+	}
+
+	usesPath(pcmPath: string): boolean {
+		return [...this.entries.values()].some((entry) => entry.spec.inputs.some((input) => input.pcmPath === pcmPath));
+	}
+
+	async acquire(key: string): Promise<StreamLease | undefined> {
+		if (this.disposed) return undefined;
+
+		const entry = this.entries.get(key);
+
+		if (!entry) return undefined;
+
+		entry.requests++;
+
+		let released = false;
+		const release = (): void => {
+			if (released) return;
+
+			released = true;
+			entry.requests--;
+			this.releaseUnused(key, entry);
+			this.evictIdle();
+		};
+
+		try {
+			return { resolved: await this.resolveForKey(key, entry.spec), release };
+		} catch (error) {
+			release();
+
+			throw error;
+		}
 	}
 
 	dispose(): void {
@@ -55,6 +131,34 @@ export class StreamManager {
 
 		this.cache.clear();
 		this.inFlight.clear();
+		this.entries.clear();
+	}
+
+	reset(): void {
+		this.generation++;
+
+		for (const [key, entry] of this.entries) {
+			entry.owners = 0;
+			this.releaseUnused(key, entry);
+		}
+	}
+
+	private releaseUnused(key: string, entry: StreamEntry): void {
+		if (entry.owners > 0 || entry.requests > 0) return;
+
+		if (this.entries.get(key) !== entry) return;
+
+		this.entries.delete(key);
+
+		const resolved = this.cache.get(key);
+
+		this.cache.delete(key);
+
+		if (resolved) closeHandles(resolved);
+	}
+
+	private assertActive(): void {
+		if (this.disposed) throw new Error("StreamManager has been disposed");
 	}
 
 	private async resolveForKey(key: string, spec: StreamSpec): Promise<ResolvedStream> {
@@ -72,6 +176,12 @@ export class StreamManager {
 
 		const promise = resolveStream(spec, (pcmPath) => fsPromises.open(pcmPath, "r"))
 			.then((resolved) => {
+				if (this.disposed) {
+					closeHandles(resolved);
+
+					throw new Error("StreamManager has been disposed");
+				}
+
 				this.store(key, resolved);
 
 				return resolved;
@@ -91,17 +201,18 @@ export class StreamManager {
 		if (previous !== undefined && previous !== resolved) closeHandles(previous);
 
 		this.cache.set(key, resolved);
+		this.evictIdle();
+	}
 
-		while (this.cache.size > MAX_STREAM_ENTRIES) {
-			const oldest = this.cache.keys().next();
+	private evictIdle(): void {
+		const idle = [...this.cache.keys()].filter((key) => (this.entries.get(key)?.requests ?? 0) === 0);
 
-			if (oldest.done === true) break;
+		for (const key of idle.slice(0, Math.max(0, idle.length - MAX_STREAM_ENTRIES))) {
+			const evicted = this.cache.get(key);
 
-			const evicted = this.cache.get(oldest.value);
+			this.cache.delete(key);
 
-			this.cache.delete(oldest.value);
-
-			if (evicted !== undefined) closeHandles(evicted);
+			if (evicted) closeHandles(evicted);
 		}
 	}
 

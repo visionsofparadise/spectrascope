@@ -1,8 +1,8 @@
 import path from "path";
-import { app, BrowserWindow } from "electron";
+import { BrowserWindow } from "electron";
 import { ASYNC_MAIN_IPCS } from "../shared/ipc/asyncMainIpcs";
 import { FileWatcherManager } from "./FileWatcherManager";
-import { SourceCacheManager } from "./SourceCacheManager";
+import type { SourceCacheManager } from "./SourceCacheManager";
 import type { StreamManager } from "./StreamManager";
 import type { Logger } from "../shared/models/Logger";
 
@@ -23,10 +23,14 @@ const WINDOW_CONFIG = {
 	},
 };
 
-export const createWindow = (logger: Logger, streamManager: StreamManager): BrowserWindow => {
+export const createWindow = (
+	logger: Logger,
+	streamManager: StreamManager,
+	sourceCacheManager: SourceCacheManager,
+): BrowserWindow => {
 	const browserWindow = new BrowserWindow({
 		...WINDOW_CONFIG,
-		icon: path.join(__dirname, "../../assets/icon.png"),
+		icon: MAIN_WINDOW_VITE_DEV_SERVER_URL ? path.join(__dirname, "../../assets/icon.png") : undefined,
 		show: false,
 		webPreferences: {
 			preload: path.join(__dirname, "preload.js"),
@@ -37,7 +41,6 @@ export const createWindow = (logger: Logger, streamManager: StreamManager): Brow
 
 	const windowId = crypto.randomUUID();
 	const fileWatcherManager = new FileWatcherManager(browserWindow);
-	const sourceCacheManager = new SourceCacheManager(app.getPath("userData"));
 
 	for (const AsyncMainIpc of ASYNC_MAIN_IPCS) {
 		new AsyncMainIpc().register({
@@ -75,7 +78,8 @@ export const createWindow = (logger: Logger, streamManager: StreamManager): Brow
 
 	browserWindow.on("closed", () => {
 		fileWatcherManager.dispose();
-		sourceCacheManager.dispose();
+		streamManager.reset();
+		sourceCacheManager.reset();
 	});
 
 	if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -86,7 +90,7 @@ export const createWindow = (logger: Logger, streamManager: StreamManager): Brow
 			});
 		});
 	} else {
-		const filePath = path.join(__dirname, `../../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`);
+		const filePath = path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`);
 
 		browserWindow.loadFile(filePath).catch((error: unknown) => {
 			logger.error("Failed to load file", error as Error, { namespace: "window", filePath });

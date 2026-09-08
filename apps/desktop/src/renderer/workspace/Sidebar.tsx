@@ -14,6 +14,8 @@ interface SidebarProps {
 	readonly onSampleRateChange: (rate: number) => void;
 	readonly sources: ReadonlyArray<Source>;
 	readonly sourceStatus?: ReadonlyMap<string, SourceStreamStatus>;
+	readonly sourceErrors?: ReadonlyMap<string, string>;
+	readonly onRetrySource?: (sourceId: string) => void;
 	readonly onSourcesChange: (next: ReadonlyArray<Source>) => void;
 }
 
@@ -48,6 +50,8 @@ export function Sidebar({
 	onSampleRateChange,
 	sources,
 	sourceStatus,
+	sourceErrors,
+	onRetrySource,
 	onSourcesChange,
 }: SidebarProps) {
 	const rateValues =
@@ -101,7 +105,13 @@ export function Sidebar({
 			</div>
 
 			<div className="min-h-0 flex-1">
-				<SourcesPanel sources={sources} sourceStatus={sourceStatus} onChange={onSourcesChange} />
+				<SourcesPanel
+					sources={sources}
+					sourceStatus={sourceStatus}
+					sourceErrors={sourceErrors}
+					onRetrySource={onRetrySource}
+					onChange={onSourcesChange}
+				/>
 			</div>
 		</div>
 	);

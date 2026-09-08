@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { main } from "../models/Main";
-import { createStreamAudioData } from "./streamAudioData";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+	derivedStreamQueryOptions,
+	initializeStreamQueries,
+	retainStreamQuery,
+	type StreamQueryEntry,
+} from "./utils/streamQueryOptions";
 import type { StreamInput, StreamSpec } from "../../main/audio/streamDsp";
 import type { PreparedSource } from "../../main/SourceCacheManager";
 import type { StreamInfo } from "../../main/StreamManager";
@@ -20,11 +25,9 @@ export interface UseDerivedStreamsResult {
 	readonly diffAudio: AudioData;
 	readonly sumInfo: StreamInfo | null;
 	readonly diffInfo: StreamInfo | null;
-}
-
-interface DerivedEntry {
-	readonly info: StreamInfo;
-	readonly audioData: AudioData;
+	readonly preparing: boolean;
+	readonly error: string | null;
+	readonly retry: () => void;
 }
 
 export function resolveAudibleSources(sources: ReadonlyArray<Source>): ReadonlyArray<Source> {
@@ -37,39 +40,18 @@ export function resolveAudibleSources(sources: ReadonlyArray<Source>): ReadonlyA
 	return sources.filter((source) => !source.muted);
 }
 
-function specKey(role: string, inputs: ReadonlyArray<StreamInput>): string {
-	return `${role}|${inputs.map((input) => `${input.pcmPath}@${String(input.offsetMs)}:${String(input.gain)}`).join("|")}`;
-}
+function useRegisteredDerivedStream(spec: StreamSpec | null) {
+	const result = useQuery({ ...derivedStreamQueryOptions(spec), placeholderData: keepPreviousData });
+	const held = useRef<StreamQueryEntry | null>(null);
+	const entry = spec === null ? null : (result.data ?? held.current);
 
-function useRegisteredDerivedStream(
-	cacheRef: React.RefObject<Map<string, DerivedEntry>>,
-	setVersion: React.Dispatch<React.SetStateAction<number>>,
-	key: string | null,
-	inputs: ReadonlyArray<StreamInput> | null,
-): void {
 	useEffect(() => {
-		if (key === null || inputs === null) return;
+		held.current = entry;
 
-		const cache = cacheRef.current;
+		if (entry) return retainStreamQuery(entry);
+	}, [entry]);
 
-		if (cache.has(key)) return;
-
-		let cancelled = false;
-
-		void main
-			.registerStream({ inputs } satisfies StreamSpec)
-			.then((info) => {
-				cache.set(key, { info, audioData: createStreamAudioData(info) });
-			})
-			.catch(() => undefined)
-			.finally(() => {
-				if (!cancelled) setVersion((current) => current + 1);
-			});
-
-		return () => {
-			cancelled = true;
-		};
-	}, [cacheRef, setVersion, key, inputs]);
+	return { result, entry, preparing: spec !== null && result.isFetching };
 }
 
 export function useDerivedStreams(
@@ -79,8 +61,9 @@ export function useDerivedStreams(
 	differenceB: string | null,
 	onDefaultDifference: (a: string, b: string) => void,
 ): UseDerivedStreamsResult {
-	const cacheRef = useRef(new Map<string, DerivedEntry>());
-	const [version, setVersion] = useState(0);
+	const client = useQueryClient();
+
+	initializeStreamQueries(client);
 
 	const onDefaultDifferenceRef = useRef(onDefaultDifference);
 
@@ -102,7 +85,7 @@ export function useDerivedStreams(
 		return inputs;
 	}, [sources, prepared]);
 
-	const sumKey = useMemo(() => (sumInputs.length === 0 ? null : specKey("sum", sumInputs)), [sumInputs]);
+	const sumSpec = useMemo(() => (sumInputs.length === 0 ? null : { inputs: sumInputs }), [sumInputs]);
 
 	const effectiveA =
 		differenceA !== null && sources.some((source) => source.id === differenceA)
@@ -132,7 +115,7 @@ export function useDerivedStreams(
 		];
 	}, [sources, prepared, effectiveA, effectiveB]);
 
-	const diffKey = useMemo(() => (diffInputs === null ? null : specKey("diff", diffInputs)), [diffInputs]);
+	const diffSpec = useMemo(() => (diffInputs === null ? null : { inputs: diffInputs }), [diffInputs]);
 
 	useEffect(() => {
 		if (differenceA !== null || differenceB !== null) return;
@@ -147,22 +130,19 @@ export function useDerivedStreams(
 		onDefaultDifferenceRef.current(first.id, second.id);
 	}, [differenceA, differenceB, sources]);
 
-	useRegisteredDerivedStream(cacheRef, setVersion, sumKey, sumInputs);
-	useRegisteredDerivedStream(cacheRef, setVersion, diffKey, diffInputs);
+	const sum = useRegisteredDerivedStream(sumSpec);
+	const difference = useRegisteredDerivedStream(diffSpec);
+	const retry = useCallback((): void => {
+		void client.invalidateQueries({ queryKey: ["derived-stream"] });
+	}, [client]);
 
-	return useMemo<UseDerivedStreamsResult>(() => {
-		// eslint-disable-next-line @typescript-eslint/no-meaningless-void-operator
-		void version;
-
-		const cache = cacheRef.current;
-		const sumEntry = sumKey === null ? undefined : cache.get(sumKey);
-		const diffEntry = diffKey === null ? undefined : cache.get(diffKey);
-
-		return {
-			sumAudio: sumEntry?.audioData ?? EMPTY_DERIVED_AUDIO,
-			diffAudio: diffEntry?.audioData ?? EMPTY_DERIVED_AUDIO,
-			sumInfo: sumEntry?.info ?? null,
-			diffInfo: diffEntry?.info ?? null,
-		};
-	}, [sumKey, diffKey, version]);
+	return {
+		sumAudio: sum.entry?.audioData ?? EMPTY_DERIVED_AUDIO,
+		diffAudio: difference.entry?.audioData ?? EMPTY_DERIVED_AUDIO,
+		sumInfo: sum.entry?.info ?? null,
+		diffInfo: difference.entry?.info ?? null,
+		preparing: sum.preparing || difference.preparing,
+		error: sum.result.error?.message ?? difference.result.error?.message ?? null,
+		retry,
+	};
 }

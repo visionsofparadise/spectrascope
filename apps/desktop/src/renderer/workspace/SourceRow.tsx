@@ -16,6 +16,8 @@ interface SourceRowProps {
 	 * reason on hover. `ready` / undefined render normally.
 	 */
 	readonly status?: SourceStreamStatus;
+	readonly error?: string;
+	readonly onRetry?: () => void;
 	readonly onChange: (next: Source) => void;
 	readonly onRemove: () => void;
 	readonly active?: boolean;
@@ -31,7 +33,7 @@ function fileNameOf(source: Source): string {
 	return segment && segment.length > 0 ? segment : source.name;
 }
 
-export function SourceRow({ source, status, onChange, onRemove, active, onActivate }: SourceRowProps) {
+export function SourceRow({ source, status, error, onRetry, onChange, onRemove, active, onActivate }: SourceRowProps) {
 	const [pickerOpen, setPickerOpen] = useState(false);
 
 	const rowRef = useRef<HTMLDivElement | null>(null);
@@ -130,7 +132,7 @@ export function SourceRow({ source, status, onChange, onRemove, active, onActiva
 							"min-w-0 truncate font-body text-base font-medium leading-tight",
 							status === "error" ? "text-state-error" : "text-chrome-text",
 						)}
-						title={status === "error" ? "Failed to prepare audio" : source.audioFilePath || label}
+						title={status === "error" ? (error ?? "Failed to prepare audio") : source.audioFilePath || label}
 					>
 						{label}
 					</span>
@@ -154,6 +156,23 @@ export function SourceRow({ source, status, onChange, onRemove, active, onActiva
 					)}
 				</div>
 
+				{status === "error" && (
+					<div className="flex flex-col gap-1 text-xs text-state-error" role="status">
+						<span className="break-words">{error ?? "Audio preparation failed."}</span>
+						{onRetry && source.audioFilePath.length > 0 && (
+							<button
+								type="button"
+								className="self-start underline focus-visible:outline"
+								onClick={(event) => {
+									event.stopPropagation();
+									onRetry();
+								}}
+							>
+								Retry source
+							</button>
+						)}
+					</div>
+				)}
 				<div className="min-w-0">
 					<span
 						className="block min-w-0 overflow-hidden truncate font-body text-xs text-chrome-text-dim"

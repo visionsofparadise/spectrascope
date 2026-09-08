@@ -10,7 +10,9 @@ import { UnwatchFileRendererIpc } from "./FileSystem/unwatchFile/Renderer";
 import { WatchFileRendererIpc } from "./FileSystem/watchFile/Renderer";
 import { WriteFileRendererIpc } from "./FileSystem/writeFile/Renderer";
 import { PrepareSourceRendererIpc } from "./Source/prepareSource/Renderer";
+import { ReleasePreparedSourceRendererIpc } from "./Source/releasePreparedSource/Renderer";
 import { RegisterStreamRendererIpc } from "./Stream/registerStream/Renderer";
+import { ReleaseStreamRendererIpc } from "./Stream/releaseStream/Renderer";
 import { GetAllDisplaysRendererIpc } from "./System/getAllDisplays/Renderer";
 import { GetAppVersionRendererIpc } from "./System/getAppVersion/Renderer";
 import { GetUserDataPathRendererIpc } from "./System/getUserDataPath/Renderer";
@@ -39,6 +41,8 @@ export const ASYNC_RENDERER_IPCS = [
 	SetBoundsRendererIpc,
 	PrepareSourceRendererIpc,
 	RegisterStreamRendererIpc,
+	ReleasePreparedSourceRendererIpc,
+	ReleaseStreamRendererIpc,
 ];
 
 export type AsyncIpcAction = IpcHandlerAction<InstanceType<(typeof ASYNC_RENDERER_IPCS)[number]>>;

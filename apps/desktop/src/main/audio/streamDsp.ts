@@ -61,7 +61,15 @@ export const resolveStream = async (
 ): Promise<ResolvedStream> => {
 	if (spec.inputs.length === 0) throw new Error("Cannot resolve a stream with no inputs");
 
-	const fileHandles = await Promise.all(spec.inputs.map((input) => openHandle(input.pcmPath)));
+	const opened = await Promise.allSettled(spec.inputs.map((input) => openHandle(input.pcmPath)));
+	const fileHandles = opened.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
+	const failed = opened.find((result) => result.status === "rejected");
+
+	if (failed?.status === "rejected") {
+		await Promise.all(fileHandles.map((fileHandle) => fileHandle.close().catch(() => undefined)));
+
+		throw failed.reason;
+	}
 
 	try {
 		const parsed = await Promise.all(

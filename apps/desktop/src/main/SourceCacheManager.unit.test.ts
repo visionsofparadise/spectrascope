@@ -1,6 +1,48 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { computeCacheKey, shouldPassThrough, touchLru } from "./SourceCacheManager";
+import { computeCacheKey, shouldPassThrough, touchLru, SourceCacheManager } from "./SourceCacheManager";
+import { probeAudioFile, type AudioProbe } from "./audio/probe";
+import { buildWavHeader } from "./audio/wavHeader";
 import type { WavHeader } from "./audio/wavReader";
+
+vi.mock("./audio/probe", () => ({ probeAudioFile: vi.fn() }));
+
+describe("SourceCacheManager window reset", () => {
+	it("rejects old preparation completion and permits preparation after window recreation", async () => {
+		const directory = await fs.mkdtemp(path.join(os.tmpdir(), "spectrascope-source-reset-"));
+		const pcmPath = path.join(directory, "source.wav");
+		await fs.writeFile(pcmPath, Buffer.concat([buildWavHeader(48000, 1, 2), Buffer.alloc(8)]));
+		const manager = new SourceCacheManager(directory);
+		const probe: AudioProbe = {
+			sampleRate: 48000,
+			channelCount: 1,
+			durationMs: 2 / 48,
+			container: "WAVE",
+			codec: "PCM",
+		};
+		let complete: (value: AudioProbe) => void = () => undefined;
+		vi.mocked(probeAudioFile)
+			.mockReturnValueOnce(
+				new Promise((resolve) => {
+					complete = resolve;
+				}),
+			)
+			.mockResolvedValue(probe);
+		try {
+			const pending = manager.prepare(pcmPath, 48000);
+			const rejected = expect(pending).rejects.toThrow("reset");
+			manager.reset();
+			complete(probe);
+			await rejected;
+			expect((await manager.prepare(pcmPath, 48000)).pcmPath).toBe(pcmPath);
+		} finally {
+			manager.dispose();
+			await fs.rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 20 });
+		}
+	});
+});
 
 const header = (sampleRate: number): WavHeader => ({
 	format: "float",
@@ -37,6 +79,23 @@ describe("shouldPassThrough", () => {
 });
 
 describe("touchLru", () => {
+	it("retains pinned files while limiting idle files", () => {
+		const cache = new Map<string, string>();
+		const evicted: Array<string> = [];
+		const retained = new Set(["/active.wav"]);
+		const evict = (filePath: string): void => {
+			evicted.push(filePath);
+		};
+		const pinned = (filePath: string): boolean => retained.has(filePath);
+		touchLru(cache, "active", "/active.wav", 1, evict, pinned);
+		touchLru(cache, "first", "/first.wav", 1, evict, pinned);
+		touchLru(cache, "second", "/second.wav", 1, evict, pinned);
+		expect(evicted).toEqual(["/first.wav"]);
+		expect(cache.has("active")).toBe(true);
+		retained.clear();
+		touchLru(cache, "second", "/second.wav", 1, evict, pinned);
+		expect(evicted).toEqual(["/first.wav", "/active.wav"]);
+	});
 	it("evicts least-recently-used entries in order and honors MRU touches", () => {
 		const cache = new Map<string, string>();
 		const evicted: Array<string> = [];

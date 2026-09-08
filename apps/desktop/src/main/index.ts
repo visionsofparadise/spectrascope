@@ -1,11 +1,12 @@
 import { app, BrowserWindow, protocol } from "electron";
+import squirrelStartup from "electron-squirrel-startup";
 import { logger } from "./logger";
 import { registerMediaProtocol } from "./mediaProtocol";
+import { SourceCacheManager } from "./SourceCacheManager";
 import { StreamManager } from "./StreamManager";
 import { createWindow } from "./window";
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports -- Electron Forge requires this pattern
-if (require("electron-squirrel-startup")) {
+if (squirrelStartup) {
 	app.quit();
 }
 
@@ -14,17 +15,22 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const streamManager = new StreamManager();
+let sourceCacheManager: SourceCacheManager | null = null;
 
 app.whenReady()
 	.then(() => {
 		registerMediaProtocol(streamManager);
+		sourceCacheManager = new SourceCacheManager(app.getPath("userData"), (pcmPath) =>
+			streamManager.usesPath(pcmPath),
+		);
 
-		return createWindow(logger, streamManager);
+		return createWindow(logger, streamManager, sourceCacheManager);
 	})
 	.catch(console.error);
 
 app.on("before-quit", () => {
 	streamManager.dispose();
+	sourceCacheManager?.dispose();
 });
 
 app.on("window-all-closed", () => {
@@ -34,7 +40,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
-	if (BrowserWindow.getAllWindows().length === 0) {
-		createWindow(logger, streamManager);
+	if (BrowserWindow.getAllWindows().length === 0 && sourceCacheManager) {
+		createWindow(logger, streamManager, sourceCacheManager);
 	}
 });

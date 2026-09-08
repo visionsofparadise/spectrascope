@@ -76,6 +76,23 @@ const withStream = async (spec: StreamSpec, body: (resolved: ResolvedStream) => 
 };
 
 describe("streamDsp", () => {
+	it("closes successfully opened inputs when a sibling open fails", async () => {
+		const filePath = writeFloatWav("partial-open.wav", 1, 1000, [1]);
+		const handle = await fsPromises.open(filePath, "r");
+		await expect(
+			resolveStream(
+				{
+					inputs: [
+						{ pcmPath: filePath, offsetMs: 0, gain: 1 },
+						{ pcmPath: "missing", offsetMs: 0, gain: 1 },
+					],
+				},
+				(inputPath) =>
+					inputPath === filePath ? Promise.resolve(handle) : Promise.reject(new Error("Missing input")),
+			),
+		).rejects.toThrow("Missing input");
+		await expect(handle.stat()).rejects.toThrow();
+	});
 	it("sums two mono inputs at different offsets, folding each into both stereo channels", async () => {
 		// 1000 Hz sample rate → offsetMs 1 = exactly one frame.
 		const a = writeFloatWav("sum-a.wav", 1, 1000, [1, 2, 3]);

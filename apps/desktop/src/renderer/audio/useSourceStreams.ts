@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { main } from "../models/Main";
-import { createStreamAudioData } from "./streamAudioData";
+import { useQueries, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { initializeStreamQueries, sourceStreamQueryOptions, type StreamQueryEntry } from "./utils/streamQueryOptions";
 import type { PreparedSource } from "../../main/SourceCacheManager";
 import type { Source } from "../workspace/source";
 import type { AudioData } from "../workspace/spectral/types";
@@ -8,35 +8,15 @@ import type { AudioData } from "../workspace/spectral/types";
 export type SourceStreamStatus = "preparing" | "ready" | "error";
 
 export interface UseSourceStreamsResult {
-	/**
-	 * Stream-backed PCM readers keyed by `Source.id`. A source is present only
-	 * once its file has been prepared and its display stream registered; a
-	 * preparing or failed source is absent, and the views skip it.
-	 */
 	readonly sourceAudio: ReadonlyMap<string, AudioData>;
-	/**
-	 * The `PreparedSource` (canonical `pcmPath`, sample rate, channel/sample
-	 * counts, native rate) keyed by `Source.id` — the input `useDerivedStreams`
-	 * folds into the sum / diff specs. Present only for a `ready` source.
-	 */
 	readonly prepared: ReadonlyMap<string, PreparedSource>;
 	readonly status: ReadonlyMap<string, SourceStreamStatus>;
+	readonly errors: ReadonlyMap<string, string>;
+	readonly retrySource: (sourceId: string) => void;
 }
 
-interface PathCacheEntry {
-	readonly status: SourceStreamStatus;
-	readonly audioData?: AudioData;
-	readonly prepared?: PreparedSource;
-}
-
-const EMPTY_RESULT: UseSourceStreamsResult = {
-	sourceAudio: new Map<string, AudioData>(),
-	prepared: new Map<string, PreparedSource>(),
-	status: new Map<string, SourceStreamStatus>(),
-};
-
-function cacheKey(path: string, rate: number | null): string {
-	return `${path}@${rate === null ? "native" : String(rate)}`;
+function combineSourceResults(results: Array<UseQueryResult<StreamQueryEntry>>) {
+	return results.map((result) => ({ data: result.data, error: result.error }));
 }
 
 export function useSourceStreams(
@@ -44,119 +24,70 @@ export function useSourceStreams(
 	canonicalSampleRate: number | null,
 	onCaptureRate: (nativeSampleRate: number) => void,
 ): UseSourceStreamsResult {
-	const cacheRef = useRef(new Map<string, PathCacheEntry>());
-	const [version, setVersion] = useState(0);
+	const client = useQueryClient();
 
-	const onCaptureRateRef = useRef(onCaptureRate);
+	initializeStreamQueries(client);
 
-	useEffect(() => {
-		onCaptureRateRef.current = onCaptureRate;
-	}, [onCaptureRate]);
-
-	const captureFiredRef = useRef(false);
-
-	const filePaths = useMemo(() => {
-		const set = new Set<string>();
-
-		for (const source of sources) {
-			if (source.audioFilePath.length > 0) {
-				set.add(source.audioFilePath);
-			}
-		}
-
-		return [...set];
-	}, [sources]);
-
-	useEffect(() => {
-		let cancelled = false;
-		const cache = cacheRef.current;
-
-		for (const filePath of filePaths) {
-			const key = cacheKey(filePath, canonicalSampleRate);
-
-			if (cache.has(key)) continue;
-
-			cache.set(key, { status: "preparing" });
-
-			void main
-				.prepareSource(filePath, canonicalSampleRate)
-				.then(async (prepared) => {
-					const info = await main.registerStream({
-						inputs: [{ pcmPath: prepared.pcmPath, offsetMs: 0, gain: 1 }],
-					});
-
-					cache.set(key, { status: "ready", prepared, audioData: createStreamAudioData(info) });
-				})
-				.catch(() => {
-					cache.set(key, { status: "error" });
-				})
-				.finally(() => {
-					if (!cancelled) {
-						setVersion((current) => current + 1);
-					}
-				});
-		}
-
-		return () => {
-			cancelled = true;
-		};
-	}, [filePaths, canonicalSampleRate]);
+	const filePaths = useMemo(
+		() => [...new Set(sources.map((source) => source.audioFilePath).filter(Boolean))],
+		[sources],
+	);
+	const results = useQueries({
+		queries: filePaths.map((filePath) => sourceStreamQueryOptions(filePath, canonicalSampleRate)),
+		combine: combineSourceResults,
+	});
+	const firstPrepared = results[0]?.data?.prepared;
+	const captureFired = useRef(false);
 
 	useEffect(() => {
 		if (canonicalSampleRate !== null) {
-			captureFiredRef.current = false;
+			captureFired.current = false;
 
 			return;
 		}
 
-		if (captureFiredRef.current) return;
-
-		const first = sources.find((source) => source.audioFilePath.length > 0);
-
-		if (!first) return;
-
-		const entry = cacheRef.current.get(cacheKey(first.audioFilePath, null));
-
-		if (entry?.status === "ready" && entry.prepared) {
-			captureFiredRef.current = true;
-			onCaptureRateRef.current(entry.prepared.nativeSampleRate);
+		if (!captureFired.current && firstPrepared) {
+			captureFired.current = true;
+			onCaptureRate(firstPrepared.nativeSampleRate);
 		}
-	}, [version, canonicalSampleRate, sources]);
+	}, [canonicalSampleRate, firstPrepared, onCaptureRate]);
 
-	return useMemo<UseSourceStreamsResult>(() => {
-		// eslint-disable-next-line @typescript-eslint/no-meaningless-void-operator
-		void version;
+	const retrySource = useCallback(
+		(sourceId: string): void => {
+			const source = sources.find((candidate) => candidate.id === sourceId);
 
-		if (sources.length === 0) return EMPTY_RESULT;
+			if (!source?.audioFilePath) return;
 
-		const cache = cacheRef.current;
+			void client.resetQueries({
+				queryKey: sourceStreamQueryOptions(source.audioFilePath, canonicalSampleRate).queryKey,
+				exact: true,
+			});
+		},
+		[sources, canonicalSampleRate, client],
+	);
+
+	return useMemo(() => {
 		const sourceAudio = new Map<string, AudioData>();
 		const prepared = new Map<string, PreparedSource>();
 		const status = new Map<string, SourceStreamStatus>();
+		const errors = new Map<string, string>();
 
 		for (const source of sources) {
-			if (source.audioFilePath.length === 0) {
+			const result = results[filePaths.indexOf(source.audioFilePath)];
+
+			if (!result) {
 				status.set(source.id, "error");
-
-				continue;
-			}
-
-			const entry = cache.get(cacheKey(source.audioFilePath, canonicalSampleRate));
-
-			if (!entry) {
-				status.set(source.id, "preparing");
-
-				continue;
-			}
-
-			status.set(source.id, entry.status);
-
-			if (entry.status === "ready" && entry.audioData && entry.prepared) {
-				sourceAudio.set(source.id, entry.audioData);
-				prepared.set(source.id, entry.prepared);
-			}
+				errors.set(source.id, "Choose an audio file for this source.");
+			} else if (result.error) {
+				status.set(source.id, "error");
+				errors.set(source.id, result.error.message);
+			} else if (result.data?.prepared) {
+				status.set(source.id, "ready");
+				sourceAudio.set(source.id, result.data.audioData);
+				prepared.set(source.id, result.data.prepared);
+			} else status.set(source.id, "preparing");
 		}
 
-		return { sourceAudio, prepared, status };
-	}, [sources, canonicalSampleRate, version]);
+		return { sourceAudio, prepared, status, errors, retrySource };
+	}, [sources, filePaths, results, retrySource]);
 }
