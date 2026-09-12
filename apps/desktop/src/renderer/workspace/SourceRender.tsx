@@ -221,6 +221,13 @@ export function SourceRender({
 
 	if (incoming !== null && incoming !== held) layers.push({ result: incoming, isFront: false });
 
+	const updating =
+		front !== null && (computeResult.status === "computing" || (incoming !== null && incoming !== held));
+	const progressFraction = computeResult.status === "computing" ? computeResult.fraction : 1;
+	const progressPercent = Number.isFinite(progressFraction)
+		? Math.round(Math.max(0, Math.min(1, progressFraction)) * 100)
+		: 0;
+
 	return (
 		<div
 			ref={displayRef}
@@ -266,6 +273,24 @@ export function SourceRender({
 			))}
 			{front === null && computeResult.status === "computing" && (
 				<ComputeProgress fraction={computeResult.fraction} />
+			)}
+			{updating && (
+				<div
+					role="progressbar"
+					aria-label={`Updating analysis for ${source.name}`}
+					aria-valuemin={0}
+					aria-valuemax={100}
+					aria-valuenow={progressPercent}
+					aria-valuetext={progressPercent === 100 ? "Rendering updated view" : `${progressPercent}%`}
+					className="pointer-events-none absolute inset-x-0 top-0 z-20"
+				>
+					<div className="h-0.5 bg-chrome-border">
+						<div className="h-full bg-primary" style={{ width: `${progressPercent}%` }} />
+					</div>
+					<span className="absolute right-2 top-1 rounded-sm bg-void/80 px-1 py-0.5 font-technical text-[length:var(--text-xs)] text-chrome-text-secondary">
+						Updating view…
+					</span>
+				</div>
 			)}
 			{computeResult.status === "error" && (
 				<div
