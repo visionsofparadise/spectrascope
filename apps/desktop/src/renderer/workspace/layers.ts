@@ -4,10 +4,10 @@ export interface LayerColor {
 }
 
 export const DEFAULT_LAYER_PALETTE: ReadonlyArray<LayerColor> = [
-	{ primary: "#F59E0B", secondary: "#7C2D12" },
-	{ primary: "#5EC4B6", secondary: "#0F3D38" },
-	{ primary: "#EC4899", secondary: "#4A044E" },
-	{ primary: "#60A5FA", secondary: "#0B2545" },
+	{ primary: "#8CD9CD", secondary: "#0F3D38" },
+	{ primary: "#C6B8ED", secondary: "#44355D" },
+	{ primary: "#ACC9F5", secondary: "#0B2545" },
+	{ primary: "#F4C8A8", secondary: "#7C2D12" },
 ];
 
 export const NEUTRAL_LAYER_COLOR: LayerColor = {

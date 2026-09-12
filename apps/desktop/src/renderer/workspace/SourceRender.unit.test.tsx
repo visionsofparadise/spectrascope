@@ -4,6 +4,7 @@ import { SpectrogramCanvas, WaveformCanvas } from "spectral-display";
 import { SourceRender } from "./SourceRender";
 import { ComputeProgress } from "./spectral/ComputeProgress";
 import { createDefaultSource } from "./source";
+import { SPECTROGRAM_COLORMAPS } from "./utils/spectrogramColormaps";
 import type { SourceRenderProps } from "./SourceRender";
 import type { ComputeResult, ComputeResultReady, SpectralOptions } from "spectral-display";
 import type { ReactElement } from "react";
@@ -94,8 +95,11 @@ describe("replacement analysis progress", () => {
 		(spectrogramColormap) => {
 			runtime.result = ready();
 			const tree = render({ spectrogramColormap });
-			expect(runtime.options?.config).toMatchObject({ colormap: spectrogramColormap, spectrogram: true });
-			expect(tree.find((element) => element.type === WaveformCanvas)?.props.color).toEqual([245, 158, 11]);
+			expect(runtime.options?.config).toMatchObject({
+				colormap: SPECTROGRAM_COLORMAPS[spectrogramColormap],
+				spectrogram: true,
+			});
+			expect(tree.find((element) => element.type === WaveformCanvas)?.props.color).toEqual([140, 217, 205]);
 		},
 	);
 

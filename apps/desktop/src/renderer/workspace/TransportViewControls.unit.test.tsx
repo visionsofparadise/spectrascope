@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { TransportViewControls } from "./TransportViewControls";
 import { INITIAL_VIEW_CONTROL_SETTINGS } from "./viewSettings";
-import type { ComponentProps, ReactElement } from "react";
+import type { ReactElement } from "react";
 import type { ViewId } from "./Workspace";
 
 vi.mock("@iconify/react", () => ({ Icon: "mock-icon" }));
@@ -33,33 +33,33 @@ describe("spectrogram sampling control", () => {
 	it.each(["timeline", "slider", "sum", "difference"] as const)("offers every sampling mode in %s", (view) => {
 		const nodes = render(view);
 		const selector = nodes.find(
-			(element) => element.type === "select" && element.props["aria-label"] === "Spectrogram sampling",
+			(element) => element.type === "mock-select" && element.props.ariaLabel === "Spectrogram sampling",
 		);
 		expect(selector?.props.value).toBe("4");
 		expect(nodes.some((element) => element.props.children === "Sampling")).toBe(false);
-		for (const label of ["Colour map", "Frequency scale", "FFT size", "FFT hop"])
-			expect(nodes.some((element) => element.props.ariaLabel === label)).toBe(true);
-		expect(selector?.props["title"]).toContain("highest-RMS");
-		expect(selector?.props["title"]).toContain("Approximate overview");
 		expect(
-			nodes
-				.filter((element) => element.type === "option")
-				.map((option) => [option.props.value, option.props.children]),
-		).toEqual([
-			["1", "1×"],
-			["2", "2×"],
-			["4", "4×"],
-			["8", "8×"],
-			["full", "Full"],
+			nodes.filter((element) => element.type === "mock-select").map((element) => element.props.ariaLabel),
+		).toEqual(["Colour map", "Spectrogram sampling", "Frequency scale", "FFT size", "FFT hop"]);
+		expect(selector?.props.variant).toBe("chip");
+		expect(selector?.props.direction).toBe("up");
+		const help = nodes.find((element) => typeof element.props.title === "string")?.props.title;
+		expect(help).toContain("highest-RMS");
+		expect(help).toContain("Approximate overview");
+		expect(selector?.props.options).toEqual([
+			{ value: "1", label: "1×" },
+			{ value: "2", label: "2×" },
+			{ value: "4", label: "4×" },
+			{ value: "8", label: "8×" },
+			{ value: "full", label: "Full" },
 		]);
 	});
 
 	it.each([1, 2, 4, 8, "full"] as const)("commits %s while preserving other display settings", (sampling) => {
 		const onSettingsChange = vi.fn();
-		const selector = render("slider", onSettingsChange).find((element) => element.type === "select")!;
-		(selector.props.onChange as NonNullable<ComponentProps<"select">["onChange"]>)({
-			target: { value: String(sampling) },
-		} as React.ChangeEvent<HTMLSelectElement>);
+		const selector = render("slider", onSettingsChange).find(
+			(element) => element.props.ariaLabel === "Spectrogram sampling",
+		)!;
+		(selector.props.onChange as (value: string) => void)(String(sampling));
 		expect(onSettingsChange).toHaveBeenCalledExactlyOnceWith({
 			...INITIAL_VIEW_CONTROL_SETTINGS,
 			spectrogramSampling: sampling,
@@ -125,6 +125,6 @@ describe("spectrogram sampling control", () => {
 	});
 
 	it("omits spectrogram sampling from measurement-only controls", () => {
-		expect(render("loudness").some((element) => element.props["aria-label"] === "Spectrogram sampling")).toBe(false);
+		expect(render("loudness").some((element) => element.props.ariaLabel === "Spectrogram sampling")).toBe(false);
 	});
 });

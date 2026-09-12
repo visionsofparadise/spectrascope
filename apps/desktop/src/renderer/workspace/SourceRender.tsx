@@ -6,6 +6,7 @@ import { useContainerSize } from "./spectral/useContainerSize";
 import { computeWindowTransform } from "./useTimeViewport";
 import { formatInspectionTime } from "./utils/formatInspectionTime";
 import { fractionToFrequency } from "./utils/frequencyScale";
+import { SPECTROGRAM_COLORMAPS } from "./utils/spectrogramColormaps";
 import type { Source } from "./source";
 import type { AudioData } from "./spectral/types";
 import type { DisplayedWaveform } from "./spectral/useWaveformReadouts";
@@ -143,7 +144,7 @@ export function SourceRender({
 				hopOverlap,
 				frequencyScale,
 				spectrogramSampling,
-				colormap: spectrogramColormap,
+				colormap: SPECTROGRAM_COLORMAPS[spectrogramColormap],
 				spectrogram,
 				channelInput,
 				loudness: false,

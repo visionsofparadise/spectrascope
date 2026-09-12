@@ -40,6 +40,7 @@ const SAMPLING_OPTIONS = [
 	{ value: 8, label: "8×" },
 	{ value: "full", label: "Full" },
 ] as const;
+const SAMPLING_SELECT_OPTIONS = SAMPLING_OPTIONS.map((option) => ({ ...option, value: String(option.value) }));
 const SAMPLING_HELP =
 	"Approximate overview: 1×, 2×, 4× and 8× choose the highest-RMS FFT window in each time subdivision of a pixel. Full uses every FFT window.";
 
@@ -48,24 +49,19 @@ function SamplingControl({
 	onSettingsChange,
 }: Pick<TransportViewControlsProps, "settings" | "onSettingsChange">) {
 	return (
-		<div className="shrink-0 font-technical text-[length:var(--text-xs)] text-chrome-text-secondary">
-			<select
-				aria-label="Spectrogram sampling"
-				title={SAMPLING_HELP}
+		<div className="shrink-0" title={SAMPLING_HELP}>
+			<Select
+				variant="chip"
+				direction="up"
+				ariaLabel="Spectrogram sampling"
 				value={String(settings.spectrogramSampling)}
-				className="bg-chrome-raised px-1 py-0.5 text-chrome-text"
-				onChange={(event) => {
-					const selected = SAMPLING_OPTIONS.find((option) => String(option.value) === event.target.value);
+				options={SAMPLING_SELECT_OPTIONS}
+				onChange={(value) => {
+					const selected = SAMPLING_OPTIONS.find((option) => String(option.value) === value);
 
 					if (selected) onSettingsChange({ ...settings, spectrogramSampling: selected.value });
 				}}
-			>
-				{SAMPLING_OPTIONS.map((option) => (
-					<option key={option.value} value={String(option.value)}>
-						{option.label}
-					</option>
-				))}
-			</select>
+			/>
 		</div>
 	);
 }
@@ -76,7 +72,6 @@ function SpectrogramSelectors({
 }: Pick<TransportViewControlsProps, "settings" | "onSettingsChange">) {
 	return (
 		<>
-			<SamplingControl settings={settings} onSettingsChange={onSettingsChange} />
 			<Select
 				variant="chip"
 				direction="up"
@@ -89,6 +84,7 @@ function SpectrogramSelectors({
 					if (selected) onSettingsChange({ ...settings, spectrogramColormap: selected.value });
 				}}
 			/>
+			<SamplingControl settings={settings} onSettingsChange={onSettingsChange} />
 			<div className="flex flex-col items-stretch gap-0.5 min-[1400px]:flex-row min-[1400px]:items-center min-[1400px]:gap-1">
 				<Select
 					variant="chip"
