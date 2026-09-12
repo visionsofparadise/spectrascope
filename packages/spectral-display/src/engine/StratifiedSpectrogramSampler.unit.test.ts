@@ -65,6 +65,6 @@ describe("stratified spectrogram window selection", () => {
 		samples.fill(2.5e-6, samples.length - 256);
 		const selected = select(samples, 2, 256, 64, samples.length)[0]!;
 		expect(selected.slice(0, 256).every((sample) => sample === 1)).toBe(true);
-		expect(selected.slice(256).every((sample) => sample === samples.at(-1))).toBe(true);
+		expect(selected.slice(256).every((sample) => sample === samples[samples.length - 1])).toBe(true);
 	});
 });

@@ -16,7 +16,7 @@ export interface Dimensions {
 }
 
 export type ChannelInput = "mono" | "mid" | "side";
-export type SpectrogramSampling = "full" | 2 | 4 | 8;
+export type SpectrogramSampling = "full" | 1 | 2 | 4 | 8;
 
 export interface SpectralConfig {
 	fftSize: number;

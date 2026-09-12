@@ -231,42 +231,44 @@ describe("contextual FFT at deep zoom", () => {
 		return { options, engine, prepare, submit, submitted, context, cleanup, texture };
 	}
 
-	it.each(["mono", "mid", "side"] as const)(
-		"samples %s spectra without changing visible measurements",
-		async (channelInput) => {
-			const channels = [
-				Float32Array.from({ length: 512 }, (_, index) => ((index * 7) % 23) / 23),
-				Float32Array.from({ length: 512 }, (_, index) => ((index * 3) % 17) / 17),
-			];
-			const test = fixture(channels, 0, 512);
-			test.options.sampleQuery.width = 4;
-			test.options.config.channelInput = channelInput;
-			test.options.config.ltas = false;
-			test.options.config.stereo = true;
-			const baseline = await runPipeline(
-				{ ...test.options, config: { ...test.options.config, spectrogram: false } },
-				new ThrowingEngine(test.options.config.device),
-			);
-			test.options.config.spectrogramSampling = 2;
-			const actual = await runPipeline(test.options, test.engine);
-			expect(test.prepare).toHaveBeenCalledWith(
-				64,
-				48000,
-				{ width: 4, height: 200 },
-				expect.objectContaining({ hopOverlap: 1 }),
-			);
-			expect(test.submitted.reduce((sum, batch) => sum + batch.length, 0)).toBe(64);
-			expect(actual.waveformBuffer).toEqual(baseline.waveformBuffer);
-			expect(actual.loudnessData).toEqual(baseline.loudnessData);
-			expect(actual.correlationEnvelope).toEqual(baseline.correlationEnvelope);
-			expect(
-				actual.vectorscopeHistogram?.every((value, index) => value === baseline.vectorscopeHistogram?.[index]),
-			).toBe(true);
-			expect(actual.options.sampleQuery).toEqual(test.options.sampleQuery);
-			expect(actual.options.config.spectrogramSampling).toBe(2);
-			expect(actual.options.config.hopOverlap).toBe(4);
-		},
-	);
+	it.each([
+		["mono", 1],
+		["mono", 2],
+		["mid", 2],
+		["side", 2],
+	] as const)("samples %s spectra at %ix without changing visible measurements", async (channelInput, sampling) => {
+		const channels = [
+			Float32Array.from({ length: 512 }, (_, index) => ((index * 7) % 23) / 23),
+			Float32Array.from({ length: 512 }, (_, index) => ((index * 3) % 17) / 17),
+		];
+		const test = fixture(channels, 0, 512);
+		test.options.sampleQuery.width = 4;
+		test.options.config.channelInput = channelInput;
+		test.options.config.ltas = false;
+		test.options.config.stereo = true;
+		const baseline = await runPipeline(
+			{ ...test.options, config: { ...test.options.config, spectrogram: false } },
+			new ThrowingEngine(test.options.config.device),
+		);
+		test.options.config.spectrogramSampling = sampling;
+		const actual = await runPipeline(test.options, test.engine);
+		expect(test.prepare).toHaveBeenCalledWith(
+			32 * sampling,
+			48000,
+			{ width: 4, height: 200 },
+			expect.objectContaining({ hopOverlap: 1 }),
+		);
+		expect(test.submitted.reduce((sum, batch) => sum + batch.length, 0)).toBe(32 * sampling);
+		expect(actual.waveformBuffer).toEqual(baseline.waveformBuffer);
+		expect(actual.loudnessData).toEqual(baseline.loudnessData);
+		expect(actual.correlationEnvelope).toEqual(baseline.correlationEnvelope);
+		expect(
+			actual.vectorscopeHistogram?.every((value, index) => value === baseline.vectorscopeHistogram?.[index]),
+		).toBe(true);
+		expect(actual.options.sampleQuery).toEqual(test.options.sampleQuery);
+		expect(actual.options.config.spectrogramSampling).toBe(sampling);
+		expect(actual.options.config.hopOverlap).toBe(4);
+	});
 
 	it.each(["full", "ltas", "narrow", "no-reduction"])("retains complete FFT processing for %s", async (mode) => {
 		const sampleCount = mode === "narrow" ? 16 : 512;
