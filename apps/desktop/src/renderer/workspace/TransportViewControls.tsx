@@ -43,14 +43,11 @@ function SamplingControl({
 	onSettingsChange,
 }: Pick<TransportViewControlsProps, "settings" | "onSettingsChange">) {
 	return (
-		<label
-			className="flex shrink-0 flex-col gap-1 font-technical text-[length:var(--text-xs)] text-chrome-text-secondary"
-			title={SAMPLING_HELP}
-		>
+		<label className="flex shrink-0 flex-col gap-1 font-technical text-[length:var(--text-xs)] text-chrome-text-secondary">
 			<span>Sampling</span>
 			<select
 				aria-label="Spectrogram sampling"
-				aria-description={SAMPLING_HELP}
+				title={SAMPLING_HELP}
 				value={String(settings.spectrogramSampling)}
 				className="bg-chrome-raised px-1 py-0.5 text-chrome-text"
 				onChange={(event) => {

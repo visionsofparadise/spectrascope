@@ -38,8 +38,8 @@ describe("spectrogram sampling control", () => {
 				(element) => element.type === "select" && element.props["aria-label"] === "Spectrogram sampling",
 			);
 			expect(selector?.props.value).toBe("4");
-			expect(selector?.props["aria-description"]).toContain("highest-RMS");
-			expect(selector?.props["aria-description"]).toContain("Approximate overview");
+			expect(selector?.props["title"]).toContain("highest-RMS");
+			expect(selector?.props["title"]).toContain("Approximate overview");
 			expect(
 				nodes
 					.filter((element) => element.type === "option")
