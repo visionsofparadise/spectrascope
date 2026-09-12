@@ -1,9 +1,11 @@
 import { lavaColormap, viridisColormap } from "spectral-display";
 import type { ColormapDefinition } from "spectral-display";
 
-function brighten(colormap: ColormapDefinition, gain: number): ColormapDefinition {
+function brighten(colormap: ColormapDefinition, gain: number, blackFloor = false): ColormapDefinition {
 	return {
 		colors: colormap.colors.map(({ position, color }) => {
+			if (blackFloor && position === 0) return { position, color: [0, 0, 0] };
+
 			const linear = color.map((channel) => {
 				const value = channel / 255;
 
@@ -23,5 +25,5 @@ function brighten(colormap: ColormapDefinition, gain: number): ColormapDefinitio
 
 export const SPECTROGRAM_COLORMAPS = {
 	lava: brighten(lavaColormap, 1.2),
-	viridis: brighten(viridisColormap, 1.1),
+	viridis: brighten(viridisColormap, 1.1, true),
 };

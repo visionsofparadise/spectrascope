@@ -41,7 +41,7 @@ export const INITIAL_VIEW_CONTROL_SETTINGS: ViewControlSettings = {
 	waveformOpacity: 0.8,
 	spectrogramOpacity: 0.7,
 	loudnessOpacity: 0.5,
-	fftSize: 2048,
+	fftSize: 4096,
 	hopOverlap: 16,
 	loudnessMetric: "integrated",
 	frequencyRange: { top: 0, bottom: 1 },
@@ -62,7 +62,7 @@ export const ViewControlSettingsSchema = z.object({
 	fftSize: z
 		.number()
 		.refine((value) => [1024, 2048, 4096, 8192, 16384].includes(value))
-		.default(2048),
+		.default(4096),
 	hopOverlap: z
 		.number()
 		.refine((value) => [2, 4, 8, 16, 32].includes(value))
