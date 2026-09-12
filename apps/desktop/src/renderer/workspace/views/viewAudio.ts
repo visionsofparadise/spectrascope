@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { NEUTRAL_LAYER_COLOR } from "../layers";
 import { placeAudioOnTimeline } from "../utils/placeAudioOnTimeline";
 import type { Source } from "../source";
@@ -56,35 +56,15 @@ export function comparisonDurationOf(sources: ReadonlyArray<SourceWithAudio>): n
 
 export function useTimelineChromeSources(sources: ReadonlyArray<Source>, sourceAudio: ReadonlyMap<string, AudioData>) {
 	const { renderableSources: rawSources, layerColor } = useChromeSources(sources, sourceAudio);
-	const cacheRef = useRef(
-		new Map<string, { original: AudioData; offsetMs: number; durationMs: number; audioData: AudioData }>(),
-	);
 	const durationMs = comparisonDurationOf(rawSources);
-	const renderableSources = useMemo(() => {
-		const previous = cacheRef.current;
-		const next: typeof previous = new Map();
-		const resolved = rawSources.map(({ source, audioData }) => {
-			const cached = previous.get(source.id);
-			const offsetMs = source.timelineOffsetMs;
-			const entry =
-				cached?.original === audioData && cached.offsetMs === offsetMs && cached.durationMs === durationMs
-					? cached
-					: {
-							original: audioData,
-							offsetMs,
-							durationMs,
-							audioData: placeAudioOnTimeline(audioData, offsetMs, durationMs),
-						};
-
-			next.set(source.id, entry);
-
-			return { source, audioData: entry.audioData };
-		});
-
-		cacheRef.current = next;
-
-		return resolved;
-	}, [rawSources, durationMs]);
+	const renderableSources = useMemo(
+		() =>
+			rawSources.map(({ source, audioData }) => ({
+				source,
+				audioData: placeAudioOnTimeline(audioData, source.timelineOffsetMs, durationMs),
+			})),
+		[rawSources, durationMs],
+	);
 
 	return { renderableSources, chromeAudio: renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA, layerColor };
 }

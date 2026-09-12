@@ -12,6 +12,39 @@ function fixture() {
 }
 
 describe("placeAudioOnTimeline", () => {
+	it("shares the raw reader when placement leaves integer sample coordinates unchanged", () => {
+		const { audio, readSamples } = fixture();
+
+		expect(placeAudioOnTimeline(audio, 0, 4)).toBe(audio);
+		expect(placeAudioOnTimeline(audio, 0.4, 4.4)).toBe(audio);
+		expect(placeAudioOnTimeline(audio, -10, 4)).toBe(audio);
+		expect(readSamples).not.toHaveBeenCalled();
+	});
+
+	it("shares wrappers only for the same source and rounded placement bounds", () => {
+		const { audio, readSamples } = fixture();
+		const placed = placeAudioOnTimeline(audio, 3, 10);
+
+		expect(placeAudioOnTimeline(audio, 3.2, 10.2)).toBe(placed);
+		expect(placeAudioOnTimeline(audio, 4, 10).readSamples).not.toBe(placed.readSamples);
+		expect(placeAudioOnTimeline(audio, 3, 11).readSamples).not.toBe(placed.readSamples);
+		expect(placeAudioOnTimeline({ ...audio }, 3, 10).readSamples).not.toBe(placed.readSamples);
+		expect(placeAudioOnTimeline(audio, 0, 10).readSamples).not.toBe(audio.readSamples);
+		expect(readSamples).not.toHaveBeenCalled();
+	});
+
+	it("keeps eight recently used wrappers while evicted active readers remain valid", async () => {
+		const { audio } = fixture();
+		const first = placeAudioOnTimeline(audio, 1, 20);
+		const second = placeAudioOnTimeline(audio, 2, 20);
+		for (let offset = 3; offset <= 8; offset++) placeAudioOnTimeline(audio, offset, 20);
+		expect(placeAudioOnTimeline(audio, 1, 20)).toBe(first);
+		placeAudioOnTimeline(audio, 9, 20);
+		expect(placeAudioOnTimeline(audio, 1, 20)).toBe(first);
+		expect(placeAudioOnTimeline(audio, 2, 20)).not.toBe(second);
+		expect([...(await second.readSamples(0, 1, 6))]).toEqual([0, 1, 2, 3, 4, 0]);
+	});
+
 	it("pads both placement boundaries and only reads the intersecting samples", async () => {
 		const { audio, readSamples } = fixture();
 		const placed = placeAudioOnTimeline(audio, 3, 10);

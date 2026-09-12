@@ -1,10 +1,32 @@
 import type { AudioData } from "../spectral/types";
 
+const placements = new WeakMap<AudioData, Map<string, AudioData>>();
+const MAX_PLACEMENTS_PER_SOURCE = 8;
+
 export function placeAudioOnTimeline(audioData: AudioData, offsetMs: number, durationMs: number): AudioData {
 	const offsetSamples = Math.round((Math.max(0, offsetMs) * audioData.sampleRate) / 1000);
 	const totalSamples = Math.max(0, Math.round((durationMs * audioData.sampleRate) / 1000));
 
-	return {
+	if (offsetSamples === 0 && totalSamples === audioData.totalSamples) return audioData;
+
+	let cache = placements.get(audioData);
+
+	if (!cache) {
+		cache = new Map();
+		placements.set(audioData, cache);
+	}
+
+	const key = `${offsetSamples}:${totalSamples}`;
+	const cached = cache.get(key);
+
+	if (cached) {
+		cache.delete(key);
+		cache.set(key, cached);
+
+		return cached;
+	}
+
+	const placed: AudioData = {
 		...audioData,
 		totalSamples,
 		durationMs: (totalSamples * 1000) / audioData.sampleRate,
@@ -27,4 +49,14 @@ export function placeAudioOnTimeline(audioData: AudioData, offsetMs: number, dur
 			return output;
 		},
 	};
+
+	cache.set(key, placed);
+
+	if (cache.size > MAX_PLACEMENTS_PER_SOURCE) {
+		const oldest = cache.keys().next().value;
+
+		if (oldest !== undefined) cache.delete(oldest);
+	}
+
+	return placed;
 }
