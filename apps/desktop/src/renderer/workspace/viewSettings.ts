@@ -49,7 +49,7 @@ export const INITIAL_VIEW_CONTROL_SETTINGS: ViewControlSettings = {
 };
 
 export const ViewControlSettingsSchema = z.object({
-	spectrogramSampling: z.union([z.literal(2), z.literal(4), z.literal(8), z.literal("full")]).default(4),
+	spectrogramSampling: z.union([z.literal(1), z.literal(2), z.literal(4), z.literal(8), z.literal("full")]).default(4),
 	frequencyScale: z.enum(["linear", "log", "mel", "erb"]).default("mel"),
 	gridMode: z.enum(["freq", "amp"]).default("freq"),
 	gridOpacity: z.number().min(0).max(1).default(0.3),

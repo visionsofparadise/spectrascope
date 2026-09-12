@@ -30,21 +30,21 @@ const METRIC_SELECT_OPTIONS = METRICS.map((metric) => ({
 }));
 
 const SAMPLING_OPTIONS = [
+	{ value: 1, label: "1×" },
 	{ value: 2, label: "2×" },
 	{ value: 4, label: "4×" },
 	{ value: 8, label: "8×" },
 	{ value: "full", label: "Full" },
 ] as const;
 const SAMPLING_HELP =
-	"Approximate overview: 2×, 4× and 8× choose the highest-RMS FFT window in each time subdivision of a pixel. Full uses every FFT window.";
+	"Approximate overview: 1×, 2×, 4× and 8× choose the highest-RMS FFT window in each time subdivision of a pixel. Full uses every FFT window.";
 
 function SamplingControl({
 	settings,
 	onSettingsChange,
 }: Pick<TransportViewControlsProps, "settings" | "onSettingsChange">) {
 	return (
-		<label className="flex shrink-0 flex-col gap-1 font-technical text-[length:var(--text-xs)] text-chrome-text-secondary">
-			<span>Sampling</span>
+		<div className="shrink-0 font-technical text-[length:var(--text-xs)] text-chrome-text-secondary">
 			<select
 				aria-label="Spectrogram sampling"
 				title={SAMPLING_HELP}
@@ -62,7 +62,57 @@ function SamplingControl({
 					</option>
 				))}
 			</select>
-		</label>
+		</div>
+	);
+}
+
+function SpectrogramSelectors({
+	settings,
+	onSettingsChange,
+}: Pick<TransportViewControlsProps, "settings" | "onSettingsChange">) {
+	return (
+		<>
+			<SamplingControl settings={settings} onSettingsChange={onSettingsChange} />
+			<div className="flex flex-col items-stretch gap-0.5 min-[1400px]:flex-row min-[1400px]:items-center min-[1400px]:gap-1">
+				<Select
+					variant="chip"
+					direction="up"
+					value={settings.frequencyScale}
+					ariaLabel="Frequency scale"
+					options={FREQUENCY_SCALE_OPTIONS}
+					onChange={(value) => {
+						const selected = FREQUENCY_SCALE_OPTIONS.find((option) => option.value === value);
+
+						if (selected)
+							onSettingsChange({
+								...settings,
+								frequencyScale: selected.value,
+								frequencyRange: { top: 0, bottom: 1 },
+							});
+					}}
+				/>
+				<Select
+					variant="chip"
+					direction="up"
+					value={String(settings.fftSize)}
+					ariaLabel="FFT size"
+					options={FFT_SELECT_OPTIONS}
+					onChange={(value) => {
+						onSettingsChange({ ...settings, fftSize: Number(value) });
+					}}
+				/>
+				<Select
+					variant="chip"
+					direction="up"
+					value={String(settings.hopOverlap)}
+					ariaLabel="FFT hop"
+					options={HOP_SELECT_OPTIONS}
+					onChange={(value) => {
+						onSettingsChange({ ...settings, hopOverlap: Number(value) });
+					}}
+				/>
+			</div>
+		</>
 	);
 }
 
@@ -207,47 +257,7 @@ export function TransportViewControls({
 				</div>
 
 				<LayerOpacityKnobs settings={settings} onSettingsChange={onSettingsChange} />
-				<SamplingControl settings={settings} onSettingsChange={onSettingsChange} />
-
-				<div className="flex flex-col items-stretch gap-0.5 min-[1400px]:flex-row min-[1400px]:items-center min-[1400px]:gap-1">
-					<Select
-						variant="chip"
-						direction="up"
-						value={settings.frequencyScale}
-						ariaLabel="Frequency scale"
-						options={FREQUENCY_SCALE_OPTIONS}
-						onChange={(value) => {
-							const selected = FREQUENCY_SCALE_OPTIONS.find((option) => option.value === value);
-
-							if (selected)
-								onSettingsChange({
-									...settings,
-									frequencyScale: selected.value,
-									frequencyRange: { top: 0, bottom: 1 },
-								});
-						}}
-					/>
-					<Select
-						variant="chip"
-						direction="up"
-						value={String(settings.fftSize)}
-						ariaLabel="FFT size"
-						options={FFT_SELECT_OPTIONS}
-						onChange={(value) => {
-							onSettingsChange({ ...settings, fftSize: Number(value) });
-						}}
-					/>
-					<Select
-						variant="chip"
-						direction="up"
-						value={String(settings.hopOverlap)}
-						ariaLabel="FFT hop"
-						options={HOP_SELECT_OPTIONS}
-						onChange={(value) => {
-							onSettingsChange({ ...settings, hopOverlap: Number(value) });
-						}}
-					/>
-				</div>
+				<SpectrogramSelectors settings={settings} onSettingsChange={onSettingsChange} />
 			</div>
 		);
 	}
@@ -263,7 +273,7 @@ export function TransportViewControls({
 					}}
 				/>
 				<LayerOpacityKnobs settings={settings} onSettingsChange={onSettingsChange} />
-				<SamplingControl settings={settings} onSettingsChange={onSettingsChange} />
+				<SpectrogramSelectors settings={settings} onSettingsChange={onSettingsChange} />
 			</div>
 		);
 	}
