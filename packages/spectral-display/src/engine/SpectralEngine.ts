@@ -16,6 +16,7 @@ export interface Dimensions {
 }
 
 export type ChannelInput = "mono" | "mid" | "side";
+export type SpectrogramSampling = "full" | 2 | 4 | 8;
 
 export interface SpectralConfig {
 	fftSize: number;
@@ -26,6 +27,7 @@ export interface SpectralConfig {
 	device: GPUDevice;
 	signal: AbortSignal;
 	spectrogram: boolean;
+	spectrogramSampling?: SpectrogramSampling;
 	ltas: boolean;
 	loudness: boolean;
 	truePeak: boolean;
@@ -126,6 +128,7 @@ export function resolveConfig(config: RequiredProperties<SpectralConfig, "device
 		colormap: resolvedColormap,
 		waveformColor,
 		spectrogram: config.spectrogram ?? true,
+		spectrogramSampling: config.spectrogramSampling ?? "full",
 		ltas: config.ltas ?? false,
 		loudness: config.loudness ?? true,
 		truePeak: config.truePeak ?? true,

@@ -3,7 +3,14 @@ import { getMaxFftSize } from "./device";
 import { resolveFftContext } from "./fft-context";
 import { computeLoudnessData, WAVEFORM_POINTS_PER_SECOND } from "./loudness";
 import { createScanContext, finalizeScan, scanSamples } from "./sample-scan";
-import { resolveConfig, type Dimensions, type SpectralConfig, type SpectralEngine } from "./SpectralEngine";
+import {
+	computeHopSize,
+	resolveConfig,
+	type Dimensions,
+	type SpectralConfig,
+	type SpectralEngine,
+} from "./SpectralEngine";
+import { StratifiedSpectrogramSampler } from "./StratifiedSpectrogramSampler";
 import type { LoudnessData } from "./loudness";
 import type { RequiredProperties } from "../utils/RequiredProperties";
 
@@ -108,21 +115,37 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 		{ pointCount: waveformPointCount, samplesPerPoint: waveformSamplesPerPoint },
 	);
 
-	const fftWindow = resolveFftContext(
-		startSample,
-		endSample,
-		metadata.sampleCount,
-		Math.min(resolvedConfig.fftSize, getMaxFftSize(config.device)),
-	);
+	const effectiveFftSize = Math.min(resolvedConfig.fftSize, getMaxFftSize(config.device));
+	const fftWindow = resolveFftContext(startSample, endSample, metadata.sampleCount, effectiveFftSize);
 	const fftSampleCount = fftWindow.endSample - fftWindow.startSample;
 	const supplementalFft = fftSampleCount > sampleCount;
+	const sampling = resolvedConfig.spectrogramSampling ?? "full";
+	const sampledFrameCount = sampling === "full" ? 0 : sampleQuery.width * sampling;
+	const fullHop = computeHopSize(sampleCount, sampleQuery.width, effectiveFftSize, resolvedConfig.hopOverlap);
+	const fullFrameCount = Math.floor((sampleCount - effectiveFftSize) / fullHop) + 1;
+	const stratified =
+		spectrogram &&
+		!ltas &&
+		sampledFrameCount > 0 &&
+		sampledFrameCount < fullFrameCount &&
+		Math.floor(sampleCount / sampledFrameCount) >= effectiveFftSize;
 	const spectralContext =
 		(spectrogram || ltas) && sampleCount > 0
 			? await engine.prepare(
-					fftSampleCount,
+					stratified ? sampledFrameCount * effectiveFftSize : fftSampleCount,
 					sampleRate,
 					{ width: sampleQuery.width, height: sampleQuery.height },
-					resolvedConfig,
+					stratified ? { ...resolvedConfig, hopOverlap: 1 } : resolvedConfig,
+				)
+			: null;
+	const sampler =
+		stratified && spectralContext
+			? new StratifiedSpectrogramSampler(
+					sampleCount,
+					sampledFrameCount,
+					effectiveFftSize,
+					Math.max(1, Math.floor(effectiveFftSize / resolvedConfig.hopOverlap)),
+					(samples, count) => engine.submitChunk(samples, count, spectralContext),
 				)
 			: null;
 
@@ -151,7 +174,8 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 			if (spectralContext && !supplementalFft) {
 				const fftInput = channelInput === "mono" ? scanContext.monoBuffer : scanContext.channelInputBuffer;
 
-				engine.submitChunk(fftInput, chunkFrames, spectralContext);
+				if (sampler) sampler.consume(fftInput, chunkFrames);
+				else engine.submitChunk(fftInput, chunkFrames, spectralContext);
 			}
 
 			offset += chunkFrames;
@@ -162,6 +186,7 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 		}
 
 		signal.throwIfAborted();
+		sampler?.finish();
 
 		if (spectralContext && supplementalFft) {
 			const readStart = Math.max(0, fftWindow.startSample);

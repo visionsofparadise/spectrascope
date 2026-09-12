@@ -21,7 +21,7 @@ export type {
 export { createScanContext, finalizeScan, scanSamples } from "./engine/sample-scan";
 export type { ScanContext } from "./engine/sample-scan";
 export { resolveConfig, SpectralEngine } from "./engine/SpectralEngine";
-export type { ChannelInput, Dimensions, SpectralConfig } from "./engine/SpectralEngine";
+export type { ChannelInput, Dimensions, SpectralConfig, SpectrogramSampling } from "./engine/SpectralEngine";
 export { LoudnessCanvas } from "./LoudnessCanvas";
 export type { LoudnessCanvasProps } from "./LoudnessCanvas";
 export { SpectrogramCanvas } from "./SpectrogramCanvas";

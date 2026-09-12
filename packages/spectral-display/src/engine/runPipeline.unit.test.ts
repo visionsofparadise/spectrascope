@@ -232,6 +232,85 @@ describe("contextual FFT at deep zoom", () => {
 	}
 
 	it.each(["mono", "mid", "side"] as const)(
+		"samples %s spectra without changing visible measurements",
+		async (channelInput) => {
+			const channels = [
+				Float32Array.from({ length: 512 }, (_, index) => ((index * 7) % 23) / 23),
+				Float32Array.from({ length: 512 }, (_, index) => ((index * 3) % 17) / 17),
+			];
+			const test = fixture(channels, 0, 512);
+			test.options.sampleQuery.width = 4;
+			test.options.config.channelInput = channelInput;
+			test.options.config.ltas = false;
+			test.options.config.stereo = true;
+			const baseline = await runPipeline(
+				{ ...test.options, config: { ...test.options.config, spectrogram: false } },
+				new ThrowingEngine(test.options.config.device),
+			);
+			test.options.config.spectrogramSampling = 2;
+			const actual = await runPipeline(test.options, test.engine);
+			expect(test.prepare).toHaveBeenCalledWith(
+				64,
+				48000,
+				{ width: 4, height: 200 },
+				expect.objectContaining({ hopOverlap: 1 }),
+			);
+			expect(test.submitted.reduce((sum, batch) => sum + batch.length, 0)).toBe(64);
+			expect(actual.waveformBuffer).toEqual(baseline.waveformBuffer);
+			expect(actual.loudnessData).toEqual(baseline.loudnessData);
+			expect(actual.correlationEnvelope).toEqual(baseline.correlationEnvelope);
+			expect(
+				actual.vectorscopeHistogram?.every((value, index) => value === baseline.vectorscopeHistogram?.[index]),
+			).toBe(true);
+			expect(actual.options.sampleQuery).toEqual(test.options.sampleQuery);
+			expect(actual.options.config.spectrogramSampling).toBe(2);
+			expect(actual.options.config.hopOverlap).toBe(4);
+		},
+	);
+
+	it.each(["full", "ltas", "narrow", "no-reduction"])("retains complete FFT processing for %s", async (mode) => {
+		const sampleCount = mode === "narrow" ? 16 : 512;
+		const test = fixture([new Float32Array(sampleCount)], 0, sampleCount);
+		test.options.sampleQuery.width = 4;
+		test.options.config.spectrogramSampling = mode === "full" ? "full" : 2;
+		test.options.config.ltas = mode === "ltas";
+		if (mode === "no-reduction") {
+			test.options.sampleQuery.width = 32;
+			test.options.config.hopOverlap = 1;
+		}
+		await runPipeline(test.options, test.engine);
+		expect(test.prepare.mock.calls[0]![0]).toBe(sampleCount);
+		expect(test.submitted.reduce((sum, batch) => sum + batch.length, 0)).toBe(sampleCount);
+	});
+
+	it("uses the device-clamped FFT size for sampled windows", async () => {
+		const test = fixture([new Float32Array(50000)], 0, 50000);
+		test.options.sampleQuery.width = 2;
+		test.options.config.fftSize = 8192;
+		test.options.config.ltas = false;
+		test.options.config.loudness = false;
+		test.options.config.spectrogramSampling = 2;
+		const result = await runPipeline(test.options, test.engine);
+		expect(test.prepare.mock.calls[0]![0]).toBe(4 * 4096);
+		expect(test.submitted.reduce((sum, batch) => sum + batch.length, 0)).toBe(4 * 4096);
+		expect(result.options.config.fftSize).toBe(8192);
+	});
+
+	it("releases sampled context when cancellation interrupts its streaming scan", async () => {
+		const test = fixture([new Float32Array(512)], 0, 512);
+		test.options.sampleQuery.width = 4;
+		test.options.config.ltas = false;
+		test.options.config.spectrogramSampling = 2;
+		const controller = new AbortController();
+		test.options.config.signal = controller.signal;
+		test.options.onProgress = () => controller.abort();
+		await expect(runPipeline(test.options, test.engine)).rejects.toMatchObject({ name: "AbortError" });
+		expect(test.cleanup).toHaveBeenCalledOnce();
+		expect(test.engine.finalize).not.toHaveBeenCalled();
+		expect(test.submitted).toHaveLength(0);
+	});
+
+	it.each(["mono", "mid", "side"] as const)(
 		"uses bounded %s context while preserving visible statistics",
 		async (channelInput) => {
 			const channels = [Float32Array.from({ length: 20 }, (_, index) => index), new Float32Array(20).fill(2)];

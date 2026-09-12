@@ -154,7 +154,7 @@ describe("analysis lifecycle", () => {
 		expect(runPipeline).toHaveBeenCalledTimes(3);
 	});
 
-	it.each(["reader", "metadata", "weights", "config", "device"])(
+	it.each(["reader", "metadata", "weights", "config", "device", "sampling"])(
 		"invalidates cached results when %s changes",
 		async (kind) => {
 			vi.mocked(runPipeline).mockImplementation(async (options) => resultFor(options));
@@ -167,6 +167,7 @@ describe("analysis lifecycle", () => {
 				...(kind === "metadata" ? { metadata: { ...options.metadata, sampleRate: 44100 } } : {}),
 				...(kind === "weights" ? { metadata: { ...options.metadata, channelWeights: [0.5] } } : {}),
 				...(kind === "config" ? { config: { frequencyScale: "mel" as const } } : {}),
+				...(kind === "sampling" ? { config: { spectrogramSampling: 4 as const } } : {}),
 			};
 			if (kind === "device") vi.mocked(getDevice).mockResolvedValue({} as GPUDevice);
 			render({ ...changed, query: { ...changed.query, endMs: 500 } });
