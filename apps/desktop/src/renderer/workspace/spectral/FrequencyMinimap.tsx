@@ -13,6 +13,7 @@ import type { FrequencyScale } from "spectral-display";
 import type { ComputeResultReady, TextureVerticalRange } from "spectral-display";
 
 interface FrequencyMinimapProps {
+	readonly amplitude?: boolean;
 	readonly sampleRate: number;
 	readonly computeResult: ComputeResultReady | null;
 	readonly frequencyScale?: FrequencyScale;
@@ -21,6 +22,7 @@ interface FrequencyMinimapProps {
 }
 
 export function FrequencyMinimap({
+	amplitude = false,
 	sampleRate,
 	computeResult,
 	frequencyScale = "mel",
@@ -120,8 +122,12 @@ export function FrequencyMinimap({
 			onFrequencyRangeChange(next);
 		}
 	};
-	const renderable = computeResult?.options.config.frequencyScale === frequencyScale ? computeResult : null;
-	const label = `${Math.round(fractionToFrequency(range.bottom, sampleRate, undefined, frequencyScale))} to ${Math.round(fractionToFrequency(range.top, sampleRate, undefined, frequencyScale))} Hz`;
+	const renderable =
+		!amplitude && computeResult?.options.config.frequencyScale === frequencyScale ? computeResult : null;
+	const amplitudeOf = (fraction: number) => Number((1 - 2 * fraction).toFixed(3));
+	const label = amplitude
+		? `${amplitudeOf(range.bottom)} to ${amplitudeOf(range.top)} FS`
+		: `${Math.round(fractionToFrequency(range.bottom, sampleRate, undefined, frequencyScale))} to ${Math.round(fractionToFrequency(range.top, sampleRate, undefined, frequencyScale))} Hz`;
 
 	return (
 		<div ref={containerRef} className="relative w-8 bg-void">
@@ -141,7 +147,7 @@ export function FrequencyMinimap({
 			<button
 				type="button"
 				role="slider"
-				aria-label="Frequency range"
+				aria-label={amplitude ? "Amplitude range" : "Frequency range"}
 				aria-orientation="vertical"
 				aria-valuemin={0}
 				aria-valuemax={1}
@@ -165,12 +171,16 @@ export function FrequencyMinimap({
 					key={edge}
 					type="button"
 					role="slider"
-					aria-label={edge === "top" ? "Upper frequency limit" : "Lower frequency limit"}
+					aria-label={`${edge === "top" ? "Upper" : "Lower"} ${amplitude ? "amplitude" : "frequency"} limit`}
 					aria-orientation="vertical"
 					aria-valuemin={0}
 					aria-valuemax={1}
 					aria-valuenow={range[edge]}
-					aria-valuetext={`${Math.round(fractionToFrequency(range[edge], sampleRate, undefined, frequencyScale))} Hz`}
+					aria-valuetext={
+						amplitude
+							? `${amplitudeOf(range[edge])} FS`
+							: `${Math.round(fractionToFrequency(range[edge], sampleRate, undefined, frequencyScale))} Hz`
+					}
 					onPointerDown={(event) => pointerDown(event, edge)}
 					onPointerMove={pointerMove}
 					onPointerUp={() => {
@@ -186,8 +196,8 @@ export function FrequencyMinimap({
 			))}
 			<button
 				type="button"
-				aria-label="Reset frequency range"
-				title="Reset frequency range"
+				aria-label={amplitude ? "Reset amplitude range" : "Reset frequency range"}
+				title={amplitude ? "Reset amplitude range" : "Reset frequency range"}
 				onClick={() => onFrequencyRangeChange(FULL_FREQUENCY_RANGE)}
 				className="absolute right-0 top-1/2 bg-void/80 px-1 font-technical text-xs text-chrome-text-secondary hover:text-primary"
 			>

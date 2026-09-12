@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SpectrogramCanvas, WaveformCanvas, useSpectralCompute } from "spectral-display";
-import { buildLayerColormap } from "./layers";
 import { hexToRgb255 } from "./spectral/colorUtil";
 import { ComputeProgress } from "./spectral/ComputeProgress";
 import { useContainerSize } from "./spectral/useContainerSize";
@@ -12,7 +11,7 @@ import type { AudioData } from "./spectral/types";
 import type { DisplayedWaveform } from "./spectral/useWaveformReadouts";
 import type { FrequencyScale, SpectrogramSampling } from "spectral-display";
 import type { TextureVerticalRange } from "spectral-display";
-import type { ChannelInput, ColormapDefinition, ComputeResultReady, SpectralOptions } from "spectral-display";
+import type { ChannelInput, ComputeResultReady, SpectralOptions } from "spectral-display";
 
 export interface SourceRenderCursorReadout {
 	readonly sourceId: string;
@@ -27,6 +26,8 @@ export interface SourceRenderProps {
 	readonly source: Source;
 	readonly frequencyScale?: FrequencyScale;
 	readonly spectrogramSampling: SpectrogramSampling;
+	readonly spectrogramColormap?: "lava" | "viridis";
+	readonly spectrogram?: boolean;
 	readonly frequencyRange?: TextureVerticalRange;
 	readonly onDisplayedResultChange?: (sourceId: string, displayed: DisplayedWaveform | null) => void;
 	readonly audioData: AudioData;
@@ -58,6 +59,8 @@ export function SourceRender({
 	source,
 	frequencyScale = "mel",
 	spectrogramSampling,
+	spectrogramColormap = "lava",
+	spectrogram = true,
 	frequencyRange,
 	onDisplayedResultChange,
 	audioData,
@@ -78,8 +81,6 @@ export function SourceRender({
 }: SourceRenderProps) {
 	const displayRef = useRef<HTMLDivElement>(null);
 	const { width, height } = useContainerSize(displayRef, { width: 800, height: 400 });
-
-	const colormap = useMemo<ColormapDefinition>(() => buildLayerColormap(source.layerColor), [source.layerColor]);
 
 	const waveformColor = useMemo<[number, number, number]>(
 		() => hexToRgb255(source.layerColor.primary, [255, 255, 255]),
@@ -102,8 +103,14 @@ export function SourceRender({
 			const timeMs = readoutTimeOffsetMs + cursorStartMs + xFrac * (cursorEndMs - cursorStartMs);
 			const timeStr = formatInspectionTime(timeMs);
 
-			const freqHz = fractionToFrequency(yFrac, audioData.sampleRate, frequencyRange, frequencyScale);
-			const freqStr = freqHz >= 1000 ? `${(freqHz / 1000).toFixed(1)} kHz` : `${Math.round(freqHz)} Hz`;
+			const freqHz = spectrogram
+				? fractionToFrequency(yFrac, audioData.sampleRate, frequencyRange, frequencyScale)
+				: 0;
+			const freqStr = spectrogram
+				? freqHz >= 1000
+					? `${(freqHz / 1000).toFixed(1)} kHz`
+					: `${Math.round(freqHz)} Hz`
+				: "—";
 
 			onCursorMove({ sourceId: source.id, timeMs, frequencyHz: freqHz, time: timeStr, freq: freqStr, amp: "—" });
 		},
@@ -118,6 +125,7 @@ export function SourceRender({
 			frequencyRange,
 			frequencyScale,
 			source.id,
+			spectrogram,
 		],
 	);
 
@@ -135,7 +143,8 @@ export function SourceRender({
 				hopOverlap,
 				frequencyScale,
 				spectrogramSampling,
-				colormap,
+				colormap: spectrogramColormap,
+				spectrogram,
 				channelInput,
 				loudness: false,
 				truePeak: false,
@@ -153,7 +162,8 @@ export function SourceRender({
 			fftSize,
 			hopOverlap,
 			channelInput,
-			colormap,
+			spectrogramColormap,
+			spectrogram,
 			frequencyScale,
 			spectrogramSampling,
 		],
@@ -194,10 +204,10 @@ export function SourceRender({
 	const handleBackRendered = useCallback(() => {
 		drawCountRef.current += 1;
 
-		if (drawCountRef.current >= 2 && backResultRef.current !== null) {
+		if (drawCountRef.current >= (spectrogram ? 2 : 1) && backResultRef.current !== null) {
 			setHeld(backResultRef.current);
 		}
-	}, []);
+	}, [spectrogram]);
 
 	const layerKeyCounterRef = useRef(0);
 	const layerKeysRef = useRef(new WeakMap<ComputeResultReady, number>());
@@ -231,7 +241,7 @@ export function SourceRender({
 	return (
 		<div
 			ref={displayRef}
-			className="absolute inset-0 overflow-hidden bg-void"
+			className={`absolute inset-0 overflow-hidden${spectrogram ? " bg-void" : ""}`}
 			style={{ opacity, clipPath }}
 			onMouseMove={handleMouseMove}
 		>
@@ -248,16 +258,18 @@ export function SourceRender({
 							: { visibility: "hidden" }
 					}
 				>
-					<div
-						className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full"
-						style={{ opacity: spectrogramOpacity }}
-					>
-						<SpectrogramCanvas
-							frequencyRange={frequencyRange}
-							computeResult={result}
-							onRendered={isFront ? undefined : handleBackRendered}
-						/>
-					</div>
+					{spectrogram && (
+						<div
+							className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full"
+							style={{ opacity: spectrogramOpacity }}
+						>
+							<SpectrogramCanvas
+								frequencyRange={frequencyRange}
+								computeResult={result}
+								onRendered={isFront ? undefined : handleBackRendered}
+							/>
+						</div>
+					)}
 					<div
 						className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full"
 						style={{ opacity: waveformOpacity }}

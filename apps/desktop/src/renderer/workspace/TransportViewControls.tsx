@@ -14,6 +14,10 @@ interface TransportViewControlsProps {
 }
 
 const FFT_SELECT_OPTIONS = FFT_OPTIONS.map((value) => ({ value, label: value }));
+const COLORMAP_OPTIONS = [
+	{ value: "lava", label: "Lava" },
+	{ value: "viridis", label: "Viridis" },
+] as const;
 const FREQUENCY_SCALE_OPTIONS = [
 	{ value: "linear", label: "Linear" },
 	{ value: "log", label: "Log" },
@@ -73,6 +77,18 @@ function SpectrogramSelectors({
 	return (
 		<>
 			<SamplingControl settings={settings} onSettingsChange={onSettingsChange} />
+			<Select
+				variant="chip"
+				direction="up"
+				value={settings.spectrogramColormap}
+				ariaLabel="Colour map"
+				options={COLORMAP_OPTIONS}
+				onChange={(value) => {
+					const selected = COLORMAP_OPTIONS.find((option) => option.value === value);
+
+					if (selected) onSettingsChange({ ...settings, spectrogramColormap: selected.value });
+				}}
+			/>
 			<div className="flex flex-col items-stretch gap-0.5 min-[1400px]:flex-row min-[1400px]:items-center min-[1400px]:gap-1">
 				<Select
 					variant="chip"
@@ -191,9 +207,10 @@ function SyncToggle({
 interface LayerOpacityKnobsProps {
 	readonly settings: ViewControlSettings;
 	readonly onSettingsChange: (next: ViewControlSettings) => void;
+	readonly showSpectrogram?: boolean;
 }
 
-function LayerOpacityKnobs({ settings, onSettingsChange }: LayerOpacityKnobsProps) {
+function LayerOpacityKnobs({ settings, onSettingsChange, showSpectrogram = true }: LayerOpacityKnobsProps) {
 	return (
 		<>
 			<Divider />
@@ -204,14 +221,18 @@ function LayerOpacityKnobs({ settings, onSettingsChange }: LayerOpacityKnobsProp
 					onSettingsChange({ ...settings, waveformOpacity });
 				}}
 			/>
-			<Divider />
-			<KnobControl
-				value={settings.spectrogramOpacity}
-				icon="lucide:flame"
-				onChange={(spectrogramOpacity) => {
-					onSettingsChange({ ...settings, spectrogramOpacity });
-				}}
-			/>
+			{showSpectrogram && (
+				<>
+					<Divider />
+					<KnobControl
+						value={settings.spectrogramOpacity}
+						icon="lucide:flame"
+						onChange={(spectrogramOpacity) => {
+							onSettingsChange({ ...settings, spectrogramOpacity });
+						}}
+					/>
+				</>
+			)}
 		</>
 	);
 }
@@ -223,10 +244,11 @@ export function TransportViewControls({
 	syncEnabled,
 	onSyncEnabledChange,
 }: TransportViewControlsProps) {
-	const isSpectralGroup =
+	const isLayerGroup =
 		activeView === "overlay" || activeView === "slider" || activeView === "difference" || activeView === "sum";
+	const showSpectrogram = activeView !== "overlay";
 
-	if (isSpectralGroup) {
+	if (isLayerGroup) {
 		return (
 			<div className="flex items-center gap-3.5">
 				<SyncToggle enabled={syncEnabled} onEnabledChange={onSyncEnabledChange} />
@@ -237,27 +259,33 @@ export function TransportViewControls({
 						onSettingsChange({ ...settings, gridOpacity });
 					}}
 				/>
-				<div className="flex items-center">
-					<GridModeToggle
-						icon="lucide:music"
-						label="Frequency grid"
-						active={settings.gridMode === "freq"}
-						onClick={() => {
-							onSettingsChange({ ...settings, gridMode: "freq" });
-						}}
-					/>
-					<GridModeToggle
-						icon="lucide:gauge"
-						label="Amplitude grid"
-						active={settings.gridMode === "amp"}
-						onClick={() => {
-							onSettingsChange({ ...settings, gridMode: "amp" });
-						}}
-					/>
-				</div>
+				{showSpectrogram && (
+					<div className="flex items-center">
+						<GridModeToggle
+							icon="lucide:music"
+							label="Frequency grid"
+							active={settings.gridMode === "freq"}
+							onClick={() => {
+								onSettingsChange({ ...settings, gridMode: "freq" });
+							}}
+						/>
+						<GridModeToggle
+							icon="lucide:gauge"
+							label="Amplitude grid"
+							active={settings.gridMode === "amp"}
+							onClick={() => {
+								onSettingsChange({ ...settings, gridMode: "amp" });
+							}}
+						/>
+					</div>
+				)}
 
-				<LayerOpacityKnobs settings={settings} onSettingsChange={onSettingsChange} />
-				<SpectrogramSelectors settings={settings} onSettingsChange={onSettingsChange} />
+				<LayerOpacityKnobs
+					settings={settings}
+					onSettingsChange={onSettingsChange}
+					showSpectrogram={showSpectrogram}
+				/>
+				{showSpectrogram && <SpectrogramSelectors settings={settings} onSettingsChange={onSettingsChange} />}
 			</div>
 		);
 	}

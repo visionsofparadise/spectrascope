@@ -5,7 +5,7 @@ import { SourceRender } from "./SourceRender";
 import { ComputeProgress } from "./spectral/ComputeProgress";
 import { createDefaultSource } from "./source";
 import type { SourceRenderProps } from "./SourceRender";
-import type { ComputeResult, ComputeResultReady } from "spectral-display";
+import type { ComputeResult, ComputeResultReady, SpectralOptions } from "spectral-display";
 import type { ReactElement } from "react";
 
 const runtime = vi.hoisted(() => ({
@@ -13,6 +13,7 @@ const runtime = vi.hoisted(() => ({
 	refs: [] as Array<{ current: unknown }>,
 	held: null as ComputeResultReady | null,
 	result: { status: "idle" } as ComputeResult,
+	options: null as SpectralOptions | null,
 }));
 
 vi.mock("react", async (original) => ({
@@ -31,7 +32,10 @@ vi.mock("react", async (original) => ({
 vi.mock("./spectral/useContainerSize", () => ({ useContainerSize: () => ({ width: 800, height: 400 }) }));
 vi.mock("spectral-display", async (original) => ({
 	...(await original<typeof import("spectral-display")>()),
-	useSpectralCompute: () => runtime.result,
+	useSpectralCompute: (options: SpectralOptions) => {
+		runtime.options = options;
+		return runtime.result;
+	},
 	SpectrogramCanvas: () => null,
 	WaveformCanvas: () => null,
 }));
@@ -67,9 +71,9 @@ function elements(node: unknown): Array<ReactElement<Record<string, unknown>>> {
 	return [node, ...elements(node.props.children)];
 }
 
-function render() {
+function render(overrides: Partial<SourceRenderProps> = {}) {
 	runtime.index = 0;
-	return elements(SourceRender(props));
+	return elements(SourceRender({ ...props, ...overrides }));
 }
 
 function progress() {
@@ -81,9 +85,35 @@ beforeEach(() => {
 	runtime.refs = [];
 	runtime.held = null;
 	runtime.result = { status: "idle" };
+	runtime.options = null;
 });
 
 describe("replacement analysis progress", () => {
+	it.each(["lava", "viridis"] as const)(
+		"uses the package %s palette independently of source colour",
+		(spectrogramColormap) => {
+			runtime.result = ready();
+			const tree = render({ spectrogramColormap });
+			expect(runtime.options?.config).toMatchObject({ colormap: spectrogramColormap, spectrogram: true });
+			expect(tree.find((element) => element.type === WaveformCanvas)?.props.color).toEqual([245, 158, 11]);
+		},
+	);
+
+	it("disables spectra and completes a waveform-only replacement after one draw", () => {
+		runtime.held = ready();
+		const incoming = ready();
+		runtime.result = incoming;
+		const tree = render({ spectrogram: false });
+		expect(tree[0]?.props.className).not.toContain("bg-void");
+		expect(runtime.options?.config?.spectrogram).toBe(false);
+		expect(tree.some((element) => element.type === SpectrogramCanvas)).toBe(false);
+		const draw = tree.find((element) => element.type === WaveformCanvas && element.props.onRendered)?.props
+			.onRendered as () => void;
+		draw();
+		expect(runtime.held).toBe(incoming);
+		expect(render({ spectrogram: false }).some((element) => element.props.role === "progressbar")).toBe(false);
+	});
+
 	it("keeps held canvases visible while reporting source-specific progress without intercepting input", () => {
 		const held = ready();
 		runtime.held = held;

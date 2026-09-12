@@ -38,9 +38,10 @@ function buttons(node: unknown): Array<ReactElement<ComponentProps<"button">>> {
 		...buttons(element.props?.children),
 	];
 }
-function renderTree(change: ReturnType<typeof vi.fn>, frequencyScale: FrequencyScale = "mel") {
+function renderTree(change: ReturnType<typeof vi.fn>, frequencyScale: FrequencyScale = "mel", amplitude = false) {
 	runtime.index = 0;
 	return FrequencyMinimap({
+		amplitude,
 		sampleRate: EMPTY_AUDIO_DATA.sampleRate,
 		computeResult: runtime.result,
 		frequencyRange: { top: 0.25, bottom: 0.75 },
@@ -63,6 +64,32 @@ beforeEach(() => {
 	runtime.result = null;
 });
 describe("frequency minimap controls", () => {
+	it("keeps amplitude navigation without mounting a supplied spectrum", () => {
+		runtime.result = { status: "ready", options: { config: { frequencyScale: "mel" } } } as ComputeResultReady;
+		const change = vi.fn();
+		const tree = renderTree(change, "mel", true);
+		const controls = buttons(tree);
+		const pan = controls.find((button) => button.props["aria-label"] === "Amplitude range");
+		expect(hasCanvas(tree)).toBe(false);
+		expect(pan?.props["aria-valuetext"]).toBe("-0.5 to 0.5 FS");
+		expect(
+			controls.find((button) => button.props["aria-label"] === "Upper amplitude limit")?.props["aria-valuetext"],
+		).toBe("0.5 FS");
+		expect(
+			controls.find((button) => button.props["aria-label"] === "Lower amplitude limit")?.props["aria-valuetext"],
+		).toBe("-0.5 FS");
+		pan?.props.onKeyDown?.({
+			key: "+",
+			shiftKey: false,
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+		} as unknown as React.KeyboardEvent<HTMLButtonElement>);
+		expect(change).toHaveBeenCalledWith({ top: 0.3, bottom: 0.7 });
+		controls
+			.find((button) => button.props["aria-label"] === "Reset amplitude range")
+			?.props.onClick?.({} as React.MouseEvent<HTMLButtonElement>);
+		expect(change).toHaveBeenLastCalledWith({ top: 0, bottom: 1 });
+	});
 	it("uses the selected scale for accessible frequency values", () => {
 		const controls = buttons(renderTree(vi.fn(), "linear"));
 		const pan = controls.find((button) => button.props["aria-label"] === "Frequency range");

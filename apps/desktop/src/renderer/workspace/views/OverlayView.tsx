@@ -23,7 +23,7 @@ export function OverlayView({
 	);
 
 	return (
-		<StripLayout channelInput={channelInput} view={view}>
+		<StripLayout channelInput={channelInput} view={view} spectrogram={false}>
 			{renderableSources.length === 0 ? (
 				<div className="flex h-full items-center justify-center">
 					<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
@@ -40,10 +40,11 @@ export function OverlayView({
 								source={source}
 								audioData={audioData}
 								opacity={0.5}
+								spectrogram={false}
 							/>
 						))}
 					</div>
-					<StripOverlays view={view} settings={settings} />
+					<StripOverlays view={view} settings={settings} spectrogram={false} />
 				</>
 			)}
 		</StripLayout>

@@ -75,15 +75,16 @@ export function useStripView(
 interface StripOverlaysProps {
 	readonly view: StripView;
 	readonly settings: ViewControlSettings;
+	readonly spectrogram?: boolean;
 }
 
-export function StripOverlays({ view, settings }: StripOverlaysProps) {
+export function StripOverlays({ view, settings, spectrogram = true }: StripOverlaysProps) {
 	return (
 		<>
 			<GridOverlay
 				startMs={view.viewport.startMs}
 				endMs={view.viewport.endMs}
-				mode={settings.gridMode}
+				mode={spectrogram ? settings.gridMode : "amp"}
 				sampleRate={view.chromeAudio.sampleRate}
 				frequencyRange={view.frequencyRange}
 				frequencyScale={view.frequencyScale}
@@ -104,9 +105,10 @@ interface StripLayoutProps {
 	readonly header?: React.ReactNode;
 	readonly children: React.ReactNode;
 	readonly channelInput: ChannelInput;
+	readonly spectrogram?: boolean;
 }
 
-export function StripLayout({ view, header, children, channelInput }: StripLayoutProps) {
+export function StripLayout({ view, header, children, channelInput, spectrogram = true }: StripLayoutProps) {
 	return (
 		<div
 			className={
@@ -120,7 +122,7 @@ export function StripLayout({ view, header, children, channelInput }: StripLayou
 				className="min-h-0 min-w-0 flex-1 overflow-hidden"
 				style={{
 					display: "grid",
-					gridTemplateColumns: "2.5rem minmax(0, 1fr) auto auto",
+					gridTemplateColumns: `${spectrogram ? "2.5rem" : "0px"} minmax(0, 1fr) auto auto`,
 					gridTemplateRows: "2rem minmax(0, 1fr) 2rem",
 				}}
 			>
@@ -129,11 +131,15 @@ export function StripLayout({ view, header, children, channelInput }: StripLayou
 				<div className="bg-void" />
 				<div className="bg-void" />
 
-				<FrequencyAxis
-					sampleRate={view.chromeAudio.sampleRate}
-					frequencyRange={view.frequencyRange}
-					frequencyScale={view.frequencyScale}
-				/>
+				{spectrogram ? (
+					<FrequencyAxis
+						sampleRate={view.chromeAudio.sampleRate}
+						frequencyRange={view.frequencyRange}
+						frequencyScale={view.frequencyScale}
+					/>
+				) : (
+					<div className="bg-void" />
+				)}
 
 				<CursorSurface
 					surfaceRef={view.viewport.wheelHandlers.ref}
@@ -147,14 +153,17 @@ export function StripLayout({ view, header, children, channelInput }: StripLayou
 				</CursorSurface>
 
 				<FrequencyMinimap
+					amplitude={!spectrogram}
 					frequencyRange={view.frequencyRange}
 					frequencyScale={view.frequencyScale}
 					onFrequencyRangeChange={view.onFrequencyRangeChange}
 					sampleRate={view.chromeAudio.sampleRate}
 					computeResult={
-						[...view.displayed.values()].find(
-							(entry) => entry.result.options.readSamples === view.chromeAudio.readSamples,
-						)?.result ?? null
+						spectrogram
+							? ([...view.displayed.values()].find(
+									(entry) => entry.result.options.readSamples === view.chromeAudio.readSamples,
+								)?.result ?? null)
+							: null
 					}
 				/>
 				<DbAxis verticalRange={view.frequencyRange} />
@@ -183,6 +192,7 @@ interface StripSourceRenderProps {
 	readonly audioData: AudioData;
 	readonly opacity?: number;
 	readonly clipPath?: string;
+	readonly spectrogram?: boolean;
 }
 
 export function StripSourceRender({
@@ -193,9 +203,12 @@ export function StripSourceRender({
 	audioData,
 	opacity,
 	clipPath,
+	spectrogram = true,
 }: StripSourceRenderProps) {
 	return (
 		<SourceRender
+			spectrogram={spectrogram}
+			spectrogramColormap={settings.spectrogramColormap}
 			frequencyRange={view.frequencyRange}
 			frequencyScale={view.frequencyScale}
 			spectrogramSampling={settings.spectrogramSampling}

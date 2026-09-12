@@ -60,6 +60,25 @@ it("defaults new and older sessions to 4× sampling and rejects unsupported mode
 	}
 });
 
+it.each(["lava", "viridis"] as const)("persists the standard %s spectrogram colour map", (colormap) => {
+	const original = createComparison(["/audio/a.wav"]);
+	original.viewSettings.spectrogramColormap = colormap;
+	const parsed = parseSession(serializeSession(original, ["a.wav"]));
+	expect(parsed.viewSettings.spectrogramColormap).toBe(colormap);
+});
+
+it("defaults new and older sessions to Lava and rejects unsupported colour maps", () => {
+	const original = createComparison(["/audio/a.wav"]);
+	expect(original.viewSettings.spectrogramColormap).toBe("lava");
+	const session = JSON.parse(serializeSession(original, ["a.wav"]));
+	delete session.comparison.viewSettings.spectrogramColormap;
+	expect(parseSession(JSON.stringify(session)).viewSettings.spectrogramColormap).toBe("lava");
+	for (const value of ["inferno", "source", "Lava", 0, null, {}]) {
+		session.comparison.viewSettings.spectrogramColormap = value;
+		expect(() => parseSession(JSON.stringify(session))).toThrow("Invalid");
+	}
+});
+
 it("rejects unsupported versions, invalid settings and broken source identities", () => {
 	const session = JSON.parse(serializeSession(createComparison(["/a.wav"]), ["a.wav"])) as {
 		version: number;

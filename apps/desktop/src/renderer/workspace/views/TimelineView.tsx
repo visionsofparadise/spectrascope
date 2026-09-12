@@ -34,6 +34,7 @@ function TimelineTrack({
 	extentEndMs,
 	frequencyScale,
 	spectrogramSampling,
+	spectrogramColormap,
 	fftSize,
 	hopOverlap,
 	channelInput,
@@ -59,6 +60,7 @@ function TimelineTrack({
 	readonly extentEndMs: number;
 	readonly frequencyScale: FrequencyScale;
 	readonly spectrogramSampling: ViewControlSettings["spectrogramSampling"];
+	readonly spectrogramColormap: ViewControlSettings["spectrogramColormap"];
 	readonly fftSize: number;
 	readonly hopOverlap: number;
 	readonly channelInput: ChannelInput;
@@ -176,6 +178,7 @@ function TimelineTrack({
 							freezeCompute={freezeCompute}
 							frequencyScale={frequencyScale}
 							spectrogramSampling={spectrogramSampling}
+							spectrogramColormap={spectrogramColormap}
 							fftSize={fftSize}
 							hopOverlap={hopOverlap}
 							channelInput={channelInput}
@@ -377,6 +380,7 @@ export function TimelineView({
 										extentEndMs={extent.endMs}
 										frequencyScale={settings.frequencyScale}
 										spectrogramSampling={settings.spectrogramSampling}
+										spectrogramColormap={settings.spectrogramColormap}
 										fftSize={settings.fftSize}
 										hopOverlap={settings.hopOverlap}
 										channelInput={channelInput}
