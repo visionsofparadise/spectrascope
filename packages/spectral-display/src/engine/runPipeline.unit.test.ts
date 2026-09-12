@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { WAVEFORM_POINTS_PER_SECOND } from "./loudness";
-import { computeSamplesPerPoint, runPipeline, type PipelineOptions } from "./runPipeline";
+import {
+	computeSamplesPerPoint,
+	computeWaveformSamplesPerPoint,
+	runPipeline,
+	type PipelineOptions,
+} from "./runPipeline";
 import { SpectralEngine, type SpectralProcessContext, type SpectralResult } from "./SpectralEngine";
 
 describe("computeSamplesPerPoint", () => {
@@ -12,8 +17,10 @@ describe("computeSamplesPerPoint", () => {
 		);
 	});
 
-	it("derives ~2 points per output pixel column when loudness is off", () => {
-		expect(computeSamplesPerPoint(96000, 100, 48000, false)).toBe(Math.floor(96000 / (100 * 2)));
+	it("keeps existing measurement density while waveform bins use aligned powers of two", () => {
+		expect(computeSamplesPerPoint(96000, 100, 48000, false)).toBe(480);
+		expect(computeWaveformSamplesPerPoint(96000, 100)).toBe(256);
+		expect(computeWaveformSamplesPerPoint(10, 100)).toBe(1);
 	});
 
 	it("floors at 1 sample per point when zoomed to sample resolution", () => {
@@ -364,6 +371,132 @@ describe("contextual FFT at deep zoom", () => {
 		await expect(runPipeline(test.options, test.engine)).rejects.toThrow();
 		expect(test.cleanup).toHaveBeenCalledExactlyOnceWith(test.context);
 		expect(test.submit).not.toHaveBeenCalled();
+	});
+});
+
+describe("shared completed CPU scans", () => {
+	it("reuses completed spectral scans in another engine at a different height and coarser width", async () => {
+		const samples = Float32Array.from({ length: 65539 }, (_, index) => Math.sin(index * 0.37));
+		samples[samples.length - 1] = 3;
+		const options = waveformOptions(samples);
+		options.config.spectrogram = true;
+		options.readSamples = vi.fn(options.readSamples);
+		const engine = new SpectralEngine(options.config.device);
+		vi.spyOn(engine, "prepare").mockResolvedValue({} as SpectralProcessContext);
+		vi.spyOn(engine, "submitChunk").mockImplementation(() => undefined);
+		vi.spyOn(engine, "finalize").mockResolvedValue({ spectrogramTexture: null, ltas: null, width: 800, height: 200 });
+		const spectral = await runPipeline(options, engine);
+		vi.mocked(options.readSamples).mockClear();
+		const next = {
+			...options,
+			sampleQuery: { ...options.sampleQuery, width: 400, height: 700 },
+			config: {
+				...options.config,
+				spectrogram: false,
+				fftSize: 1024,
+				frequencyScale: "linear" as const,
+				colormap: "viridis" as const,
+				spectrogramSampling: 1 as const,
+			},
+		};
+		const actual = await runPipeline(next, new ThrowingEngine(options.config.device));
+		expect(options.readSamples).not.toHaveBeenCalled();
+		const direct = await runPipeline(
+			{ ...next, readSamples: async (_channel, offset, count) => samples.slice(offset, offset + count) },
+			new ThrowingEngine(options.config.device),
+		);
+		expect(actual.waveformBuffer).toEqual(direct.waveformBuffer);
+		expect(actual.waveformSamplesPerPoint).toBe(spectral.waveformSamplesPerPoint * 2);
+		expect(actual.waveformBuffer[actual.waveformBuffer.length - 1]).toBe(3);
+		expect(actual.options.sampleQuery).toEqual(next.sampleQuery);
+		expect(actual.options.config).toEqual(direct.options.config);
+	});
+
+	it("rescans for higher detail and then reuses that completed detail", async () => {
+		const options = waveformOptions(new Float32Array(65539));
+		options.sampleQuery.width = 100;
+		options.readSamples = vi.fn(options.readSamples);
+		await runPipeline(options, new ThrowingEngine(options.config.device));
+		options.sampleQuery.width = 800;
+		await runPipeline(options, new ThrowingEngine(options.config.device));
+		expect(options.readSamples).toHaveBeenCalledTimes(2);
+		await runPipeline(options, new ThrowingEngine(options.config.device));
+		expect(options.readSamples).toHaveBeenCalledTimes(2);
+	});
+
+	it("scans missing measurements once and independently reuses exact loudness and stereo results", async () => {
+		const samples = Float32Array.from({ length: 8193 }, (_, index) => Math.sin(index / 10) * 0.4);
+		const options = waveformOptions(samples);
+		options.metadata.channelCount = 2;
+		options.readSamples = vi.fn(options.readSamples);
+		await runPipeline(options, new ThrowingEngine(options.config.device));
+		options.config.loudness = true;
+		options.config.truePeak = true;
+		options.config.stereo = true;
+		const first = await runPipeline(options, new ThrowingEngine(options.config.device));
+		expect(options.readSamples).toHaveBeenCalledTimes(4);
+		const expected = first.loudnessData!.rmsEnvelope[0];
+		first.loudnessData!.rmsEnvelope[0] = 99;
+		const next = { ...options, sampleQuery: { ...options.sampleQuery, width: 200, height: 1 } };
+		const hit = await runPipeline(next, new ThrowingEngine(options.config.device));
+		expect(options.readSamples).toHaveBeenCalledTimes(4);
+		expect(hit.loudnessData!.rmsEnvelope[0]).toBe(expected);
+		expect(hit.loudnessData!.truePeak).toBe(first.loudnessData!.truePeak);
+		expect(hit.correlationEnvelope).toEqual(first.correlationEnvelope);
+		expect(hit.vectorscopeHistogram).toEqual(first.vectorscopeHistogram);
+		hit.loudnessData!.rmsEnvelope[0] = 88;
+		const reduced = await runPipeline(
+			{ ...next, config: { ...next.config, truePeak: false, stereo: false } },
+			new ThrowingEngine(options.config.device),
+		);
+		expect(reduced.loudnessData!.rmsEnvelope[0]).toBe(expected);
+		expect(reduced.loudnessData!.truePeak).toBeUndefined();
+		expect(reduced.loudnessData!.truePeakDb).toBeUndefined();
+		expect(reduced.correlationEnvelope).toBeNull();
+		expect(reduced.vectorscopeHistogram).toBeNull();
+		expect(options.readSamples).toHaveBeenCalledTimes(4);
+	});
+
+	it("rejects pre-aborted cache hits and cancellation from hit progress", async () => {
+		const options = waveformOptions(new Float32Array(100));
+		options.readSamples = vi.fn(options.readSamples);
+		await runPipeline(options, new ThrowingEngine(options.config.device));
+		const controller = new AbortController();
+		controller.abort();
+		await expect(
+			runPipeline(
+				{ ...options, config: { ...options.config, signal: controller.signal } },
+				new ThrowingEngine(options.config.device),
+			),
+		).rejects.toMatchObject({ name: "AbortError" });
+		const duringProgress = new AbortController();
+		await expect(
+			runPipeline(
+				{
+					...options,
+					config: { ...options.config, signal: duringProgress.signal },
+					onProgress: () => duringProgress.abort(),
+				},
+				new ThrowingEngine(options.config.device),
+			),
+		).rejects.toMatchObject({ name: "AbortError" });
+		expect(options.readSamples).toHaveBeenCalledOnce();
+	});
+
+	it.each(["abort", "truncate"])("does not cache a scan whose reader completes with %s", async (failure) => {
+		const options = waveformOptions(new Float32Array(100));
+		const controller = new AbortController();
+		let broken = true;
+		options.config.signal = controller.signal;
+		options.readSamples = vi.fn(async (_channel, _offset, count) => {
+			if (broken && failure === "abort") controller.abort();
+			return new Float32Array(broken && failure === "truncate" ? 0 : count);
+		});
+		await expect(runPipeline(options, new ThrowingEngine(options.config.device))).rejects.toThrow();
+		broken = false;
+		options.config.signal = new AbortController().signal;
+		await runPipeline(options, new ThrowingEngine(options.config.device));
+		expect(options.readSamples).toHaveBeenCalledTimes(2);
 	});
 });
 

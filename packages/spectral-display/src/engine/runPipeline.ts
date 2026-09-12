@@ -1,3 +1,4 @@
+import { CpuScanCache } from "../utils/CpuScanCache";
 import { resolveRenderDimensions } from "../utils/resolveRenderDimensions";
 import { getMaxFftSize } from "./device";
 import { resolveFftContext } from "./fft-context";
@@ -68,7 +69,14 @@ export function computeSamplesPerPoint(
 	return Math.max(1, Math.floor(windowSamples / (width * 2)));
 }
 
+export function computeWaveformSamplesPerPoint(windowSamples: number, width: number): number {
+	const target = Math.max(1, Math.floor(windowSamples / (width * 2)));
+
+	return 2 ** Math.floor(Math.log2(target));
+}
+
 const DEFAULT_CHUNK_SIZE = 131072;
+const cpuScanCache = new CpuScanCache();
 
 declare const scheduler: { yield(): Promise<void> } | undefined;
 
@@ -100,8 +108,37 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 
 	const samplesPerPoint = computeSamplesPerPoint(sampleCount, sampleQuery.width, sampleRate, loudness);
 	const pointCount = Math.ceil(sampleCount / samplesPerPoint);
-	const waveformSamplesPerPoint = computeSamplesPerPoint(sampleCount, sampleQuery.width, sampleRate, false);
+	const waveformSamplesPerPoint = computeWaveformSamplesPerPoint(sampleCount, sampleQuery.width);
 	const waveformPointCount = Math.ceil(sampleCount / waveformSamplesPerPoint);
+	const scanRequest = {
+		metadata,
+		readSamples,
+		startSample,
+		endSample,
+		channelInput,
+		waveformSamplesPerPoint,
+		measurementSamplesPerPoint: samplesPerPoint,
+		loudness,
+		truePeak: computeTruePeak,
+		stereo,
+	};
+
+	if (!spectrogram && !ltas) {
+		const cached = cpuScanCache.get(scanRequest);
+
+		if (cached) {
+			signal.throwIfAborted();
+			options.onProgress?.(1);
+			signal.throwIfAborted();
+
+			return {
+				...cached,
+				spectrogramTexture: null,
+				ltas: null,
+				options: { ...options, sampleQuery, config: resolvedConfig },
+			};
+		}
+	}
 
 	const scanContext = createScanContext(
 		metadata,
@@ -259,7 +296,7 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 		config: resolvedConfig,
 	};
 
-	return {
+	const result = {
 		waveformBuffer: scanContext.waveformBuffer,
 		waveformPointCount: scanContext.state.waveformPointIndex,
 		waveformSamplesPerPoint,
@@ -270,4 +307,9 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 		vectorscopeHistogram: stereo ? scanContext.vectorscopeHistogram : null,
 		options: resolvedOptions,
 	};
+
+	signal.throwIfAborted();
+	cpuScanCache.set(scanRequest, result);
+
+	return result;
 }
