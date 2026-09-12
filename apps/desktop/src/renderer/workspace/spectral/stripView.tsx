@@ -198,6 +198,7 @@ export function StripSourceRender({
 		<SourceRender
 			frequencyRange={view.frequencyRange}
 			frequencyScale={view.frequencyScale}
+			spectrogramSampling={settings.spectrogramSampling}
 			onDisplayedResultChange={view.onDisplayedResultChange}
 			source={source}
 			audioData={audioData}

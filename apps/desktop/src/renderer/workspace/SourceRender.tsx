@@ -10,7 +10,7 @@ import { fractionToFrequency } from "./utils/frequencyScale";
 import type { Source } from "./source";
 import type { AudioData } from "./spectral/types";
 import type { DisplayedWaveform } from "./spectral/useWaveformReadouts";
-import type { FrequencyScale } from "spectral-display";
+import type { FrequencyScale, SpectrogramSampling } from "spectral-display";
 import type { TextureVerticalRange } from "spectral-display";
 import type { ChannelInput, ColormapDefinition, ComputeResultReady, SpectralOptions } from "spectral-display";
 
@@ -26,6 +26,7 @@ export interface SourceRenderCursorReadout {
 export interface SourceRenderProps {
 	readonly source: Source;
 	readonly frequencyScale?: FrequencyScale;
+	readonly spectrogramSampling: SpectrogramSampling;
 	readonly frequencyRange?: TextureVerticalRange;
 	readonly onDisplayedResultChange?: (sourceId: string, displayed: DisplayedWaveform | null) => void;
 	readonly audioData: AudioData;
@@ -56,6 +57,7 @@ export interface SourceRenderProps {
 export function SourceRender({
 	source,
 	frequencyScale = "mel",
+	spectrogramSampling,
 	frequencyRange,
 	onDisplayedResultChange,
 	audioData,
@@ -132,6 +134,7 @@ export function SourceRender({
 				fftSize,
 				hopOverlap,
 				frequencyScale,
+				spectrogramSampling,
 				colormap,
 				channelInput,
 				loudness: false,
@@ -152,6 +155,7 @@ export function SourceRender({
 			channelInput,
 			colormap,
 			frequencyScale,
+			spectrogramSampling,
 		],
 	);
 

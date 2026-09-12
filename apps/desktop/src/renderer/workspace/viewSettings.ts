@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { FrequencyScale } from "spectral-display";
+import type { FrequencyScale, SpectrogramSampling } from "spectral-display";
 
 export type GridMode = "freq" | "amp";
 
@@ -31,6 +31,7 @@ export interface ViewControlSettings {
 	readonly loudnessMetric: LoudnessMetric;
 	readonly frequencyRange: { readonly top: number; readonly bottom: number };
 	readonly frequencyScale: FrequencyScale;
+	readonly spectrogramSampling: SpectrogramSampling;
 }
 
 export const INITIAL_VIEW_CONTROL_SETTINGS: ViewControlSettings = {
@@ -44,9 +45,11 @@ export const INITIAL_VIEW_CONTROL_SETTINGS: ViewControlSettings = {
 	loudnessMetric: "integrated",
 	frequencyRange: { top: 0, bottom: 1 },
 	frequencyScale: "mel",
+	spectrogramSampling: 4,
 };
 
 export const ViewControlSettingsSchema = z.object({
+	spectrogramSampling: z.union([z.literal(2), z.literal(4), z.literal(8), z.literal("full")]).default(4),
 	frequencyScale: z.enum(["linear", "log", "mel", "erb"]).default("mel"),
 	gridMode: z.enum(["freq", "amp"]).default("freq"),
 	gridOpacity: z.number().min(0).max(1).default(0.3),

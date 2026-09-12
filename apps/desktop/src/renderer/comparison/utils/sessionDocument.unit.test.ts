@@ -41,6 +41,25 @@ it("loads older session settings as Mel and validates all supported frequency sc
 	expect(() => parseSession(JSON.stringify(session))).toThrow("Invalid");
 });
 
+it.each([2, 4, 8, "full"] as const)("persists spectrogram sampling %s in session files", (sampling) => {
+	const original = createComparison(["/audio/a.wav"]);
+	original.viewSettings.spectrogramSampling = sampling;
+	const parsed = parseSession(serializeSession(original, ["a.wav"]));
+	expect(parsed.viewSettings.spectrogramSampling).toBe(sampling);
+});
+
+it("defaults new and older sessions to 4× sampling and rejects unsupported modes", () => {
+	const original = createComparison(["/audio/a.wav"]);
+	expect(original.viewSettings.spectrogramSampling).toBe(4);
+	const session = JSON.parse(serializeSession(original, ["a.wav"]));
+	delete session.comparison.viewSettings.spectrogramSampling;
+	expect(parseSession(JSON.stringify(session)).viewSettings.spectrogramSampling).toBe(4);
+	for (const value of [0, 1, 3, 16, "4", "unknown", null]) {
+		session.comparison.viewSettings.spectrogramSampling = value;
+		expect(() => parseSession(JSON.stringify(session))).toThrow("Invalid");
+	}
+});
+
 it("rejects unsupported versions, invalid settings and broken source identities", () => {
 	const session = JSON.parse(serializeSession(createComparison(["/a.wav"]), ["a.wav"])) as {
 		version: number;

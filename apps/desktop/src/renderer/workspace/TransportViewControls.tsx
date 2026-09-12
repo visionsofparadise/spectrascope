@@ -29,6 +29,46 @@ const METRIC_SELECT_OPTIONS = METRICS.map((metric) => ({
 	label: metric.label,
 }));
 
+const SAMPLING_OPTIONS = [
+	{ value: 2, label: "2×" },
+	{ value: 4, label: "4×" },
+	{ value: 8, label: "8×" },
+	{ value: "full", label: "Full" },
+] as const;
+const SAMPLING_HELP =
+	"Approximate overview: 2×, 4× and 8× choose the highest-RMS FFT window in each time subdivision of a pixel. Full uses every FFT window.";
+
+function SamplingControl({
+	settings,
+	onSettingsChange,
+}: Pick<TransportViewControlsProps, "settings" | "onSettingsChange">) {
+	return (
+		<label
+			className="flex shrink-0 flex-col gap-1 font-technical text-[length:var(--text-xs)] text-chrome-text-secondary"
+			title={SAMPLING_HELP}
+		>
+			<span>Sampling</span>
+			<select
+				aria-label="Spectrogram sampling"
+				aria-description={SAMPLING_HELP}
+				value={String(settings.spectrogramSampling)}
+				className="bg-chrome-raised px-1 py-0.5 text-chrome-text"
+				onChange={(event) => {
+					const selected = SAMPLING_OPTIONS.find((option) => String(option.value) === event.target.value);
+
+					if (selected) onSettingsChange({ ...settings, spectrogramSampling: selected.value });
+				}}
+			>
+				{SAMPLING_OPTIONS.map((option) => (
+					<option key={option.value} value={String(option.value)}>
+						{option.label}
+					</option>
+				))}
+			</select>
+		</label>
+	);
+}
+
 function KnobControl({
 	value,
 	icon,
@@ -170,6 +210,7 @@ export function TransportViewControls({
 				</div>
 
 				<LayerOpacityKnobs settings={settings} onSettingsChange={onSettingsChange} />
+				<SamplingControl settings={settings} onSettingsChange={onSettingsChange} />
 
 				<div className="flex flex-col items-stretch gap-0.5 min-[1400px]:flex-row min-[1400px]:items-center min-[1400px]:gap-1">
 					<Select
@@ -225,6 +266,7 @@ export function TransportViewControls({
 					}}
 				/>
 				<LayerOpacityKnobs settings={settings} onSettingsChange={onSettingsChange} />
+				<SamplingControl settings={settings} onSettingsChange={onSettingsChange} />
 			</div>
 		);
 	}
