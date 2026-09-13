@@ -41,6 +41,12 @@ export function visibleTracksOf(range: AxisRange, count: number): { readonly fir
 	return { first, last };
 }
 
+export function trackHandleTopOf(range: AxisRange, index: number, count: number): string {
+	const hiddenFraction = Math.max(0, range.start * count - index);
+
+	return `clamp(0px, ${hiddenFraction * 100}%, calc(100% - 1rem))`;
+}
+
 function TimelineTrack({
 	source,
 	audioData,
@@ -61,6 +67,7 @@ function TimelineTrack({
 	spectrogramOpacity,
 	draggable,
 	dragging,
+	handleTop,
 	onCursorMove,
 	onDisplayedResultChange,
 	onDragMove,
@@ -87,6 +94,7 @@ function TimelineTrack({
 	readonly spectrogramOpacity: number;
 	readonly draggable: boolean;
 	readonly dragging: boolean;
+	readonly handleTop: string;
 	readonly onCursorMove: (readout: SourceRenderCursorReadout) => void;
 	readonly onDisplayedResultChange: (sourceId: string, displayed: DisplayedWaveform | null) => void;
 	readonly onDragMove: (offsetMs: number) => void;
@@ -225,7 +233,8 @@ function TimelineTrack({
 							aria-valuemax={Math.round(extentEndMs)}
 							aria-valuenow={Math.round(offsetMs)}
 							aria-valuetext={`${(offsetMs / 1000).toFixed(2)} seconds`}
-							className={`absolute top-0 left-0 right-0 flex h-4 cursor-ew-resize items-center gap-1 px-1.5 outline-none focus-visible:ring-1 focus-visible:ring-primary ${
+							style={{ top: handleTop }}
+							className={`absolute left-0 right-0 flex h-4 cursor-ew-resize items-center gap-1 px-1.5 outline-none focus-visible:ring-1 focus-visible:ring-primary ${
 								dragging ? "bg-primary/30" : "bg-chrome-raised/70 hover:bg-chrome-raised"
 							}`}
 						>
@@ -378,7 +387,7 @@ export function TimelineView({
 					) : (
 						<>
 							<div className="absolute inset-x-0 flex flex-col" style={trackStackStyleOf(yRange)}>
-								{renderableSources.map(({ source, audioData }) => (
+								{renderableSources.map(({ source, audioData }, index) => (
 									<TimelineTrack
 										key={source.id}
 										source={source}
@@ -408,6 +417,7 @@ export function TimelineView({
 										spectrogramOpacity={settings.spectrogramOpacity}
 										draggable={onSourceOffsetChange !== undefined}
 										dragging={drag?.id === source.id}
+										handleTop={trackHandleTopOf(yRange, index, trackCount)}
 										onCursorMove={readouts.setCursorReadout}
 										onDisplayedResultChange={readouts.onDisplayedResultChange}
 										onDragMove={(offsetMs) => {
@@ -434,21 +444,25 @@ export function TimelineView({
 					onScrubToFraction={setViewportToFraction}
 				/>
 			</div>
-			<div className="flex shrink-0 flex-col">
-				<div className="h-8" />
-				<ScrollTrack
-					axis="y"
-					className="min-h-0 flex-1"
-					range={yRange}
-					minSpan={TRACK_MIN_SPAN}
-					onRangeChange={setYRange}
-					label="Track range"
-					valueText={`tracks ${visibleTracks.first} to ${visibleTracks.last} of ${trackCount}`}
-					edgeLabels={["Upper track range", "Lower track range"]}
-					edgeValueTexts={[`track ${visibleTracks.first}`, `track ${visibleTracks.last}`]}
-				/>
-				<div className="h-8" />
-			</div>
+			{trackCount === 0 ? (
+				<div className="w-2 shrink-0" />
+			) : (
+				<div className="flex shrink-0 flex-col">
+					<div className="h-8" />
+					<ScrollTrack
+						axis="y"
+						className="min-h-0 flex-1"
+						range={yRange}
+						minSpan={TRACK_MIN_SPAN}
+						onRangeChange={setYRange}
+						label="Track range"
+						valueText={`tracks ${visibleTracks.first} to ${visibleTracks.last} of ${trackCount}`}
+						edgeLabels={["Upper track range", "Lower track range"]}
+						edgeValueTexts={[`track ${visibleTracks.first}`, `track ${visibleTracks.last}`]}
+					/>
+					<div className="h-8" />
+				</div>
+			)}
 		</div>
 	);
 }

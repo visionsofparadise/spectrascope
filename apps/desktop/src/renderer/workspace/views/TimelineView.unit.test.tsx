@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createDefaultSource } from "../source";
 import { INITIAL_VIEW_CONTROL_SETTINGS } from "../viewSettings";
-import { trackStackStyleOf, TimelineView, visibleTracksOf } from "./TimelineView";
+import { trackHandleTopOf, trackStackStyleOf, TimelineView, visibleTracksOf } from "./TimelineView";
 import { EMPTY_AUDIO_DATA } from "./viewAudio";
 import type { SpectralOptions } from "spectral-display";
 
@@ -131,6 +131,27 @@ describe("Timeline track range", () => {
 		expect(visibleTracksOf({ start: 0, end: 1 }, 5)).toEqual({ first: 1, last: 5 });
 		expect(visibleTracksOf({ start: 0.3, end: 0.5 }, 5)).toEqual({ first: 2, last: 3 });
 		expect(visibleTracksOf({ start: 0.4, end: 0.6 }, 5)).toEqual({ first: 3, last: 3 });
+	});
+
+	it("keeps a track's offset handle at the visible top of the track", () => {
+		expect(trackHandleTopOf({ start: 0, end: 0.5 }, 0, 2)).toBe("clamp(0px, 0%, calc(100% - 1rem))");
+		expect(trackHandleTopOf({ start: 0.25, end: 0.75 }, 0, 2)).toBe("clamp(0px, 50%, calc(100% - 1rem))");
+		expect(trackHandleTopOf({ start: 0.25, end: 0.75 }, 1, 2)).toBe("clamp(0px, 0%, calc(100% - 1rem))");
+		expect(trackHandleTopOf({ start: 0.75, end: 1 }, 0, 2)).toBe("clamp(0px, 150%, calc(100% - 1rem))");
+	});
+
+	it("renders only the spacer column without visible tracks", () => {
+		const html = renderToStaticMarkup(
+			createElement(TimelineView, {
+				sources: [],
+				sourceAudio: new Map(),
+				channelInput: "mono",
+				settings: INITIAL_VIEW_CONTROL_SETTINGS,
+			}),
+		);
+
+		expect(html).not.toContain('aria-label="Track range"');
+		expect(html).toContain('<div class="w-2 shrink-0"></div>');
 	});
 
 	it("renders the full-range stack beside a track scroll track", () => {

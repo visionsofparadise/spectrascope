@@ -212,7 +212,6 @@ export function SourceRender({
 			hasCoverage
 				? {
 						results: waveformResults,
-						spectrogramResults,
 						sourceName: source.name,
 						timeOffsetMs: readoutTimeOffsetMs + placementMs,
 					}
@@ -222,7 +221,6 @@ export function SourceRender({
 		source.id,
 		source.name,
 		waveformResults,
-		spectrogramResults,
 		hasCoverage,
 		readoutTimeOffsetMs,
 		placementMs,

@@ -142,8 +142,9 @@ describe("replacement analysis progress", () => {
 		expect(tree.filter((element) => element.type === WaveformCanvas)).toHaveLength(2);
 		expect(onDisplayedResultChange).toHaveBeenCalledWith(
 			props.source.id,
-			expect.objectContaining({ results: [previous, next], spectrogramResults: [next] }),
+			expect.objectContaining({ results: [previous, next] }),
 		);
+		expect(onDisplayedResultChange.mock.lastCall?.[1]).not.toHaveProperty("spectrogramResults");
 	});
 	it("keeps waveform canvas identity across palette keys and overlapping tile reorder", () => {
 		const first = ready();

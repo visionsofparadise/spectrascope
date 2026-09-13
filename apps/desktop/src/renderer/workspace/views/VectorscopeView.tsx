@@ -9,7 +9,7 @@ import { scrollTrackTextsOf, trackValueTextOf } from "../spectral/scrollTrackTex
 import { useTraceCompute } from "../spectral/traceCompute";
 import { useContainerSize } from "../spectral/useContainerSize";
 import { useDisabledTransport } from "../spectral/viewScaffold";
-import { FULL_AXIS_RANGE } from "../utils/axisRange";
+import { axisFractionOf, FULL_AXIS_RANGE } from "../utils/axisRange";
 import { resolveVisibleSourceAudio } from "./viewAudio";
 import type { Source } from "../source";
 import type { ComputeState } from "../spectral/firstComputeProgress";
@@ -38,14 +38,24 @@ interface ScopeRangeProps {
 	readonly yRange: AxisRange;
 }
 
-function crossLinePositionsOf(xRange: AxisRange, yRange: AxisRange) {
-	return {
-		x: (0.5 - xRange.start) / (xRange.end - xRange.start),
-		y: (0.5 - yRange.start) / (yRange.end - yRange.start),
-	};
+function visibleFractionOf(range: AxisRange): number | undefined {
+	const fraction = axisFractionOf(0.5, range);
+
+	return fraction >= 0 && fraction <= 1 ? fraction : undefined;
 }
 
-function cloudTransformOf(xRange: AxisRange, yRange: AxisRange): string {
+export function crossLinePositionsOf(
+	xRange: AxisRange,
+	yRange: AxisRange,
+): { readonly x: number | undefined; readonly y: number | undefined } {
+	return { x: visibleFractionOf(xRange), y: visibleFractionOf(yRange) };
+}
+
+export function canvasScaleOf(baseScale: number, visibleSpan: number): number {
+	return Math.max(baseScale, Math.min(4, baseScale * 2 ** Math.ceil(Math.log2(1 / visibleSpan))));
+}
+
+export function cloudTransformOf(xRange: AxisRange, yRange: AxisRange): string {
 	const xSpan = xRange.end - xRange.start;
 	const ySpan = yRange.end - yRange.start;
 
@@ -57,14 +67,14 @@ function FullBleedAxes({ xRange, yRange }: ScopeRangeProps) {
 
 	return (
 		<>
-			{positions.x >= 0 && positions.x <= 1 && (
+			{positions.x !== undefined && (
 				<div
 					aria-hidden="true"
 					className="pointer-events-none absolute inset-y-0 w-px bg-chrome-border"
 					style={{ left: `calc(50% - 50cqmin + ${positions.x * 100}cqmin)` }}
 				/>
 			)}
-			{positions.y >= 0 && positions.y <= 1 && (
+			{positions.y !== undefined && (
 				<div
 					aria-hidden="true"
 					className="pointer-events-none absolute inset-x-0 h-px bg-chrome-border"
@@ -128,7 +138,7 @@ function SourceCloud({ source, audioData, onComputeState, visibleSpan }: SourceC
 	const containerRef = useRef<HTMLDivElement>(null);
 	const size = useContainerSize(containerRef, { width: 256, height: 256 });
 	const baseScale = Math.max(1, Math.min(size.width, size.height)) / 256;
-	const canvasScale = Math.max(baseScale, Math.min(4, baseScale / visibleSpan));
+	const canvasScale = canvasScaleOf(baseScale, visibleSpan);
 	const tint = useMemo(() => hexToRgb255(source.layerColor.primary), [source.layerColor.primary]);
 
 	return (

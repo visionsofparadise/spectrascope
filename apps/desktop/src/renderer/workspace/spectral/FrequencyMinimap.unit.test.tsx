@@ -13,6 +13,7 @@ vi.mock("react", async (importOriginal) => ({
 		const index = runtime.index++;
 		return (runtime.refs[index] ??= { current: initial });
 	},
+	useState: (initial: unknown) => [initial, () => {}],
 	useCallback: (callback: unknown) => callback,
 	useEffect: () => {},
 }));

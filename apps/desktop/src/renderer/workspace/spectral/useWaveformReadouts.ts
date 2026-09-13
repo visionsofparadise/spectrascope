@@ -10,7 +10,6 @@ export type DisplayedWaveform = (
 	| { readonly results: ReadonlyArray<ComputeResultReady>; readonly result?: never }
 ) & {
 	readonly sourceName: string;
-	readonly spectrogramResults?: ReadonlyArray<ComputeResultReady>;
 	readonly timeOffsetMs: number;
 };
 
@@ -65,9 +64,6 @@ export function useWaveformReadouts() {
 				(value &&
 					old &&
 					old.result === value.result &&
-					(old.spectrogramResults === value.spectrogramResults ||
-						(old.spectrogramResults?.length === value.spectrogramResults?.length &&
-							old.spectrogramResults?.every((result, index) => result === value.spectrogramResults?.[index]))) &&
 					(old.results === value.results ||
 						(old.results?.length === value.results?.length &&
 							old.results?.every((result, index) => result === value.results?.[index]))) &&
