@@ -208,7 +208,11 @@ export function ScrollTrack({
 				aria-valuenow={(range.start + range.end) / 2}
 				aria-valuetext={valueText}
 				{...handlersOf("pan")}
-				className={cn("absolute bg-chrome-raised", horizontal ? "inset-y-0" : "inset-x-0", focusClass)}
+				className={cn(
+					"absolute bg-chrome-raised",
+					horizontal ? "inset-y-0 h-full" : "inset-x-0 w-full",
+					focusClass,
+				)}
 				style={
 					horizontal ? { left: thumb.offset, width: thumb.length } : { top: thumb.offset, height: thumb.length }
 				}
@@ -229,7 +233,9 @@ export function ScrollTrack({
 							{...handlersOf(edge)}
 							className={cn(
 								"absolute bg-transparent",
-								horizontal ? "inset-y-0 w-[3px] cursor-ew-resize" : "inset-x-0 h-[3px] cursor-ns-resize",
+								horizontal
+									? "inset-y-0 h-full w-[3px] cursor-ew-resize"
+									: "inset-x-0 h-[3px] w-full cursor-ns-resize",
 								focusClass,
 							)}
 							style={

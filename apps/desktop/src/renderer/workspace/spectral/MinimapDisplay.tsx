@@ -208,15 +208,15 @@ export function MinimapDisplay({
 			)}
 			{computeResult.status === "computing" && !hasCoverage && <ComputeProgress fraction={computeResult.fraction} />}
 			<div
-				className="pointer-events-none absolute inset-y-0 left-0 bg-black/65"
+				className="pointer-events-none absolute inset-y-0 left-0 bg-black/60"
 				style={{ width: `${vpStartPct}%` }}
 			/>
 			<div
-				className="pointer-events-none absolute inset-y-0 right-0 bg-black/65"
+				className="pointer-events-none absolute inset-y-0 right-0 bg-black/60"
 				style={{ width: `${(1 - viewEndFrac) * 100}%` }}
 			/>
 			<div
-				className="pointer-events-none absolute inset-y-0 border-2 border-data-selection-border"
+				className="pointer-events-none absolute inset-y-0 bg-[rgba(224,224,232,0.17)]"
 				style={{ left: `${vpStartPct}%`, width: `${vpWidthPct}%` }}
 			/>
 		</div>
