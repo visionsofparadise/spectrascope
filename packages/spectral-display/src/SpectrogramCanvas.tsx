@@ -67,7 +67,19 @@ export const SpectrogramCanvas: React.FC<SpectrogramCanvasProps> = ({
 		blitDeviceRef.current = device;
 
 		blitReference.current.resize(canvasWidth, canvasHeight);
-		blitReference.current.render(computeResult.spectrogramTexture, frequencyRange);
+
+		const range = computeResult.spectrogramRange;
+		const sampleRate = computeResult.options.metadata.sampleRate;
+		const span = range ? range.endSample - range.startSample : 0;
+		const horizontalRange =
+			range && span > 0
+				? {
+						left: ((computeResult.query.startMs * sampleRate) / 1000 - range.startSample) / span,
+						right: ((computeResult.query.endMs * sampleRate) / 1000 - range.startSample) / span,
+					}
+				: undefined;
+
+		blitReference.current.render(computeResult.spectrogramTexture, frequencyRange, horizontalRange);
 
 		onRenderedRef.current?.();
 	}, [computeResult, canvasWidth, canvasHeight, frequencyRange?.top, frequencyRange?.bottom]);

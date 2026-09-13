@@ -29,6 +29,8 @@ interface ScanState {
 	overallSumSquares: number;
 	totalSampleValues: number;
 	truePeakAbs: number;
+	pointTruePeak: number;
+	waveformSumSquares: number;
 	biquadStates: Array<{ stage1: BiquadState; stage2: BiquadState }>;
 	truePeakStates: Array<TruePeakState>;
 }
@@ -60,6 +62,12 @@ export interface ScanContext {
 	kWeightedMeanSquare: Float32Array;
 	correlationEnvelope: Float32Array;
 	vectorscopeHistogram: Uint32Array;
+	truePeakEnvelope: Float32Array;
+	truePeakBuffer: Float32Array;
+	stereoLeftEnergy: Float32Array;
+	stereoRightEnergy: Float32Array;
+	stereoCrossEnergy: Float32Array;
+	waveformEnergyBuffer: Float64Array;
 }
 
 export function createScanContext(
@@ -126,6 +134,8 @@ export function createScanContext(
 			overallSumSquares: 0,
 			totalSampleValues: 0,
 			truePeakAbs: 0,
+			pointTruePeak: 0,
+			waveformSumSquares: 0,
 			biquadStates,
 			truePeakStates,
 		},
@@ -135,11 +145,17 @@ export function createScanContext(
 		rBuffer: new Float32Array(lrBufferSize),
 		channelInputBuffer: new Float32Array(channelInputBufferSize),
 		waveformBuffer: new Float32Array((waveform?.pointCount ?? pointCount) * 2),
+		waveformEnergyBuffer: new Float64Array(waveform?.pointCount ?? pointCount),
 		rmsEnvelope: new Float32Array(pointCount),
 		peakEnvelope: new Float32Array(pointCount),
 		kWeightedMeanSquare: new Float32Array(pointCount),
 		correlationEnvelope: new Float32Array(computeStereo ? pointCount : 0),
 		vectorscopeHistogram: new Uint32Array(computeStereo ? VECTORSCOPE_GRID_SIZE * VECTORSCOPE_GRID_SIZE : 0),
+		truePeakEnvelope: new Float32Array(computeTruePeak ? pointCount : 0),
+		truePeakBuffer: new Float32Array(computeTruePeak ? chunkSize : 0),
+		stereoLeftEnergy: new Float32Array(computeStereo ? pointCount : 0),
+		stereoRightEnergy: new Float32Array(computeStereo ? pointCount : 0),
+		stereoCrossEnergy: new Float32Array(computeStereo ? pointCount : 0),
 	};
 }
 
@@ -150,6 +166,8 @@ export function finalizeScan(context: ScanContext): { overallPeak: number; overa
 	if (state.samplesInWaveformPoint > 0 && state.waveformPointIndex < context.waveformBuffer.length / 2) {
 		context.waveformBuffer[state.waveformPointIndex * 2] = state.pointMin;
 		context.waveformBuffer[state.waveformPointIndex * 2 + 1] = state.pointMax;
+		context.waveformEnergyBuffer[state.waveformPointIndex] = state.waveformSumSquares;
+		state.waveformSumSquares = 0;
 		state.waveformPointIndex++;
 		state.samplesInWaveformPoint = 0;
 		state.pointMin = Infinity;
@@ -159,9 +177,15 @@ export function finalizeScan(context: ScanContext): { overallPeak: number; overa
 	if (samplesInCurrentPoint > 0 && pointIndex < context.rmsEnvelope.length) {
 		context.rmsEnvelope[pointIndex] = Math.sqrt(state.pointSumSq / samplesInCurrentPoint);
 		context.peakEnvelope[pointIndex] = state.pointPeak;
+
+		if (context.computeTruePeak) context.truePeakEnvelope[pointIndex] = state.pointTruePeak;
+
 		context.kWeightedMeanSquare[pointIndex] = state.kWeightedPointSum / samplesInCurrentPoint;
 
 		if (context.computeStereo) {
+			context.stereoLeftEnergy[pointIndex] = state.pointSumL2;
+			context.stereoRightEnergy[pointIndex] = state.pointSumR2;
+			context.stereoCrossEnergy[pointIndex] = state.pointSumLR;
 			context.correlationEnvelope[pointIndex] =
 				state.pointSumL2 < CORRELATION_SILENCE_FLOOR || state.pointSumR2 < CORRELATION_SILENCE_FLOOR
 					? NaN
@@ -245,6 +269,8 @@ export function scanSamples(
 
 	monoBuffer.fill(0, 0, samplesPerChannel);
 	kwBuffer.fill(0, 0, samplesPerChannel);
+
+	if (computeTruePeak) context.truePeakBuffer.fill(0, 0, samplesPerChannel);
 
 	if (foldChannels) {
 		const { lCoef, rCoef } = deriveChannelFoldCoefficients(channelCount);
@@ -360,9 +386,11 @@ export function scanSamples(
 				}
 
 				if (computeTruePeak) {
-					const tp = truePeakMaxAbs(sample, tpState);
+					const tp = Math.max(Math.abs(sample), truePeakMaxAbs(sample, tpState));
 
 					if (tp > truePeakAbs) truePeakAbs = tp;
+
+					context.truePeakBuffer[si] = Math.max(context.truePeakBuffer[si]!, tp);
 				}
 			}
 		} else {
@@ -398,27 +426,37 @@ export function scanSamples(
 				}
 
 				if (computeTruePeak) {
-					const tp = truePeakMaxAbs(sample, tpState);
+					const tp = Math.max(Math.abs(sample), truePeakMaxAbs(sample, tpState));
 
 					if (tp > truePeakAbs) truePeakAbs = tp;
+
+					state.pointTruePeak = Math.max(state.pointTruePeak, context.truePeakBuffer[si]!, tp);
 				}
 
 				const sq = mono * mono;
 				const abs = mono < 0 ? -mono : mono;
 
-				if (waveformSample < pointMin) pointMin = waveformSample;
+				if (waveformPointCount > 0) {
+					if (waveformSample < pointMin) pointMin = waveformSample;
 
-				if (waveformSample > pointMax) pointMax = waveformSample;
+					if (waveformSample > pointMax) pointMax = waveformSample;
 
-				samplesInWaveformPoint++;
+					samplesInWaveformPoint++;
 
-				if (samplesInWaveformPoint >= waveformSamplesPerPoint && waveformPointIndex < waveformPointCount) {
-					waveformBuffer[waveformPointIndex * 2] = pointMin;
-					waveformBuffer[waveformPointIndex * 2 + 1] = pointMax;
-					waveformPointIndex++;
-					samplesInWaveformPoint = 0;
-					pointMin = Infinity;
-					pointMax = -Infinity;
+					const energySample = channelInput === "mono" ? monoBuffer[si]! : waveformSample;
+
+					state.waveformSumSquares += energySample * energySample;
+
+					if (samplesInWaveformPoint >= waveformSamplesPerPoint && waveformPointIndex < waveformPointCount) {
+						waveformBuffer[waveformPointIndex * 2] = pointMin;
+						waveformBuffer[waveformPointIndex * 2 + 1] = pointMax;
+						context.waveformEnergyBuffer[waveformPointIndex] = state.waveformSumSquares;
+						state.waveformSumSquares = 0;
+						waveformPointIndex++;
+						samplesInWaveformPoint = 0;
+						pointMin = Infinity;
+						pointMax = -Infinity;
+					}
 				}
 
 				pointSumSq += sq;
@@ -446,9 +484,17 @@ export function scanSamples(
 
 					rmsEnvelope[pointIndex] = Math.sqrt(pointSumSq * invSamples);
 					peakEnvelope[pointIndex] = pointPeak;
+
+					if (computeTruePeak) context.truePeakEnvelope[pointIndex] = state.pointTruePeak;
+
+					state.pointTruePeak = 0;
 					kWeightedMeanSquare[pointIndex] = kWeightedPointSum * invSamples;
 
 					if (computeStereo) {
+						context.stereoLeftEnergy[pointIndex] = pointSumL2;
+						context.stereoRightEnergy[pointIndex] = pointSumR2;
+						context.stereoCrossEnergy[pointIndex] = pointSumLR;
+
 						if (pointSumL2 < CORRELATION_SILENCE_FLOOR || pointSumR2 < CORRELATION_SILENCE_FLOOR) {
 							correlationEnvelope[pointIndex] = NaN;
 						} else {

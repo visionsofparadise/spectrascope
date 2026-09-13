@@ -12,6 +12,7 @@ function resultBytes(result: ComputeResultReady): number {
 	const buffers = new Set<ArrayBufferLike>();
 	const values = [
 		result.waveformBuffer,
+		result.waveformEnergyBuffer,
 		result.ltas,
 		result.correlationEnvelope,
 		result.vectorscopeHistogram,

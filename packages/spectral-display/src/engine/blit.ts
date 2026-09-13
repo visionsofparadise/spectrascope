@@ -5,6 +5,11 @@ export interface TextureVerticalRange {
 	readonly bottom: number;
 }
 
+export interface TextureHorizontalRange {
+	readonly left: number;
+	readonly right: number;
+}
+
 export class BlitRenderer {
 	private readonly device: GPUDevice;
 	private readonly context: GPUCanvasContext;
@@ -57,12 +62,25 @@ export class BlitRenderer {
 		this.rangeBuffer = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 	}
 
-	render(texture: GPUTexture, range?: TextureVerticalRange): void {
+	render(texture: GPUTexture, range?: TextureVerticalRange, horizontalRange?: TextureHorizontalRange): void {
 		const top = Math.max(0, Math.min(1, range?.top ?? 0));
 		const bottom = Math.max(0, Math.min(1, range?.bottom ?? 1));
 		const valid = Number.isFinite(range?.top ?? 0) && Number.isFinite(range?.bottom ?? 1) && bottom > top;
+		const left = Math.max(0, Math.min(1, horizontalRange?.left ?? 0));
+		const right = Math.max(0, Math.min(1, horizontalRange?.right ?? 1));
+		const validHorizontal =
+			Number.isFinite(horizontalRange?.left ?? 0) && Number.isFinite(horizontalRange?.right ?? 1) && right > left;
 
-		this.device.queue.writeBuffer(this.rangeBuffer, 0, new Float32Array([valid ? top : 0, valid ? bottom : 1, 0, 0]));
+		this.device.queue.writeBuffer(
+			this.rangeBuffer,
+			0,
+			new Float32Array([
+				valid ? top : 0,
+				valid ? bottom : 1,
+				validHorizontal ? left : 0,
+				validHorizontal ? right : 1,
+			]),
+		);
 
 		const textureView = texture.createView();
 

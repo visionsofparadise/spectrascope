@@ -26,6 +26,16 @@ function result(overview = false, texture = false): ComputeResultReady {
 }
 
 describe("bounded completed analysis cache", () => {
+	it("counts retained waveform energies against the byte limit", () => {
+		const cache = new ComputeResultCache(16, 8);
+		const first = { ...result(), waveformEnergyBuffer: new Float64Array(1) };
+		cache.set("first", first);
+		expect(cache.get("first")).toBe(first);
+		cache.set("second", result());
+		expect(cache.get("first")).toBeUndefined();
+		cache.set("oversized", { ...result(), waveformEnergyBuffer: new Float64Array(2) });
+		expect(cache.get("oversized")).toBeUndefined();
+	});
 	it("evicts least recently used details while preferring the complete overview", () => {
 		const cache = new ComputeResultCache(1024, 3);
 		const overview = result(true);

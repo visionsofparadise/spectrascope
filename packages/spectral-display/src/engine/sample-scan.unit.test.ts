@@ -27,6 +27,7 @@ describe("independent waveform density", () => {
 				const bucket = samples.slice(point * waveformSamplesPerPoint, (point + 1) * waveformSamplesPerPoint);
 				expect(detail.waveformBuffer[point * 2]).toBe(Math.min(...bucket));
 				expect(detail.waveformBuffer[point * 2 + 1]).toBe(Math.max(...bucket));
+				expect(detail.waveformEnergyBuffer[point]).toBe(bucket.reduce((sum, value) => sum + value * value, 0));
 			}
 			const before = detail.waveformBuffer.slice();
 			finalizeScan(detail);
@@ -86,6 +87,7 @@ describe("waveform boundaries and channel selection", () => {
 			expect(summary.overallPeak).toBe(0);
 			expect(Array.from(context.rmsEnvelope)).toEqual([0, 0]);
 			expect(Array.from(context.correlationEnvelope)).toEqual([-1, -1]);
+			expect(Array.from(context.waveformEnergyBuffer)).toEqual(channelInput === "side" ? [2, 1] : [0, 0]);
 		},
 	);
 });

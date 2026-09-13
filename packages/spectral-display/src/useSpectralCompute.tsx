@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getDevice } from "./engine/device";
+import { runDisplayPipeline } from "./engine/runDisplayPipeline";
 import {
 	type PipelineOptions,
 	type ResolvedPipelineOptions,
@@ -30,6 +31,8 @@ export interface SpectralOptions {
 }
 
 export interface ComputeResultReady {
+	waveformEnergyBuffer?: Float64Array;
+	spectrogramRange?: { startSample: number; endSample: number };
 	status: "ready";
 	spectrogramTexture: GPUTexture | null;
 	waveformBuffer: Float32Array | null;
@@ -79,6 +82,7 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 
 	useEffect(() => {
 		const sampleQuery: SampleQuery = {
+			...(config?.displayTiles ? { requestedSampleCount: ((endMs - startMs) * sampleRate) / 1000 } : {}),
 			startSample: Math.max(0, Math.min(Math.floor((startMs / 1000) * sampleRate), sampleCount)),
 			endSample: Math.max(0, Math.min(Math.ceil((endMs / 1000) * sampleRate), sampleCount)),
 			width,
@@ -187,7 +191,10 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 				engineReference.current ??= new SpectralEngine(device);
 				engineDeviceRef.current = device;
 
-				const pipelineResult = await runPipeline(pipelineOptions, engineReference.current);
+				const pipelineResult = await (config?.displayTiles ? runDisplayPipeline : runPipeline)(
+					pipelineOptions,
+					engineReference.current,
+				);
 
 				if (obsolete()) {
 					pipelineResult.spectrogramTexture?.destroy();
@@ -207,7 +214,15 @@ export function useSpectralCompute(options: SpectralOptions): ComputeResult {
 				const readyResult: ComputeResultReady = {
 					status: "ready",
 					...pipelineResult,
-					query: { startMs, endMs, width, height },
+					query:
+						pipelineResult.displayEndSample === undefined
+							? { startMs, endMs, width, height }
+							: {
+									startMs: (pipelineResult.options.sampleQuery.startSample * 1000) / sampleRate,
+									endMs: (pipelineResult.displayEndSample * 1000) / sampleRate,
+									width: pipelineResult.options.sampleQuery.width,
+									height: pipelineResult.options.sampleQuery.height,
+								},
 				};
 
 				lastReadyRef.current = readyResult;

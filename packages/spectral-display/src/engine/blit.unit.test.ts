@@ -36,10 +36,10 @@ describe("blit frequency crop", () => {
 	it("maps normalized top and bottom without reallocating output", () => {
 		const { renderer, device, texture, canvas } = setup();
 		renderer.render(texture, { top: 0.25, bottom: 0.75 });
-		expect(device.queue.writeBuffer.mock.calls[0]?.[2]).toEqual(new Float32Array([0.25, 0.75, 0, 0]));
+		expect(device.queue.writeBuffer.mock.calls[0]?.[2]).toEqual(new Float32Array([0.25, 0.75, 0, 1]));
 		expect(canvas).toMatchObject({ width: 300, height: 150 });
 		renderer.render(texture);
-		expect(device.queue.writeBuffer.mock.calls[1]?.[2]).toEqual(new Float32Array([0, 1, 0, 0]));
+		expect(device.queue.writeBuffer.mock.calls[1]?.[2]).toEqual(new Float32Array([0, 1, 0, 1]));
 	});
 
 	it.each([
@@ -50,7 +50,15 @@ describe("blit frequency crop", () => {
 	])("falls back to full texture for invalid crop", (range) => {
 		const { renderer, device, texture } = setup();
 		renderer.render(texture, range);
-		expect(device.queue.writeBuffer.mock.calls[0]?.[2]).toEqual(new Float32Array([0, 1, 0, 0]));
+		expect(device.queue.writeBuffer.mock.calls[0]?.[2]).toEqual(new Float32Array([0, 1, 0, 1]));
+	});
+
+	it("crops time and frequency independently with safe horizontal defaults", () => {
+		const { renderer, device, texture } = setup();
+		renderer.render(texture, { top: 0.25, bottom: 0.75 }, { left: 0.4, right: 0.6 });
+		expect(device.queue.writeBuffer.mock.calls[0]?.[2]).toEqual(new Float32Array([0.25, 0.75, 0.4, 0.6]));
+		renderer.render(texture, undefined, { left: 1, right: 0 });
+		expect(device.queue.writeBuffer.mock.calls[1]?.[2]).toEqual(new Float32Array([0, 1, 0, 1]));
 	});
 
 	it("clamps backing size and releases the crop buffer", () => {

@@ -28,6 +28,7 @@ export interface SpectralConfig {
 	signal: AbortSignal;
 	spectrogram: boolean;
 	spectrogramSampling?: SpectrogramSampling;
+	displayTiles?: boolean;
 	ltas: boolean;
 	loudness: boolean;
 	truePeak: boolean;

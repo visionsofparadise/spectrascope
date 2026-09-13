@@ -519,7 +519,8 @@ export const BLIT_FRAGMENT_SHADER = `
 struct TextureRange {
   top: f32,
   bottom: f32,
-  padding: vec2<f32>,
+  left: f32,
+  right: f32,
 }
 
 @group(0) @binding(0) var source_texture: texture_2d<f32>;
@@ -528,7 +529,7 @@ struct TextureRange {
 
 @fragment
 fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-  let cropped_uv = vec2<f32>(uv.x, mix(texture_range.top, texture_range.bottom, uv.y));
+  let cropped_uv = vec2<f32>(mix(texture_range.left, texture_range.right, uv.x), mix(texture_range.top, texture_range.bottom, uv.y));
   return textureSample(source_texture, source_sampler, cropped_uv);
 }
 `;

@@ -11,6 +11,9 @@ export {
 	meanSquareToLufs,
 } from "./engine/loudness";
 export type { LoudnessData } from "./engine/loudness";
+export { analyzeMeasurements, selectMeasurements } from "./engine/measurements";
+export type { MeasurementData } from "./engine/measurements";
+export { runPipeline } from "./engine/runPipeline";
 export type {
 	PipelineOptions,
 	PipelineResult,

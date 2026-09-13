@@ -3,8 +3,15 @@ export function resolveFftContext(
 	endSample: number,
 	totalSamples: number,
 	fftSize: number,
+	anchorToSource = false,
 ): { startSample: number; endSample: number } {
 	if (endSample <= startSample || endSample - startSample >= fftSize) return { startSample, endSample };
+
+	if (anchorToSource) {
+		const start = Math.max(0, Math.floor(startSample / fftSize) * fftSize);
+
+		return { startSample: start, endSample: Math.ceil(endSample / fftSize) * fftSize };
+	}
 
 	const start =
 		totalSamples < fftSize

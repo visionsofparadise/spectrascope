@@ -2,6 +2,20 @@ import { describe, expect, it } from "vitest";
 import { resolveFftContext } from "./fft-context";
 
 describe("minimum FFT context", () => {
+	it("anchors contained fine views to the same source FFT block", () => {
+		for (const start of [32, 35, 40, 45]) {
+			expect(resolveFftContext(start, start + 2, 100, 16, true)).toEqual({ startSample: 32, endSample: 48 });
+		}
+	});
+
+	it("keeps source-zero anchors at short-source and partial-tail boundaries", () => {
+		expect(resolveFftContext(1, 2, 3, 16, true)).toEqual({ startSample: 0, endSample: 16 });
+		expect(resolveFftContext(98, 100, 100, 16, true)).toEqual({ startSample: 96, endSample: 112 });
+	});
+
+	it("retains full coverage when a fine view straddles anchored blocks", () => {
+		expect(resolveFftContext(47, 49, 100, 16, true)).toEqual({ startSample: 32, endSample: 64 });
+	});
 	it.each([
 		[40, 42, 100, 16, 33, 49],
 		[0, 1, 100, 16, 0, 16],
