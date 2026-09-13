@@ -10,6 +10,11 @@ import type { ComputeResult, ComputeResultReady, SpectralOptions } from "spectra
 import type { ReactElement } from "react";
 
 const runtime = vi.hoisted(() => ({
+	tiles: null as Array<{
+		key: string;
+		waveform: ComputeResultReady | null;
+		spectrogram: ComputeResultReady | null;
+	}> | null,
 	index: 0,
 	refs: [] as Array<{ current: unknown }>,
 	held: null as ComputeResultReady | null,
@@ -20,6 +25,7 @@ const runtime = vi.hoisted(() => ({
 
 vi.mock("react", async (original) => ({
 	...(await original<typeof import("react")>()),
+	memo: (component: unknown) => component,
 	useRef: (initial: unknown) => (runtime.refs[runtime.index++] ??= { current: initial }),
 	useState: () => [
 		runtime.held,
@@ -35,9 +41,20 @@ vi.mock("./spectral/useContainerSize", () => ({ useContainerSize: () => ({ width
 vi.mock("./spectral/useComputeSize", () => ({ useComputeSize: (size: unknown) => size }));
 vi.mock("spectral-display", async (original) => ({
 	...(await original<typeof import("spectral-display")>()),
-	useSpectralCompute: (options: SpectralOptions) => {
+	useDisplayCompute: (options: SpectralOptions) => {
 		runtime.options = options;
-		return runtime.result;
+		const result = runtime.result;
+		const held =
+			result.status === "ready"
+				? result
+				: result.status === "computing" || result.status === "error"
+					? result.previous
+					: null;
+		return {
+			...result,
+			fraction: result.status === "computing" ? result.fraction : 1,
+			tiles: runtime.tiles ?? (held ? [{ key: "tile", waveform: held, spectrogram: held }] : []),
+		};
 	},
 	SpectrogramCanvas: () => null,
 	WaveformCanvas: () => null,
@@ -71,6 +88,13 @@ function ready(frequencyScale = "mel"): ComputeResultReady {
 function elements(node: unknown): Array<ReactElement<Record<string, unknown>>> {
 	if (Array.isArray(node)) return node.flatMap(elements);
 	if (!isValidElement<Record<string, unknown>>(node)) return [];
+	if (
+		typeof node.type === "function" &&
+		node.type !== SpectrogramCanvas &&
+		node.type !== WaveformCanvas &&
+		node.type !== ComputeProgress
+	)
+		return [node, ...elements((node.type as (props: unknown) => unknown)(node.props))];
 	return [node, ...elements(node.props.children)];
 }
 
@@ -84,6 +108,7 @@ function progress() {
 }
 
 beforeEach(() => {
+	runtime.tiles = null;
 	runtime.index = 0;
 	runtime.refs = [];
 	runtime.held = null;
@@ -93,6 +118,50 @@ beforeEach(() => {
 });
 
 describe("replacement analysis progress", () => {
+	it("admits a throttled committed pan even when live scrolling already advanced", () => {
+		render();
+		render({ startMs: 100, endMs: 1100, liveStartMs: 120, liveEndMs: 1120, freezeCompute: true });
+		expect(runtime.options?.query).toMatchObject({ startMs: 100, endMs: 1100 });
+		const admitted = runtime.options;
+		render({ startMs: 100, endMs: 1100, liveStartMs: 150, liveEndMs: 1150, freezeCompute: true, fftSize: 4096 });
+		expect(runtime.options).toBe(admitted);
+	});
+	it("keeps waveform coverage while withholding stale frequency-scale spectral tiles", () => {
+		const previous = ready("mel");
+		const next = ready("linear");
+		runtime.tiles = [
+			{ key: "old", waveform: previous, spectrogram: previous },
+			{ key: "new", waveform: next, spectrogram: next },
+		];
+		const onDisplayedResultChange = vi.fn();
+		const tree = render({ frequencyScale: "linear", onDisplayedResultChange });
+		for (const effect of runtime.effects) effect();
+		expect(
+			tree.filter((element) => element.type === SpectrogramCanvas).map((element) => element.props.computeResult),
+		).toEqual([next]);
+		expect(tree.filter((element) => element.type === WaveformCanvas)).toHaveLength(2);
+		expect(onDisplayedResultChange).toHaveBeenCalledWith(
+			props.source.id,
+			expect.objectContaining({ results: [previous, next], spectrogramResults: [next] }),
+		);
+	});
+	it("keeps waveform canvas identity across palette keys and overlapping tile reorder", () => {
+		const first = ready();
+		const second = ready();
+		runtime.tiles = [
+			{ key: "lava:first", waveform: first, spectrogram: first },
+			{ key: "lava:second", waveform: second, spectrogram: null },
+		];
+		const before = render().filter((element) => element.props["data-display-layer"] === "waveform");
+		runtime.tiles = [
+			{ key: "viridis:second", waveform: second, spectrogram: null },
+			{ key: "viridis:first", waveform: first, spectrogram: ready() },
+		];
+		const after = render({ spectrogramColormap: "viridis" }).filter(
+			(element) => element.props["data-display-layer"] === "waveform",
+		);
+		expect(after.map((element) => element.key)).toEqual([before[1]?.key, before[0]?.key]);
+	});
 	it("adds placement once to waveform readouts while pointer time stays in timeline coordinates", () => {
 		const placed = {
 			...props.audioData,
@@ -115,7 +184,7 @@ describe("replacement analysis progress", () => {
 		for (const effect of runtime.effects) effect();
 		expect(onDisplayedResultChange).toHaveBeenCalledWith(
 			props.source.id,
-			expect.objectContaining({ result: runtime.held, timeOffsetMs: 350 }),
+			expect.objectContaining({ results: [runtime.held], timeOffsetMs: 350 }),
 		);
 		runtime.refs[0]!.current = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }) };
 		const move = tree[0]!.props.onMouseMove as (event: { clientX: number; clientY: number }) => void;
@@ -154,14 +223,12 @@ describe("replacement analysis progress", () => {
 		const container = tree.find((element) => element.props.children === spectrum);
 		expect(container?.props.style).toMatchObject({ visibility: "hidden" });
 		const waveform = tree.find((element) => element.type === WaveformCanvas)!;
-		(spectrum.props.onRendered as () => void)();
-		expect(runtime.held).toBeNull();
-		(waveform.props.onRendered as () => void)();
-		expect(runtime.held).toBe(incoming);
+		expect(waveform.props.computeResult).toBe(incoming);
+		expect(waveform.props.onRendered).toBeUndefined();
 		expect(render(overrides).some((element) => element.props.role === "progressbar")).toBe(false);
 	});
 	it("aligns native spectral pixels to a common display rate while keeping waveform crop independent", () => {
-		runtime.result = ready();
+		runtime.result = ready("linear");
 		const frequencyRange = { top: 0, bottom: 0.75 };
 		const tree = render({ displaySampleRate: 96000, frequencyScale: "linear", frequencyRange });
 		expect(runtime.options?.metadata.sampleRate).toBe(48000);
@@ -196,7 +263,7 @@ describe("replacement analysis progress", () => {
 		},
 	);
 
-	it("disables spectra and completes a waveform-only replacement after one draw", () => {
+	it("disables spectra and presents a waveform-only result immediately", () => {
 		runtime.held = ready();
 		const incoming = ready();
 		runtime.result = incoming;
@@ -204,10 +271,7 @@ describe("replacement analysis progress", () => {
 		expect(tree[0]?.props.className).not.toContain("bg-void");
 		expect(runtime.options?.config?.spectrogram).toBe(false);
 		expect(tree.some((element) => element.type === SpectrogramCanvas)).toBe(false);
-		const draw = tree.find((element) => element.type === WaveformCanvas && element.props.onRendered)?.props
-			.onRendered as () => void;
-		draw();
-		expect(runtime.held).toBe(incoming);
+		expect(tree.find((element) => element.type === WaveformCanvas)?.props.computeResult).toBe(incoming);
 		expect(render({ spectrogram: false }).some((element) => element.props.role === "progressbar")).toBe(false);
 	});
 
@@ -249,19 +313,31 @@ describe("replacement analysis progress", () => {
 		}
 	});
 
-	it("shows final rendering progress until both replacement layers have drawn", () => {
-		runtime.held = ready();
-		const incoming = ready();
-		runtime.result = incoming;
+	it("publishes waveform tiles while spectra are still pending", () => {
+		const waveform = ready();
+		runtime.result = { status: "computing", fraction: 0.5, previous: null };
+		runtime.tiles = [{ key: "first", waveform, spectrogram: null }];
 		const tree = render();
-		expect(progress()?.props).toMatchObject({ "aria-valuenow": 100, "aria-valuetext": "Rendering updated view" });
-		const draw = tree.find((element) => element.type === SpectrogramCanvas && element.props.onRendered)?.props
-			.onRendered as () => void;
-		draw();
-		expect(progress()).toBeDefined();
-		draw();
-		expect(runtime.held).toBe(incoming);
-		expect(progress()).toBeUndefined();
+		expect(tree.find((element) => element.type === WaveformCanvas)?.props.computeResult).toBe(waveform);
+		expect(tree.some((element) => element.type === SpectrogramCanvas)).toBe(false);
+		expect(tree.some((element) => element.type === ComputeProgress)).toBe(false);
+		expect(progress()?.props["aria-valuenow"]).toBe(50);
+	});
+
+	it("keeps old spectral coverage below incoming spectra and every waveform above spectra", () => {
+		const old = ready();
+		const first = ready();
+		const second = ready();
+		runtime.tiles = [
+			{ key: "old", waveform: old, spectrogram: old },
+			{ key: "first", waveform: first, spectrogram: first },
+			{ key: "second", waveform: second, spectrogram: null },
+		];
+		const canvases = render().filter(
+			(element) => element.type === SpectrogramCanvas || element.type === WaveformCanvas,
+		);
+		expect(canvases.map((element) => element.props.computeResult)).toEqual([old, first, old, first, second]);
+		expect(canvases.slice(2).every((element) => element.type === WaveformCanvas)).toBe(true);
 	});
 
 	it.each([

@@ -1,5 +1,6 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, memo } from "react";
 import { SpectrogramCanvas } from "spectral-display";
+import { computeWindowTransform } from "../useTimeViewport";
 import {
 	constrainFrequencyRange,
 	FULL_FREQUENCY_RANGE,
@@ -9,6 +10,8 @@ import {
 	zoomFrequencyRange,
 } from "../utils/frequencyRange";
 import { fractionToFrequency } from "../utils/frequencyScale";
+import { displayResultKey } from "./displayResultKey";
+import { tileCoverageMask } from "./tileCoverageMask";
 import type { FrequencyScale } from "spectral-display";
 import type { ComputeResultReady, TextureVerticalRange } from "spectral-display";
 
@@ -16,6 +19,9 @@ interface FrequencyMinimapProps {
 	readonly amplitude?: boolean;
 	readonly sampleRate: number;
 	readonly computeResult: ComputeResultReady | null;
+	readonly tiles?: ReadonlyArray<{ readonly result: ComputeResultReady; readonly timeOffsetMs: number }>;
+	readonly startMs?: number;
+	readonly endMs?: number;
 	readonly frequencyScale?: FrequencyScale;
 	readonly frequencyRange: TextureVerticalRange;
 	readonly onFrequencyRangeChange: (range: TextureVerticalRange) => void;
@@ -25,6 +31,9 @@ export function FrequencyMinimap({
 	amplitude = false,
 	sampleRate,
 	computeResult,
+	tiles,
+	startMs = computeResult?.query.startMs ?? 0,
+	endMs = computeResult?.query.endMs ?? 1,
 	frequencyScale = "mel",
 	frequencyRange,
 	onFrequencyRangeChange,
@@ -122,20 +131,37 @@ export function FrequencyMinimap({
 			onFrequencyRangeChange(next);
 		}
 	};
-	const renderable =
-		!amplitude && computeResult?.options.config.frequencyScale === frequencyScale ? computeResult : null;
+	const renderable = amplitude
+		? []
+		: (tiles ?? (computeResult ? [{ result: computeResult, timeOffsetMs: 0 }] : [])).filter(
+				(tile) => tile.result.options.config.frequencyScale === frequencyScale,
+			);
 	const amplitudeOf = (fraction: number) => Number((1 - 2 * fraction).toFixed(3));
 	const label = amplitude
 		? `${amplitudeOf(range.bottom)} to ${amplitudeOf(range.top)} FS`
 		: `${Math.round(fractionToFrequency(range.bottom, sampleRate, undefined, frequencyScale))} to ${Math.round(fractionToFrequency(range.top, sampleRate, undefined, frequencyScale))} Hz`;
 
 	return (
-		<div ref={containerRef} className="relative w-8 bg-void">
-			{renderable !== null && (
-				<div className="pointer-events-none absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full">
-					<SpectrogramCanvas computeResult={renderable} />
+		<div ref={containerRef} className="relative w-8 overflow-hidden bg-void">
+			{renderable.map(({ result, timeOffsetMs }, index) => (
+				<div
+					key={displayResultKey(result)}
+					className="pointer-events-none absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full"
+					style={{
+						transform: computeWindowTransform(
+							{ startMs: result.query.startMs + timeOffsetMs, endMs: result.query.endMs + timeOffsetMs },
+							{ startMs, endMs },
+						),
+						transformOrigin: "left",
+						maskImage: tileCoverageMask(
+							result,
+							renderable.slice(index + 1).map((tile) => tile.result),
+						),
+					}}
+				>
+					<FrequencyTile result={result} />
 				</div>
-			)}
+			))}
 			<div
 				className="pointer-events-none absolute inset-x-0 top-0 bg-black/65"
 				style={{ height: `${range.top * 100}%` }}
@@ -206,3 +232,7 @@ export function FrequencyMinimap({
 		</div>
 	);
 }
+
+const FrequencyTile = memo(({ result }: { readonly result: ComputeResultReady }) => (
+	<SpectrogramCanvas computeResult={result} />
+));

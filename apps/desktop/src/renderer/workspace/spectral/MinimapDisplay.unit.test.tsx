@@ -20,9 +20,11 @@ vi.mock("react", async (importOriginal) => ({
 vi.mock("./useContainerSize", () => ({ useContainerSize: () => ({ width: 800, height: 32 }) }));
 vi.mock("./useComputeSize", () => ({ useComputeSize: (size: unknown) => size }));
 vi.mock("spectral-display", () => ({
-	useSpectralCompute: (options: SpectralOptions) => {
+	useDisplayCompute: (options: SpectralOptions) => {
 		runtime.options = options;
-		return runtime.result;
+		const result = runtime.result as { status: string; previous?: unknown };
+		const held = result.status === "ready" ? result : result.previous;
+		return { ...result, fraction: 0, tiles: held ? [{ key: "tile", waveform: held, spectrogram: null }] : [] };
 	},
 	WaveformCanvas: () => null,
 }));
@@ -115,7 +117,7 @@ it("crops source-aligned output to the full source extent", () => {
 		waveformColor: [255, 255, 255],
 	}) as ReactElement<ComponentProps<"div">>;
 	const children = view.props.children as Array<ReactElement<ComponentProps<"div">>>;
-	const waveform = children.find((child) => isValidElement(child) && child.props.style?.transform);
+	const waveform = children.flat().find((child) => isValidElement(child) && child.props.style?.transform);
 	expect(waveform?.props.style).toEqual({ transform: "translateX(0%) scaleX(1.2)", transformOrigin: "left" });
 	expect(view.props.className).toContain("overflow-hidden");
 });
@@ -145,6 +147,6 @@ it("reads placed minimap audio from native source and positions it in timeline c
 	expect(runtime.options?.metadata.sampleCount).toBe(48000);
 	expect(runtime.options?.query).toMatchObject({ startMs: -250, endMs: 1750 });
 	const children = view.props.children as Array<ReactElement<ComponentProps<"div">>>;
-	const waveform = children.find((child) => isValidElement(child) && child.props.style?.transform);
+	const waveform = children.flat().find((child) => isValidElement(child) && child.props.style?.transform);
 	expect(waveform?.props.style).toEqual({ transform: "translateX(12.5%) scaleX(0.5)", transformOrigin: "left" });
 });

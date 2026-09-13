@@ -7,12 +7,18 @@ import { TimelineView } from "./TimelineView";
 import { EMPTY_AUDIO_DATA } from "./viewAudio";
 import type { SpectralOptions } from "spectral-display";
 
-const compute = vi.hoisted(() => vi.fn<(options: SpectralOptions) => { status: "idle" }>(() => ({ status: "idle" })));
+const compute = vi.hoisted(() =>
+	vi.fn<(options: SpectralOptions) => { status: "idle"; fraction: number; tiles: [] }>(() => ({
+		status: "idle",
+		fraction: 0,
+		tiles: [],
+	})),
+);
 const viewportCalls = vi.hoisted(() => vi.fn());
 
 vi.mock("spectral-display", async (importOriginal) => ({
 	...(await importOriginal<typeof import("spectral-display")>()),
-	useSpectralCompute: compute,
+	useDisplayCompute: compute,
 	SpectrogramCanvas: () => null,
 	WaveformCanvas: () => null,
 }));

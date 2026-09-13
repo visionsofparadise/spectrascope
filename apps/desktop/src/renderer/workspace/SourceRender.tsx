@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SpectrogramCanvas, WaveformCanvas, useSpectralCompute } from "spectral-display";
+import { useCallback, useEffect, useMemo, useRef, memo } from "react";
+import { SpectrogramCanvas, WaveformCanvas, useDisplayCompute } from "spectral-display";
 import { hexToRgb255 } from "./spectral/colorUtil";
 import { ComputeProgress } from "./spectral/ComputeProgress";
+import { displayResultKey } from "./spectral/displayResultKey";
+import { tileCoverageMask } from "./spectral/tileCoverageMask";
 import { useComputeSize } from "./spectral/useComputeSize";
 import { useContainerSize } from "./spectral/useContainerSize";
 import { computeWindowTransform } from "./useTimeViewport";
@@ -182,69 +184,62 @@ export function SourceRender({
 
 	const computeOptionsRef = useRef(spectralOptions);
 
-	if (!freezeCompute) computeOptionsRef.current = spectralOptions;
+	if (
+		!freezeCompute ||
+		spectralOptions.query.startMs !== computeOptionsRef.current.query.startMs ||
+		spectralOptions.query.endMs !== computeOptionsRef.current.query.endMs
+	)
+		computeOptionsRef.current = spectralOptions;
 
-	const computeResult = useSpectralCompute(computeOptionsRef.current);
+	const computeResult = useDisplayCompute(computeOptionsRef.current);
 
-	const incoming = computeResult.status === "ready" ? computeResult : null;
-
-	const [held, setHeld] = useState<ComputeResultReady | null>(null);
-	const front =
-		computeResult.status === "idle" || held?.options.config.frequencyScale !== frequencyScale ? null : held;
+	const waveformResults = useMemo(
+		() => computeResult.tiles.flatMap((tile) => (tile.waveform ? [tile.waveform] : [])),
+		[computeResult.tiles],
+	);
+	const spectrogramResults = useMemo(
+		() =>
+			computeResult.tiles.flatMap((tile) =>
+				spectrogram && tile.spectrogram?.options.config.frequencyScale === frequencyScale ? [tile.spectrogram] : [],
+			),
+		[computeResult.tiles, frequencyScale, spectrogram],
+	);
+	const hasCoverage = waveformResults.length > 0 || spectrogramResults.length > 0;
 
 	useEffect(() => {
 		onDisplayedResultChange?.(
 			source.id,
-			front ? { result: front, sourceName: source.name, timeOffsetMs: readoutTimeOffsetMs + placementMs } : null,
+			hasCoverage
+				? {
+						results: waveformResults,
+						spectrogramResults,
+						sourceName: source.name,
+						timeOffsetMs: readoutTimeOffsetMs + placementMs,
+					}
+				: null,
 		);
-	}, [source.id, source.name, front, readoutTimeOffsetMs, placementMs, onDisplayedResultChange]);
+	}, [
+		source.id,
+		source.name,
+		waveformResults,
+		spectrogramResults,
+		hasCoverage,
+		readoutTimeOffsetMs,
+		placementMs,
+		onDisplayedResultChange,
+	]);
 	useEffect(() => () => onDisplayedResultChange?.(source.id, null), [source.id, onDisplayedResultChange]);
 
-	useEffect(() => {
-		if (computeResult.status === "idle") setHeld(null);
-	}, [computeResult.status]);
-
-	const drawCountRef = useRef(0);
-	const backResultRef = useRef<ComputeResultReady | null>(null);
-
-	if (backResultRef.current !== incoming) {
-		backResultRef.current = incoming;
-		drawCountRef.current = 0;
-	}
-
-	const handleBackRendered = useCallback(() => {
-		drawCountRef.current += 1;
-
-		if (drawCountRef.current >= (spectrogram ? 2 : 1) && backResultRef.current !== null) {
-			setHeld(backResultRef.current);
-		}
-	}, [spectrogram]);
-
-	const layerKeyCounterRef = useRef(0);
-	const layerKeysRef = useRef(new WeakMap<ComputeResultReady, number>());
-
-	const keyForResult = (result: ComputeResultReady): number => {
-		let key = layerKeysRef.current.get(result);
-
-		if (key === undefined) {
-			key = layerKeyCounterRef.current += 1;
-			layerKeysRef.current.set(result, key);
-		}
-
-		return key;
-	};
-
 	const live = { startMs: liveStartMs ?? startMs, endMs: liveEndMs ?? endMs };
-
-	const layers: Array<{ result: ComputeResultReady; isFront: boolean }> = [];
-
-	if (front !== null) layers.push({ result: front, isFront: true });
-
-	if (incoming !== null && incoming !== held) layers.push({ result: incoming, isFront: false });
-
-	const updating =
-		front !== null && (computeResult.status === "computing" || (incoming !== null && incoming !== held));
-	const progressFraction = computeResult.status === "computing" ? computeResult.fraction : 1;
+	const transformFor = (result: ComputeResultReady) => ({
+		transform: computeWindowTransform(
+			{ startMs: result.query.startMs + placementMs, endMs: result.query.endMs + placementMs },
+			live,
+		),
+		transformOrigin: "left",
+	});
+	const updating = hasCoverage && computeResult.status === "computing";
+	const progressFraction = computeResult.fraction;
 	const progressPercent = Number.isFinite(progressFraction)
 		? Math.round(Math.max(0, Math.min(1, progressFraction)) * 100)
 		: 0;
@@ -256,67 +251,55 @@ export function SourceRender({
 			style={{ opacity, clipPath }}
 			onMouseMove={handleMouseMove}
 		>
-			{layers.map(({ result, isFront }) => {
-				const placement = spectrogramPlacement(
-					result.options.metadata.sampleRate,
-					displaySampleRate,
-					frequencyRange,
-					frequencyScale,
-				);
-
-				return (
+			{spectrogram &&
+				spectrogramResults.map((result, index) => (
 					<div
-						key={keyForResult(result)}
+						key={displayResultKey(result)}
+						data-display-layer="spectrogram"
+						data-tile-start-ms={result.query.startMs}
 						className="absolute inset-0"
-						style={
-							isFront
-								? {
-										transform: computeWindowTransform(
-											{
-												startMs: result.query.startMs + placementMs,
-												endMs: result.query.endMs + placementMs,
-											},
-											live,
-										),
-										transformOrigin: "left",
-									}
-								: { visibility: "hidden" }
-						}
+						style={{
+							...transformFor(result),
+							maskImage: tileCoverageMask(result, spectrogramResults.slice(index + 1)),
+						}}
 					>
-						{spectrogram && (
-							<div
-								className="absolute inset-x-0 [&>canvas]:h-full [&>canvas]:w-full"
-								style={{
-									opacity: spectrogramOpacity,
-									top: `${placement.top * 100}%`,
-									height: `${placement.height * 100}%`,
-									visibility: placement.visible ? undefined : "hidden",
-								}}
-							>
-								<SpectrogramCanvas
-									frequencyRange={placement.range}
-									computeResult={result}
-									onRendered={isFront ? undefined : handleBackRendered}
-								/>
-							</div>
-						)}
+						<SpectrumTile
+							result={result}
+							displaySampleRate={displaySampleRate}
+							frequencyRange={frequencyRange}
+							frequencyScale={frequencyScale}
+							opacity={spectrogramOpacity}
+						/>
+					</div>
+				))}
+			{computeResult.tiles.map(
+				({ waveform: result }, index) =>
+					result && (
 						<div
-							className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full"
-							style={{ opacity: waveformOpacity }}
+							key={displayResultKey(result)}
+							data-display-layer="waveform"
+							data-tile-start-ms={result.query.startMs}
+							className="absolute inset-0"
+							style={{
+								...transformFor(result),
+								maskImage: tileCoverageMask(
+									result,
+									computeResult.tiles
+										.slice(index + 1)
+										.flatMap((tile) => (tile.waveform ? [tile.waveform] : [])),
+								),
+							}}
 						>
-							<WaveformCanvas
-								verticalRange={frequencyRange}
-								computeResult={result}
+							<WaveformTile
+								result={result}
 								color={waveformColor}
-								onRendered={isFront ? undefined : handleBackRendered}
+								frequencyRange={frequencyRange}
+								opacity={waveformOpacity}
 							/>
 						</div>
-					</div>
-				);
-			})}
-			{front === null && computeResult.status === "computing" && (
-				<ComputeProgress fraction={computeResult.fraction} />
+					),
 			)}
+			{!hasCoverage && computeResult.status === "computing" && <ComputeProgress fraction={computeResult.fraction} />}
 			{updating && (
 				<div
 					role="progressbar"
@@ -340,10 +323,64 @@ export function SourceRender({
 					role="status"
 					className="pointer-events-none absolute bottom-1 left-2 font-technical text-[length:var(--text-xs)] text-chrome-text-secondary"
 				>
-					{front ? "Analysis update failed: " : "Analysis unavailable: "}
-					{computeResult.error.message}
+					{hasCoverage ? "Analysis update failed: " : "Analysis unavailable: "}
+					{computeResult.error?.message}
 				</div>
 			)}
 		</div>
 	);
 }
+
+const WaveformTile = memo(
+	({
+		result,
+		color,
+		frequencyRange,
+		opacity,
+	}: {
+		readonly result: ComputeResultReady;
+		readonly color: [number, number, number];
+		readonly frequencyRange?: TextureVerticalRange;
+		readonly opacity: number;
+	}) => (
+		<div className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full" style={{ opacity }}>
+			<WaveformCanvas verticalRange={frequencyRange} computeResult={result} color={color} />
+		</div>
+	),
+);
+
+const SpectrumTile = memo(
+	({
+		result,
+		displaySampleRate,
+		frequencyRange,
+		frequencyScale,
+		opacity,
+	}: {
+		readonly result: ComputeResultReady;
+		readonly displaySampleRate: number;
+		readonly frequencyRange?: TextureVerticalRange;
+		readonly frequencyScale: FrequencyScale;
+		readonly opacity: number;
+	}) => {
+		const placement = useMemo(
+			() =>
+				spectrogramPlacement(result.options.metadata.sampleRate, displaySampleRate, frequencyRange, frequencyScale),
+			[result.options.metadata.sampleRate, displaySampleRate, frequencyRange, frequencyScale],
+		);
+
+		return (
+			<div
+				className="absolute inset-x-0 [&>canvas]:h-full [&>canvas]:w-full"
+				style={{
+					opacity,
+					top: `${placement.top * 100}%`,
+					height: `${placement.height * 100}%`,
+					visibility: placement.visible ? undefined : "hidden",
+				}}
+			>
+				<SpectrogramCanvas frequencyRange={placement.range} computeResult={result} />
+			</div>
+		);
+	},
+);

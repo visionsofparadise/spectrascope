@@ -158,12 +158,21 @@ export function StripLayout({ view, header, children, channelInput, spectrogram 
 					frequencyScale={view.frequencyScale}
 					onFrequencyRangeChange={view.onFrequencyRangeChange}
 					sampleRate={view.chromeAudio.sampleRate}
-					computeResult={
+					computeResult={null}
+					startMs={view.viewport.startMs}
+					endMs={view.viewport.endMs}
+					tiles={
 						spectrogram
-							? ([...view.displayed.values()].find(
-									(entry) => entry.result.options.readSamples === view.chromeAudio.readSamples,
-								)?.result ?? null)
-							: null
+							? [...view.displayed.values()].flatMap((entry) =>
+									(entry.spectrogramResults ?? (entry.result ? [entry.result] : []))
+										.filter(
+											(result) =>
+												result.options.readSamples ===
+												(view.chromeAudio.timelinePlacement?.source ?? view.chromeAudio).readSamples,
+										)
+										.map((result) => ({ result, timeOffsetMs: entry.timeOffsetMs })),
+								)
+							: []
 					}
 				/>
 				<DbAxis verticalRange={view.frequencyRange} />

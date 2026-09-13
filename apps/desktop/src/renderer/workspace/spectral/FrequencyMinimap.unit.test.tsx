@@ -12,6 +12,7 @@ const runtime = vi.hoisted(() => ({
 }));
 vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
+	memo: (component: unknown) => component,
 	useRef: (initial: unknown) => {
 		const index = runtime.index++;
 		return (runtime.refs[index] ??= { current: initial });
@@ -56,7 +57,11 @@ function hasCanvas(node: unknown): boolean {
 	if (Array.isArray(node)) return node.some(hasCanvas);
 	if (!node || typeof node !== "object") return false;
 	const element = node as ReactElement<{ children?: unknown }>;
-	return element.type === SpectrogramCanvas || hasCanvas(element.props?.children);
+	return (
+		element.type === SpectrogramCanvas ||
+		(typeof element.type === "function" && hasCanvas((element.type as (props: unknown) => unknown)(element.props))) ||
+		hasCanvas(element.props?.children)
+	);
 }
 beforeEach(() => {
 	runtime.refs = [];
@@ -64,8 +69,67 @@ beforeEach(() => {
 	runtime.result = null;
 });
 describe("frequency minimap controls", () => {
+	it("keeps overlapping tile canvas identity when earlier tiles leave the viewport", () => {
+		const first = {
+			status: "ready",
+			query: { startMs: 0, endMs: 500 },
+			options: { config: { frequencyScale: "mel" } },
+		} as ComputeResultReady;
+		const second = { ...first, query: { ...first.query, startMs: 500, endMs: 1000 } };
+		const draw = (results: Array<ComputeResultReady>) => {
+			runtime.index = 0;
+			const tree = FrequencyMinimap({
+				sampleRate: 48000,
+				computeResult: null,
+				tiles: results.map((result) => ({ result, timeOffsetMs: 0 })),
+				startMs: 0,
+				endMs: 1000,
+				frequencyRange: { top: 0, bottom: 1 },
+				onFrequencyRangeChange: vi.fn(),
+			});
+			return (tree.props.children as Array<unknown>)
+				.flat()
+				.filter(
+					(child) =>
+						child &&
+						typeof child === "object" &&
+						(child as ReactElement<ComponentProps<"div">>).props?.style?.transform,
+				) as Array<ReactElement>;
+		};
+		expect(draw([second])[0]?.key).toBe(draw([first, second])[1]?.key);
+	});
+	it("places progressive spectral tiles in the live timeline and masks replaced coverage", () => {
+		const old = {
+			status: "ready",
+			query: { startMs: 0, endMs: 1000 },
+			options: { config: { frequencyScale: "mel" } },
+		} as ComputeResultReady;
+		const next = { ...old, query: { ...old.query, startMs: 500, endMs: 1000 } };
+		const tree = FrequencyMinimap({
+			sampleRate: 48000,
+			computeResult: null,
+			tiles: [
+				{ result: old, timeOffsetMs: 250 },
+				{ result: next, timeOffsetMs: 250 },
+			],
+			startMs: 0,
+			endMs: 2000,
+			frequencyRange: { top: 0, bottom: 1 },
+			onFrequencyRangeChange: vi.fn(),
+		});
+		const children = (tree.props.children as Array<unknown>).flat() as Array<ReactElement<ComponentProps<"div">>>;
+		const layers = children.filter((child) => child && typeof child === "object" && child.props?.style?.transform);
+		expect(layers[0]?.props.style?.transform).toBe("translateX(12.5%) scaleX(0.5)");
+		expect(layers[0]?.props.style?.maskImage).toContain("black 50%, transparent 50%");
+		expect(layers[1]?.props.style?.transform).toBe("translateX(37.5%) scaleX(0.25)");
+		expect(layers[1]?.props.style?.maskImage).toBeUndefined();
+	});
 	it("keeps amplitude navigation without mounting a supplied spectrum", () => {
-		runtime.result = { status: "ready", options: { config: { frequencyScale: "mel" } } } as ComputeResultReady;
+		runtime.result = {
+			status: "ready",
+			query: { startMs: 0, endMs: 1000, width: 256, height: 400 },
+			options: { config: { frequencyScale: "mel" } },
+		} as ComputeResultReady;
 		const change = vi.fn();
 		const tree = renderTree(change, "mel", true);
 		const controls = buttons(tree);
@@ -97,11 +161,19 @@ describe("frequency minimap controls", () => {
 		expect(pan?.props["aria-valuetext"]).toBe(`${Math.round(nyquist * 0.25)} to ${Math.round(nyquist * 0.75)} Hz`);
 	});
 	it("hides held pixels from a different scale until matching output is ready", () => {
-		const previous = { status: "ready", options: { config: { frequencyScale: "mel" } } };
+		const previous = {
+			status: "ready",
+			query: { startMs: 0, endMs: 1000, width: 256, height: 400 },
+			options: { config: { frequencyScale: "mel" } },
+		};
 		runtime.result = previous as ComputeResultReady;
 		expect(hasCanvas(renderTree(vi.fn(), "linear"))).toBe(false);
 		expect(hasCanvas(renderTree(vi.fn(), "mel"))).toBe(true);
-		runtime.result = { status: "ready", options: { config: { frequencyScale: "linear" } } } as ComputeResultReady;
+		runtime.result = {
+			status: "ready",
+			query: { startMs: 0, endMs: 1000, width: 256, height: 400 },
+			options: { config: { frequencyScale: "linear" } },
+		} as ComputeResultReady;
 		expect(hasCanvas(renderTree(vi.fn(), "linear"))).toBe(true);
 	});
 	it("zooms and resets through keyboard and the named reset action", () => {

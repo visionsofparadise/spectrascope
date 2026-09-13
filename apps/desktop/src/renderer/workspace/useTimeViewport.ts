@@ -116,8 +116,10 @@ export function useTimeViewport(
 	freezeCommitRef.current = freezeCommit;
 	extentRef.current = { startMs: extentStartMs, endMs: extentEndMs };
 
-	const scheduleCommit = useCallback(() => {
+	const scheduleCommit = useCallback((zoom = false) => {
 		if (commitTimerRef.current !== null) {
+			if (!zoom && !freezeCommitRef.current) return;
+
 			window.clearTimeout(commitTimerRef.current);
 			commitTimerRef.current = null;
 		}
@@ -178,7 +180,7 @@ export function useTimeViewport(
 				setLive((current) => panWindow(current, deltaFrac, extentRef.current));
 			}
 
-			scheduleCommit();
+			scheduleCommit(event.ctrlKey || event.metaKey);
 		};
 
 		element.addEventListener("wheel", onWheel, { passive: false });
@@ -199,8 +201,14 @@ export function useTimeViewport(
 
 	const setViewport = useCallback(
 		(next: TimeWindow) => {
-			setLive(zoomWindow(next, 1, 0.5, extentRef.current, minimumRef.current));
-			scheduleCommit();
+			const nextLive = zoomWindow(next, 1, 0.5, extentRef.current, minimumRef.current);
+			const currentSpan = liveRef.current.endMs - liveRef.current.startMs;
+			const nextSpan = nextLive.endMs - nextLive.startMs;
+			const changedScale = Math.abs(nextSpan - currentSpan) > Math.max(nextSpan, currentSpan) * 1e-10;
+
+			liveRef.current = nextLive;
+			setLive(nextLive);
+			scheduleCommit(changedScale);
 		},
 		[scheduleCommit],
 	);

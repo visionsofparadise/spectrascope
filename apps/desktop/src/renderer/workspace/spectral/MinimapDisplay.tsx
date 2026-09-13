@@ -1,12 +1,13 @@
-import { useCallback, useMemo, useRef } from "react";
-import { WaveformCanvas, useSpectralCompute } from "spectral-display";
+import { useCallback, useMemo, useRef, memo } from "react";
+import { WaveformCanvas, useDisplayCompute } from "spectral-display";
 import { computeWindowTransform } from "../useTimeViewport";
 import { ComputeProgress } from "./ComputeProgress";
-import { heldComputeResult } from "./computeResult";
+import { displayResultKey } from "./displayResultKey";
+import { tileCoverageMask } from "./tileCoverageMask";
 import { useComputeSize } from "./useComputeSize";
 import { useContainerSize } from "./useContainerSize";
 import type { AudioData } from "./types";
-import type { ChannelInput, SpectralOptions } from "spectral-display";
+import type { ChannelInput, ComputeResultReady, SpectralOptions } from "spectral-display";
 
 interface MinimapDisplayProps {
 	readonly audioData: AudioData;
@@ -121,9 +122,9 @@ export function MinimapDisplay({
 		};
 	}, [audioData, width, height, channelInput]);
 
-	const computeResult = useSpectralCompute(spectralOptions);
+	const computeResult = useDisplayCompute(spectralOptions);
 
-	const renderable = heldComputeResult(computeResult);
+	const hasCoverage = computeResult.tiles.some((tile) => tile.waveform);
 
 	const vpStartPct = viewStartFrac * 100;
 	const vpWidthPct = (viewEndFrac - viewStartFrac) * 100;
@@ -172,28 +173,40 @@ export function MinimapDisplay({
 				}
 			}}
 		>
-			{renderable !== null && (
-				<div
-					className="pointer-events-none absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full"
-					style={{
-						transform: computeWindowTransform(
-							{
-								startMs:
-									renderable.query.startMs +
-									((audioData.timelinePlacement?.offsetSamples ?? 0) * 1000) / audioData.sampleRate,
-								endMs:
-									renderable.query.endMs +
-									((audioData.timelinePlacement?.offsetSamples ?? 0) * 1000) / audioData.sampleRate,
-							},
-							{ startMs: 0, endMs: audioData.durationMs },
-						),
-						transformOrigin: "left",
-					}}
-				>
-					<WaveformCanvas computeResult={renderable} color={color} />
-				</div>
+			{computeResult.tiles.map(
+				({ waveform: renderable }, index) =>
+					renderable && (
+						<div
+							key={displayResultKey(renderable)}
+							data-display-layer="waveform"
+							data-tile-start-ms={renderable.query.startMs}
+							className="pointer-events-none absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full"
+							style={{
+								maskImage: tileCoverageMask(
+									renderable,
+									computeResult.tiles
+										.slice(index + 1)
+										.flatMap((tile) => (tile.waveform ? [tile.waveform] : [])),
+								),
+								transform: computeWindowTransform(
+									{
+										startMs:
+											renderable.query.startMs +
+											((audioData.timelinePlacement?.offsetSamples ?? 0) * 1000) / audioData.sampleRate,
+										endMs:
+											renderable.query.endMs +
+											((audioData.timelinePlacement?.offsetSamples ?? 0) * 1000) / audioData.sampleRate,
+									},
+									{ startMs: 0, endMs: audioData.durationMs },
+								),
+								transformOrigin: "left",
+							}}
+						>
+							<MinimapWaveform result={renderable} color={color} />
+						</div>
+					),
 			)}
-			{computeResult.status === "computing" && computeResult.previous === null && <ComputeProgress />}
+			{computeResult.status === "computing" && !hasCoverage && <ComputeProgress fraction={computeResult.fraction} />}
 			<div
 				className="pointer-events-none absolute inset-y-0 left-0 bg-black/65"
 				style={{ width: `${vpStartPct}%` }}
@@ -209,3 +222,9 @@ export function MinimapDisplay({
 		</div>
 	);
 }
+
+const MinimapWaveform = memo(
+	({ result, color }: { readonly result: ComputeResultReady; readonly color: [number, number, number] }) => (
+		<WaveformCanvas computeResult={result} color={color} />
+	),
+);

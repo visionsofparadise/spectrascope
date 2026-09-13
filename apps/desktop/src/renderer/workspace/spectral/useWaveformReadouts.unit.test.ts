@@ -41,6 +41,22 @@ const result = {
 } as ComputeResultReady;
 const displayed: DisplayedWaveform = { result, sourceName: "Placed source", timeOffsetMs: 2000 };
 describe("held waveform readout coverage", () => {
+	it("registers progressive results and ignores unchanged waveform publication during spectral updates", () => {
+		let view = readouts();
+		view.onDisplayedResultChange("tiles", { results: [result], sourceName: "Tiles", timeOffsetMs: 2000 });
+		view = readouts();
+		const previous = view.displayed;
+		view.onDisplayedResultChange("tiles", { results: [result], sourceName: "Tiles", timeOffsetMs: 2000 });
+		expect(readouts().displayed).toBe(previous);
+	});
+	it("reads newly published tiles ahead of old overlapping coverage and keeps gaps unavailable", () => {
+		const replacement = { ...result, waveformBuffer: new Float32Array([-0.25, 0.25, -0.25, 0.25, 0, 0]) };
+		const tiles: DisplayedWaveform = { results: [result, replacement], sourceName: "Tiles", timeOffsetMs: 2000 };
+		expect(waveformAmplitudeLabel(tiles, 2010)).toBe("-12.0");
+		expect(waveformAmplitudeLabel(tiles, 2015)).toBeUndefined();
+		expect(waveformAmplitudeLabel(tiles, 2012, true)).toBe("-12.0");
+		expect(waveformAmplitudeLabel({ results: [], sourceName: "Empty", timeOffsetMs: 0 }, 2010)).toBeUndefined();
+	});
 	it("tracks named displayed identity through hover, swap and removal", () => {
 		let view = readouts();
 		view.onDisplayedResultChange("source", displayed);
