@@ -29,7 +29,10 @@ function render(playing: boolean, toggle: ReturnType<typeof vi.fn>, disabled = f
 				durationSec: 10,
 				onPlayToggle: toggle,
 				onSeek: vi.fn(),
-				readoutSourceName: "Test source",
+				readoutRows: [
+					{ label: "Time", cursor: "00:01.000", in: "—", out: "—" },
+					{ label: "Freq", cursor: "1.0 kHz", in: "—", out: "—" },
+				],
 			},
 			playbackRate: 1,
 			onPlaybackRateChange,
@@ -89,7 +92,7 @@ it("keeps compact controls reachable through named native nonmodal popovers", ()
 	expect(region.props.className).toContain("h-[92px]");
 	expect(region.props.className).not.toContain("border-t");
 	expect(elements(region.props.children)[0]?.props.className).toContain("px-4");
-	for (const label of ["View controls", "Measurements", "Volume"]) {
+	for (const label of ["View controls", "Volume"]) {
 		const trigger = nodes.find((element) => element.type === "button" && element.props["aria-label"] === label)!;
 		expect(
 			nodes.some((element) => element.props.id === trigger.props.popoverTarget && element.props.popover === "auto"),

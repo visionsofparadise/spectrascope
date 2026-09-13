@@ -1,17 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
 import { useWorkspacePlayback } from "../playback";
-import { formatInspectionTime } from "../utils/formatInspectionTime";
 import { readChartValue } from "../utils/readChartValue";
+import { EMPTY_READOUT, timeReadoutRowOf } from "./readoutRows";
 import type { TimeWindow } from "../useTimeViewport";
 
 export interface ChartReadoutTrace {
 	readonly sourceId: string;
-	readonly sourceName: string;
 	readonly query: TimeWindow;
 	readonly values: Float32Array | number;
 	readonly valueToY: (value: number) => number;
 	readonly formatValue: (value: number) => string;
-	readonly amplitudeLabel: string;
 }
 
 export function nearestChartTrace(
@@ -38,7 +36,7 @@ export function nearestChartTrace(
 	return nearest;
 }
 
-export function useChartReadouts() {
+export function useChartReadouts(valueLabel: string) {
 	const { selection } = useWorkspacePlayback();
 	const [traces, setTraces] = useState<ReadonlyMap<string, ChartReadoutTrace>>(() => new Map());
 	const [cursor, setCursor] = useState<{ timeMs: number; y: number } | null>(null);
@@ -57,23 +55,25 @@ export function useChartReadouts() {
 	const active = cursor ? nearestChartTrace(traces, cursor.timeMs, cursor.y) : traces.values().next().value;
 	const control = useMemo(() => {
 		const label = (timeMs: number | undefined) => {
-			if (!active || timeMs === undefined) return undefined;
+			if (!active || timeMs === undefined) return EMPTY_READOUT;
 
 			const value = readChartValue(active.values, active.query, timeMs);
 
-			return value === null ? undefined : active.formatValue(value);
+			return value === null ? EMPTY_READOUT : active.formatValue(value);
 		};
 
 		return {
-			cursorReadout: cursor
-				? { time: formatInspectionTime(cursor.timeMs), amp: label(cursor.timeMs) ?? "—" }
-				: undefined,
-			selectionInAmp: label(selection?.start),
-			selectionOutAmp: label(selection?.end),
-			readoutSourceName: active?.sourceName,
-			amplitudeLabel: active?.amplitudeLabel,
+			readoutRows: [
+				timeReadoutRowOf(cursor?.timeMs, selection),
+				{
+					label: valueLabel,
+					cursor: label(cursor?.timeMs),
+					in: label(selection?.start),
+					out: label(selection?.end),
+				},
+			],
 		};
-	}, [active, cursor, selection]);
+	}, [active, cursor, selection, valueLabel]);
 
 	return { control, setCursor, onTraceChange };
 }

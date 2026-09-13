@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { StripLayout, StripOverlays, StripSourceRender, useStripView } from "../spectral/stripView";
 import { sourcePairOf } from "./sourcePair";
-import { SourcePairSelector } from "./SourcePairSelector";
 import type { LayerColor } from "../layers";
 import type { Source } from "../source";
 import type { DerivedSpectralViewProps, DifferenceSelectionProps } from "./viewProps";
@@ -22,7 +21,6 @@ export function DerivedPairView({
 	settings,
 	differenceA,
 	differenceB,
-	onDifferenceChange,
 	onFrequencyRangeChange,
 	onTransportControlChange,
 }: DerivedPairViewProps) {
@@ -54,13 +52,7 @@ export function DerivedPairView({
 	);
 
 	return (
-		<StripLayout
-			channelInput={channelInput}
-			view={view}
-			header={
-				<SourcePairSelector sources={sources} pair={pair} operator={operator} onPairChange={onDifferenceChange} />
-			}
-		>
+		<StripLayout channelInput={channelInput} view={view}>
 			{pair.a !== null && (
 				<>
 					<div className="absolute inset-0">

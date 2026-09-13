@@ -167,7 +167,7 @@ export function Select({
 				variant === "field"
 					? "flex w-full items-center justify-between gap-2 border border-chrome-border bg-void px-2 py-1.5 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text hover:border-chrome-text-dim"
 					: cn(
-							"flex items-center px-1 py-0.5 font-technical uppercase tracking-[0.06em]",
+							"flex max-w-full items-center px-1 py-0.5 font-technical uppercase tracking-[0.06em]",
 							size === "sm" ? "text-[length:var(--text-sm)]" : "text-[length:var(--text-xs)]",
 							disabled ? "cursor-not-allowed text-chrome-text-dim" : "text-chrome-text",
 						)
@@ -181,12 +181,17 @@ export function Select({
 			) : (
 				<span
 					className={cn(
-						"flex items-center whitespace-nowrap bg-chrome-raised",
+						"flex min-w-0 items-center whitespace-nowrap bg-chrome-raised",
 						size === "sm" ? "gap-1" : "gap-0.5",
 					)}
 				>
-					<span>{displayLabel}</span>
-					<Icon icon="lucide:chevron-down" width={size === "sm" ? 12 : 10} height={size === "sm" ? 12 : 10} />
+					<span className="truncate">{displayLabel}</span>
+					<Icon
+						icon="lucide:chevron-down"
+						width={size === "sm" ? 12 : 10}
+						height={size === "sm" ? 12 : 10}
+						className="shrink-0"
+					/>
 				</span>
 			)}
 		</button>

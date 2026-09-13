@@ -2,13 +2,13 @@ import { Icon } from "@iconify/react";
 import { useCallback, useId, useRef } from "react";
 import { IconButton } from "../components/IconButton";
 import { Select } from "../components/Select";
-import { formatInspectionTime } from "./utils/formatInspectionTime";
 import type { ReactNode } from "react";
 
-interface TransportCursorReadout {
-	readonly time: string;
-	readonly freq?: string;
-	readonly amp: string;
+export interface TransportReadoutRow {
+	readonly label: string;
+	readonly cursor: string;
+	readonly in: string;
+	readonly out: string;
 }
 
 export interface TransportControl {
@@ -18,19 +18,7 @@ export interface TransportControl {
 	readonly durationSec: number;
 	readonly onPlayToggle: () => void;
 	readonly onSeek: (sec: number) => void;
-	readonly cursorReadout?: TransportCursorReadout;
-	readonly readoutSourceName?: string;
-	readonly amplitudeLabel?: string;
-	/**
-	 * Selection range — the In / Out columns of the transport's readout panel.
-	 * Times are in seconds (the transport formats them to a timecode);
-	 * amplitudes are pre-formatted strings. Optional — unset fields render an
-	 * em-dash. Views publish measurements for the shared selection range.
-	 */
-	readonly selectionInSec?: number;
-	readonly selectionOutSec?: number;
-	readonly selectionInAmp?: string;
-	readonly selectionOutAmp?: string;
+	readonly readoutRows: ReadonlyArray<TransportReadoutRow>;
 }
 
 interface TransportProps {
@@ -185,58 +173,35 @@ function TransportCluster({
 	);
 }
 
-interface PointReadout {
-	readonly time: string;
-	readonly amp: string;
-	readonly freq?: string;
-}
-
 function ReadoutPanel({
-	cursor,
-	selectionIn,
-	selectionOut,
-	amplitudeLabel,
+	rows,
 	disabled,
 }: {
-	readonly cursor: PointReadout;
-	readonly selectionIn: PointReadout;
-	readonly selectionOut: PointReadout;
-	readonly amplitudeLabel?: string;
+	readonly rows: ReadonlyArray<TransportReadoutRow>;
 	readonly disabled?: boolean;
 }) {
-	const headClass =
-		"font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-right text-chrome-text-dim";
-	const rowLabelClass = "font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-dim";
-	const valueClass = `font-technical text-[length:var(--text-sm)] tabular-nums text-right ${
+	const labelClass = "font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-dim";
+	const headClass = `w-19 shrink-0 text-right ${labelClass}`;
+	const valueClass = `w-19 shrink-0 text-right font-technical text-[length:var(--text-sm)] tabular-nums ${
 		disabled ? "text-chrome-text-dim" : "text-chrome-text"
 	}`;
 
 	return (
-		<div
-			className="grid items-baseline gap-x-3 gap-y-1 leading-none"
-			style={{ gridTemplateColumns: "auto repeat(3, minmax(max-content, 1fr))" }}
-		>
-			<span />
-			<span className={headClass}>Cursor</span>
-			<span className={headClass}>In</span>
-			<span className={headClass}>Out</span>
-
-			<span className={rowLabelClass}>Time</span>
-			<span className={valueClass}>{cursor.time}</span>
-			<span className={valueClass}>{selectionIn.time}</span>
-			<span className={valueClass}>{selectionOut.time}</span>
-
-			<span className={rowLabelClass}>Freq</span>
-			<span className={valueClass}>{cursor.freq ?? "— Hz"}</span>
-			<span />
-			<span />
-
-			<span className={`${rowLabelClass} max-w-24 truncate`} title={amplitudeLabel}>
-				{amplitudeLabel ?? "Amp"}
-			</span>
-			<span className={valueClass}>{cursor.amp}</span>
-			<span className={valueClass}>{selectionIn.amp}</span>
-			<span className={valueClass}>{selectionOut.amp}</span>
+		<div className="flex shrink-0 flex-col gap-1">
+			<div className="flex items-baseline gap-3 leading-none">
+				<span className="w-11 shrink-0" />
+				<span className={headClass}>Cursor</span>
+				<span className={headClass}>In</span>
+				<span className={headClass}>Out</span>
+			</div>
+			{rows.map((row) => (
+				<div key={row.label} className="flex items-baseline gap-3 leading-none">
+					<span className={`w-11 shrink-0 whitespace-nowrap ${labelClass}`}>{row.label}</span>
+					<span className={valueClass}>{row.cursor}</span>
+					<span className={valueClass}>{row.in}</span>
+					<span className={valueClass}>{row.out}</span>
+				</div>
+			))}
 		</div>
 	);
 }
@@ -348,31 +313,15 @@ export function Transport({
 	onLoopingChange,
 	sampleRate,
 }: TransportProps) {
-	const {
-		disabled,
-		playing,
-		positionSec,
-		durationSec,
-		onPlayToggle,
-		onSeek,
-		cursorReadout,
-		selectionInSec,
-		selectionOutSec,
-		selectionInAmp,
-		selectionOutAmp,
-		amplitudeLabel,
-	} = control;
+	const { disabled, playing, positionSec, durationSec, onPlayToggle, onSeek, readoutRows } = control;
 
 	const timecodeMainClass = disabled ? "text-chrome-text-dim" : "text-chrome-text";
 	const timecodeSecondaryClass = disabled ? "text-chrome-text-dim" : "text-chrome-text-secondary";
 
-	const selectionInLabel = selectionInSec !== undefined ? formatInspectionTime(selectionInSec * 1000) : "—";
-	const selectionOutLabel = selectionOutSec !== undefined ? formatInspectionTime(selectionOutSec * 1000) : "—";
-
 	return (
 		<div role="region" aria-label="Transport" className="@container h-[92px] w-full bg-void">
 			<div className="flex h-full min-w-0 items-center px-4">
-				<div className="flex min-w-0 flex-1 basis-0 items-center">
+				<div className="flex min-w-0 flex-1 basis-0 items-center overflow-x-clip">
 					{viewControls && (
 						<TransportCluster
 							label="View"
@@ -467,33 +416,8 @@ export function Transport({
 				</div>
 
 				<div className="flex min-w-0 flex-1 basis-0 items-center">
-					<div className="min-w-0 flex-1 @[1360px]:min-w-4" />
-					<TransportCluster
-						label="Measurements"
-						icon="lucide:ruler"
-						inlineClassName="hidden shrink-0 @[1360px]:block"
-						compactClassName="shrink-0 @[1360px]:hidden"
-					>
-						<div className="max-w-[calc(100vw-48px)]">
-							<ReadoutPanel
-								amplitudeLabel={amplitudeLabel}
-								cursor={{
-									time: cursorReadout?.time ?? "—",
-									freq: cursorReadout?.freq ?? "— Hz",
-									amp: cursorReadout?.amp ?? "—",
-								}}
-								selectionIn={{
-									time: selectionInLabel,
-									amp: selectionInAmp ?? "—",
-								}}
-								selectionOut={{
-									time: selectionOutLabel,
-									amp: selectionOutAmp ?? "—",
-								}}
-								disabled={disabled}
-							/>
-						</div>
-					</TransportCluster>
+					<div className="min-w-4 flex-1" />
+					<ReadoutPanel rows={readoutRows} disabled={disabled} />
 					<div className="min-w-0 flex-1 @[700px]:min-w-4" />
 					<TransportCluster
 						label="Volume"

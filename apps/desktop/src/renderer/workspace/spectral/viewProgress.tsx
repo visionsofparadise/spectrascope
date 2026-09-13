@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useState } from "react";
+import { ViewLoadingToast } from "./ViewLoadingToast";
 
 type ReportViewProgress = (key: string, fraction: number | null) => void;
 
@@ -8,6 +9,8 @@ export interface ViewProgress {
 	readonly active: boolean;
 	readonly fraction: number;
 }
+
+const ViewProgressStateContext = createContext<ViewProgress>({ active: false, fraction: 0 });
 
 export function clampedFractionOf(fraction: number): number {
 	return Number.isFinite(fraction) ? Math.max(0, Math.min(1, fraction)) : 0;
@@ -20,7 +23,7 @@ export function viewProgressOf(fractions: ReadonlyArray<number>): ViewProgress {
 	};
 }
 
-export function useViewProgressState(): { readonly report: ReportViewProgress; readonly progress: ViewProgress } {
+function useViewProgressState(): { readonly report: ReportViewProgress; readonly progress: ViewProgress } {
 	const [fractions, setFractions] = useState<ReadonlyMap<string, number>>(() => new Map());
 
 	const report = useCallback<ReportViewProgress>((key, fraction) => {
@@ -41,14 +44,20 @@ export function useViewProgressState(): { readonly report: ReportViewProgress; r
 	return { report, progress };
 }
 
-export function ViewProgressProvider({
-	report,
-	children,
-}: {
-	readonly report: ReportViewProgress;
-	readonly children: React.ReactNode;
-}) {
-	return <ViewProgressContext.Provider value={report}>{children}</ViewProgressContext.Provider>;
+export function ViewProgressProvider({ children }: { readonly children: React.ReactNode }) {
+	const { report, progress } = useViewProgressState();
+
+	return (
+		<ViewProgressContext.Provider value={report}>
+			<ViewProgressStateContext.Provider value={progress}>{children}</ViewProgressStateContext.Provider>
+		</ViewProgressContext.Provider>
+	);
+}
+
+export function ViewProgressToast({ color }: { readonly color?: string }) {
+	const progress = useContext(ViewProgressStateContext);
+
+	return progress.active ? <ViewLoadingToast label="Rendering" color={color} /> : null;
 }
 
 export function useReportViewProgress(fraction: number): void {

@@ -9,7 +9,7 @@ import { TimelineView } from "./views/TimelineView";
 import { VectorscopeView } from "./views/VectorscopeView";
 import type { Source } from "./source";
 import type { AudioData } from "./spectral/types";
-import type { SpectralViewControls, DifferenceSelectionProps } from "./views/viewProps";
+import type { SpectralViewControls, DifferenceSelectionProps, SourceManagementProps } from "./views/viewProps";
 import type { ThemeId } from "../utils/themePalettes";
 
 export type ViewId =
@@ -23,7 +23,7 @@ export type ViewId =
 	| "correlation"
 	| "vectorscope";
 
-interface WorkspaceProps extends SpectralViewControls, DifferenceSelectionProps {
+interface WorkspaceProps extends SpectralViewControls, DifferenceSelectionProps, SourceManagementProps {
 	/**
 	 * Per-source PCM readers, keyed by `Source.id`. Each source carries its own
 	 * decoded audio rather than the whole workspace sharing one buffer — the
@@ -40,12 +40,6 @@ interface WorkspaceProps extends SpectralViewControls, DifferenceSelectionProps 
 	readonly derivedAudio: AudioData;
 	readonly sources: ReadonlyArray<Source>;
 	readonly theme: ThemeId;
-	/**
-	 * The active view. Controlled — the host owns which view is shown so it can
-	 * resolve view-specific data (e.g. the desktop app routes the Sum vs
-	 * Difference stream for whichever derived view is active). The selector lives
-	 * in the `Sidebar`; `Workspace` only renders the active view.
-	 */
 	readonly activeView: ViewId;
 	/**
 	 * Emitted when a source is dragged on the Timeline view — `(sourceId,
@@ -67,9 +61,14 @@ export function Workspace({
 	onFrequencyRangeChange,
 	differenceA,
 	differenceB,
-	onDifferenceChange,
 	onSourceOffsetChange,
 	onTransportControlChange,
+	sourceStatus,
+	sourceErrors,
+	onRetrySource,
+	onRelinkSource,
+	onSourcesChange,
+	onAddSources,
 }: WorkspaceProps) {
 	return (
 		<div className="h-full min-h-0 w-full overflow-hidden bg-void">
@@ -81,6 +80,12 @@ export function Workspace({
 					settings={settings}
 					onSourceOffsetChange={onSourceOffsetChange}
 					onTransportControlChange={onTransportControlChange}
+					sourceStatus={sourceStatus}
+					sourceErrors={sourceErrors}
+					onRetrySource={onRetrySource}
+					onRelinkSource={onRelinkSource}
+					onSourcesChange={onSourcesChange}
+					onAddSources={onAddSources}
 				/>
 			)}
 			{activeView === "overlay" && (
@@ -97,7 +102,6 @@ export function Workspace({
 				<SliderView
 					differenceA={differenceA}
 					differenceB={differenceB}
-					onDifferenceChange={onDifferenceChange}
 					onFrequencyRangeChange={onFrequencyRangeChange}
 					sources={sources}
 					sourceAudio={sourceAudio}
@@ -116,7 +120,6 @@ export function Workspace({
 					theme={theme}
 					differenceA={differenceA}
 					differenceB={differenceB}
-					onDifferenceChange={onDifferenceChange}
 					onTransportControlChange={onTransportControlChange}
 				/>
 			)}
@@ -124,7 +127,6 @@ export function Workspace({
 				<SumView
 					differenceA={differenceA}
 					differenceB={differenceB}
-					onDifferenceChange={onDifferenceChange}
 					onFrequencyRangeChange={onFrequencyRangeChange}
 					sources={sources}
 					derivedAudio={derivedAudio}

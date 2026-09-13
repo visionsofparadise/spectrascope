@@ -62,24 +62,21 @@ describe("held waveform readout coverage", () => {
 		view.onDisplayedResultChange("source", displayed);
 		view.setCursorReadout({ sourceId: "source", timeMs: 2010, frequencyHz: 1000, time: "", freq: "1 kHz", amp: "—" });
 		view = readouts();
-		expect(view.control).toMatchObject({
-			readoutSourceName: "Placed source",
-			selectionInAmp: "-6.0",
-			selectionOutAmp: "-6.0",
-			cursorReadout: { amp: "-6.0" },
-		});
+		expect(view.control.readoutRows).toEqual([
+			{ label: "Time", cursor: "00:02.010", in: "00:02.010", out: "00:02.012" },
+			{ label: "Freq", cursor: "1 kHz", in: "—", out: "—" },
+			{ label: "Amp", cursor: "-6.0 dB", in: "-6.0 dB", out: "-6.0 dB" },
+		]);
 		view.onDisplayedResultChange("source", {
 			...displayed,
 			sourceName: "Replacement",
 			result: { ...result, waveformBuffer: new Float32Array([-0.25, 0.25, -1, 0.75, 0, 0]) },
 		});
 		view = readouts();
-		expect(view.control.readoutSourceName).toBe("Replacement");
-		expect(view.control.cursorReadout?.amp).toBe("-12.0");
+		expect(view.control.readoutRows[2]?.cursor).toBe("-12.0 dB");
 		view.onDisplayedResultChange("source", null);
 		view = readouts();
-		expect(view.control.cursorReadout?.amp).toBe("—");
-		expect(view.control.selectionInAmp).toBeUndefined();
+		expect(view.control.readoutRows[2]).toEqual({ label: "Amp", cursor: "—", in: "—", out: "—" });
 	});
 	it("reads the selected source envelope peak at placed timeline time", () => {
 		expect(waveformAmplitudeLabel(displayed, 2010)).toBe("-6.0");

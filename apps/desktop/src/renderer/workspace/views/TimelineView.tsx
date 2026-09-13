@@ -8,6 +8,7 @@ import { trackPointerDrag } from "../spectral/pointerDrag";
 import { ScrollTrack } from "../spectral/ScrollTrack";
 import { SelectionSurface } from "../spectral/SelectionSurface";
 import { useWaveformReadouts } from "../spectral/useWaveformReadouts";
+import { ViewProgressProvider, ViewProgressToast } from "../spectral/viewProgress";
 import { useTransportPlayback } from "../spectral/viewScaffold";
 import { useTimeViewport } from "../useTimeViewport";
 import { FULL_AXIS_RANGE } from "../utils/axisRange";
@@ -17,6 +18,7 @@ import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
 import type { Source } from "../source";
 import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { TimelineDrag } from "./timelineExtent";
+import type { SourceManagementProps } from "./viewProps";
 import type { AudioData } from "../spectral/types";
 import type { DisplayedWaveform } from "../spectral/useWaveformReadouts";
 import type { TransportControl } from "../Transport";
@@ -254,7 +256,7 @@ function TimelineTrack({
 	);
 }
 
-interface TimelineViewProps {
+interface TimelineViewProps extends SourceManagementProps {
 	readonly sources: ReadonlyArray<Source>;
 	readonly sourceAudio: ReadonlyMap<string, AudioData>;
 	readonly channelInput: ChannelInput;
@@ -362,107 +364,110 @@ export function TimelineView({
 	const visibleTracks = visibleTracksOf(yRange, trackCount);
 
 	return (
-		<div className="flex h-full min-h-0 w-full overflow-hidden bg-void">
-			<div
-				className="min-h-0 min-w-0 flex-1 overflow-hidden"
-				style={{
-					display: "grid",
-					gridTemplateColumns: "minmax(0, 1fr)",
-					gridTemplateRows: "auto minmax(0, 1fr) auto",
-				}}
-			>
-				<TimeRuler startMs={windowStartMs} endMs={windowEndMs} />
-
-				<SelectionSurface
-					ref={viewport.wheelHandlers.ref}
-					startMs={windowStartMs}
-					endMs={windowEndMs}
-					seekOnClick
-					className="relative flex flex-col overflow-hidden bg-void"
+		<ViewProgressProvider>
+			<div className="flex h-full min-h-0 w-full overflow-hidden bg-void">
+				<div
+					className="min-h-0 min-w-0 flex-1 overflow-hidden"
+					style={{
+						display: "grid",
+						gridTemplateColumns: "minmax(0, 1fr)",
+						gridTemplateRows: "auto minmax(0, 1fr) auto",
+					}}
 				>
-					{renderableSources.length === 0 ? (
-						<div className="flex h-full items-center justify-center">
-							<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
-						</div>
-					) : (
-						<>
-							<div className="absolute inset-x-0 flex flex-col" style={trackStackStyleOf(yRange)}>
-								{renderableSources.map(({ source, audioData }, index) => (
-									<TimelineTrack
-										key={source.id}
-										source={source}
-										audioData={audioData}
-										offsetMs={
-											drag?.id === source.id
-												? Math.max(0, drag.offsetMs)
-												: Math.max(0, source.timelineOffsetMs)
-										}
-										windowStartMs={windowStartMs}
-										windowEndMs={windowEndMs}
-										committedStartMs={viewport.committedStartMs}
-										committedEndMs={viewport.committedEndMs}
-										freezeCompute={
-											drag !== null ||
-											viewport.startMs !== viewport.committedStartMs ||
-											viewport.endMs !== viewport.committedEndMs
-										}
-										extentEndMs={extent.endMs}
-										frequencyScale={settings.frequencyScale}
-										spectrogramSampling={settings.spectrogramSampling}
-										spectrogramColormap={settings.spectrogramColormap}
-										fftSize={settings.fftSize}
-										hopOverlap={settings.hopOverlap}
-										channelInput={channelInput}
-										waveformOpacity={settings.waveformOpacity}
-										spectrogramOpacity={settings.spectrogramOpacity}
-										draggable={onSourceOffsetChange !== undefined}
-										dragging={drag?.id === source.id}
-										handleTop={trackHandleTopOf(yRange, index, trackCount)}
-										onCursorMove={readouts.setCursorReadout}
-										onDisplayedResultChange={readouts.onDisplayedResultChange}
-										onDragMove={(offsetMs) => {
-											setDrag({ id: source.id, offsetMs });
-										}}
-										onCommit={(offsetMs) => {
-											setDrag(null);
-											onSourceOffsetChange?.(source.id, offsetMs);
-										}}
-									/>
-								))}
-							</div>
-							<GridOverlay startMs={windowStartMs} endMs={windowEndMs} opacity={settings.gridOpacity} />
-						</>
-					)}
-				</SelectionSurface>
+					<TimeRuler startMs={windowStartMs} endMs={windowEndMs} />
 
-				<MinimapDisplay
-					audioData={minimapAudio}
-					viewStartFrac={viewStartFrac}
-					viewEndFrac={viewEndFrac}
-					waveformColor={hexToRgb255(minimapColor.primary)}
-					channelInput={channelInput}
-					onScrubToFraction={setViewportToFraction}
-				/>
-			</div>
-			{trackCount === 0 ? (
-				<div className="w-2 shrink-0" />
-			) : (
-				<div className="flex shrink-0 flex-col">
-					<div className="h-8" />
-					<ScrollTrack
-						axis="y"
-						className="min-h-0 flex-1"
-						range={yRange}
-						minSpan={TRACK_MIN_SPAN}
-						onRangeChange={setYRange}
-						label="Track range"
-						valueText={`tracks ${visibleTracks.first} to ${visibleTracks.last} of ${trackCount}`}
-						edgeLabels={["Upper track range", "Lower track range"]}
-						edgeValueTexts={[`track ${visibleTracks.first}`, `track ${visibleTracks.last}`]}
+					<SelectionSurface
+						ref={viewport.wheelHandlers.ref}
+						startMs={windowStartMs}
+						endMs={windowEndMs}
+						seekOnClick
+						className="relative flex flex-col overflow-hidden bg-void"
+					>
+						{renderableSources.length === 0 ? (
+							<div className="flex h-full items-center justify-center">
+								<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
+							</div>
+						) : (
+							<>
+								<div className="absolute inset-x-0 flex flex-col" style={trackStackStyleOf(yRange)}>
+									{renderableSources.map(({ source, audioData }, index) => (
+										<TimelineTrack
+											key={source.id}
+											source={source}
+											audioData={audioData}
+											offsetMs={
+												drag?.id === source.id
+													? Math.max(0, drag.offsetMs)
+													: Math.max(0, source.timelineOffsetMs)
+											}
+											windowStartMs={windowStartMs}
+											windowEndMs={windowEndMs}
+											committedStartMs={viewport.committedStartMs}
+											committedEndMs={viewport.committedEndMs}
+											freezeCompute={
+												drag !== null ||
+												viewport.startMs !== viewport.committedStartMs ||
+												viewport.endMs !== viewport.committedEndMs
+											}
+											extentEndMs={extent.endMs}
+											frequencyScale={settings.frequencyScale}
+											spectrogramSampling={settings.spectrogramSampling}
+											spectrogramColormap={settings.spectrogramColormap}
+											fftSize={settings.fftSize}
+											hopOverlap={settings.hopOverlap}
+											channelInput={channelInput}
+											waveformOpacity={settings.waveformOpacity}
+											spectrogramOpacity={settings.spectrogramOpacity}
+											draggable={onSourceOffsetChange !== undefined}
+											dragging={drag?.id === source.id}
+											handleTop={trackHandleTopOf(yRange, index, trackCount)}
+											onCursorMove={readouts.setCursorReadout}
+											onDisplayedResultChange={readouts.onDisplayedResultChange}
+											onDragMove={(offsetMs) => {
+												setDrag({ id: source.id, offsetMs });
+											}}
+											onCommit={(offsetMs) => {
+												setDrag(null);
+												onSourceOffsetChange?.(source.id, offsetMs);
+											}}
+										/>
+									))}
+								</div>
+								<GridOverlay startMs={windowStartMs} endMs={windowEndMs} opacity={settings.gridOpacity} />
+							</>
+						)}
+						<ViewProgressToast />
+					</SelectionSurface>
+
+					<MinimapDisplay
+						audioData={minimapAudio}
+						viewStartFrac={viewStartFrac}
+						viewEndFrac={viewEndFrac}
+						waveformColor={hexToRgb255(minimapColor.primary)}
+						channelInput={channelInput}
+						onScrubToFraction={setViewportToFraction}
 					/>
-					<div className="h-8" />
 				</div>
-			)}
-		</div>
+				{trackCount === 0 ? (
+					<div className="w-2 shrink-0" />
+				) : (
+					<div className="flex shrink-0 flex-col">
+						<div className="h-8" />
+						<ScrollTrack
+							axis="y"
+							className="min-h-0 flex-1"
+							range={yRange}
+							minSpan={TRACK_MIN_SPAN}
+							onRangeChange={setYRange}
+							label="Track range"
+							valueText={`tracks ${visibleTracks.first} to ${visibleTracks.last} of ${trackCount}`}
+							edgeLabels={["Upper track range", "Lower track range"]}
+							edgeValueTexts={[`track ${visibleTracks.first}`, `track ${visibleTracks.last}`]}
+						/>
+						<div className="h-8" />
+					</div>
+				)}
+			</div>
+		</ViewProgressProvider>
 	);
 }

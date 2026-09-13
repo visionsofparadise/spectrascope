@@ -5,12 +5,10 @@ import type { ChartReadoutTrace } from "./useChartReadouts";
 function trace(id: string, values: Float32Array | number): ChartReadoutTrace {
 	return {
 		sourceId: id,
-		sourceName: id,
 		values,
 		query: { startMs: 100, endMs: 200 },
 		valueToY: (value) => value,
 		formatValue: String,
-		amplitudeLabel: "Correlation r",
 	};
 }
 describe("named chart source selection", () => {

@@ -1,15 +1,7 @@
 import { Icon } from "@iconify/react";
 import { cn } from "../cn";
 
-export function LoadingToast({
-	label,
-	fraction,
-	className,
-}: {
-	readonly label: string;
-	readonly fraction?: number;
-	readonly className: string;
-}) {
+export function LoadingToast({ label, className }: { readonly label: string; readonly className: string }) {
 	return (
 		<div
 			role="status"
@@ -29,11 +21,6 @@ export function LoadingToast({
 				/>
 				<span>{label}</span>
 			</div>
-			{fraction !== undefined && (
-				<div className="h-0.5 w-full bg-chrome-border">
-					<div className="h-full bg-primary" style={{ width: `${Math.max(0, Math.min(1, fraction)) * 100}%` }} />
-				</div>
-			)}
 		</div>
 	);
 }

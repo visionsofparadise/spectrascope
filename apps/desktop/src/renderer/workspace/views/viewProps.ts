@@ -1,3 +1,4 @@
+import type { SourceStreamStatus } from "../../audio/useSourceStreams";
 import type { ThemeId } from "../../utils/themePalettes";
 import type { Source } from "../source";
 import type { AudioData } from "../spectral/types";
@@ -25,5 +26,12 @@ export interface DerivedSpectralViewProps extends SpectralViewControls {
 export interface DifferenceSelectionProps {
 	readonly differenceA: string | null;
 	readonly differenceB: string | null;
-	readonly onDifferenceChange: (differenceA: string, differenceB: string) => void;
+}
+export interface SourceManagementProps {
+	readonly sourceStatus?: ReadonlyMap<string, SourceStreamStatus>;
+	readonly sourceErrors?: ReadonlyMap<string, string>;
+	readonly onRetrySource?: (sourceId: string) => void;
+	readonly onRelinkSource?: (sourceId: string) => void;
+	readonly onSourcesChange?: (next: ReadonlyArray<Source>) => void;
+	readonly onAddSources?: () => void;
 }

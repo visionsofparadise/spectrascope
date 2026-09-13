@@ -92,29 +92,30 @@ export function AppBar({ context, historyControl, canExport, exportBusy, onExpor
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="start" className="w-[200px]">
 						<DropdownMenuItem onSelect={() => void context.newComparison()}>New Session</DropdownMenuItem>
-						<DropdownMenuItem onSelect={() => void context.openComparison()}>Open…</DropdownMenuItem>
+						<DropdownMenuItem onSelect={() => void context.openComparison()}>Open Session…</DropdownMenuItem>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem
 							disabled={!hasActiveTab || context.busy}
 							onSelect={() => void context.saveComparison()}
 						>
-							Save
+							Save Session
 						</DropdownMenuItem>
 						<DropdownMenuItem
 							disabled={!hasActiveTab || context.busy}
 							onSelect={() => void context.saveComparison(true)}
 						>
-							Save As…
+							Save Session As…
 						</DropdownMenuItem>
-						<DropdownMenuSeparator />
 						<DropdownMenuItem disabled={!canExport} onSelect={onExport}>
 							Export…
 						</DropdownMenuItem>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem onSelect={onPreferences}>Preferences</DropdownMenuItem>
+						<DropdownMenuSeparator />
 						<DropdownMenuItem disabled={!hasActiveTab} onSelect={closeActiveTab}>
 							Close Session
 						</DropdownMenuItem>
-						<DropdownMenuSeparator />
-						<DropdownMenuItem onSelect={onPreferences}>Preferences</DropdownMenuItem>
+						<DropdownMenuItem onSelect={() => window.close()}>Close</DropdownMenuItem>
 					</DropdownMenuContent>
 				</DropdownMenu>
 			</div>

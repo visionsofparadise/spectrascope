@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { readWaveformAmplitude } from "spectral-display";
 import { useWorkspacePlayback } from "../playback";
-import { formatInspectionTime } from "../utils/formatInspectionTime";
+import { EMPTY_READOUT, timeReadoutRowOf } from "./readoutRows";
 import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { ComputeResultReady } from "spectral-display";
 
@@ -81,22 +81,22 @@ export function useWaveformReadouts() {
 		});
 	}, []);
 	const active = cursor?.sourceId ? displayed.get(cursor.sourceId) : displayed.values().next().value;
-	const control = useMemo(
-		() => ({
-			cursorReadout: cursor
-				? {
-						time: formatInspectionTime(cursor.timeMs),
-						freq: cursor.freq,
-						amp: waveformAmplitudeLabel(active, cursor.timeMs) ?? "—",
-					}
-				: undefined,
-			selectionInAmp: waveformAmplitudeLabel(active, selection?.start),
-			selectionOutAmp: waveformAmplitudeLabel(active, selection?.end, true),
-			readoutSourceName: active?.sourceName,
-			amplitudeLabel: "Peak dBFS",
-		}),
-		[active, cursor, selection],
-	);
+	const control = useMemo(() => {
+		const decibels = (label: string | undefined) => (label === undefined ? EMPTY_READOUT : `${label} dB`);
+
+		return {
+			readoutRows: [
+				timeReadoutRowOf(cursor?.timeMs, selection),
+				{ label: "Freq", cursor: cursor?.freq ?? EMPTY_READOUT, in: EMPTY_READOUT, out: EMPTY_READOUT },
+				{
+					label: "Amp",
+					cursor: decibels(cursor ? waveformAmplitudeLabel(active, cursor.timeMs) : undefined),
+					in: decibels(waveformAmplitudeLabel(active, selection?.start)),
+					out: decibels(waveformAmplitudeLabel(active, selection?.end, true)),
+				},
+			],
+		};
+	}, [active, cursor, selection]);
 
 	return { control, displayed, setCursorReadout: setCursor, onDisplayedResultChange };
 }

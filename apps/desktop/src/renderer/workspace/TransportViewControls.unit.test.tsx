@@ -151,27 +151,8 @@ describe("transport view control layout", () => {
 		).toEqual(["Frequency scale", "FFT size", "FFT hop"]);
 	});
 
-	it("selects the loudness metric through a label-less upward chip", () => {
-		const onSettingsChange = vi.fn();
-		const [metric] = render("loudness", onSettingsChange).filter((element) => element.type === "mock-select");
-		expect(metric?.props).toMatchObject({
-			ariaLabel: "Loudness metric",
-			variant: "chip",
-			direction: "up",
-			menuClassName: "w-40",
-		});
-		expect(metric?.props.label).toBeUndefined();
-		const options = metric?.props.options as ReadonlyArray<{ value: string }>;
-		const next = options[options.length - 1]!.value;
-		(metric?.props.onChange as (value: string) => void)(next);
-		expect(onSettingsChange).toHaveBeenCalledExactlyOnceWith({
-			...INITIAL_VIEW_CONTROL_SETTINGS,
-			loudnessMetric: next,
-		});
-	});
-
-	it("renders nothing for Correlation", () => {
-		expect(render("correlation")).toEqual([]);
+	it.each(["loudness", "correlation"] as const)("renders nothing for %s", (view) => {
+		expect(render(view)).toEqual([]);
 	});
 
 	it.each([
@@ -180,7 +161,7 @@ describe("transport view control layout", () => {
 		["slider", true],
 		["difference", true],
 		["sum", true],
-		["loudness", true],
+		["loudness", false],
 		["frequency-distribution", false],
 		["correlation", false],
 		["vectorscope", false],

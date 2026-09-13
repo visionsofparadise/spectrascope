@@ -27,6 +27,7 @@ const CORR_AXIS: ChartAxis = {
 	min: CORR_MIN,
 	formatValue: (value) => `${value.toFixed(2)} r`,
 	rangeLabel: "Correlation range",
+	readoutLabel: "Corr",
 	unit: "r",
 	emptyValue: "— r",
 };
@@ -62,15 +63,13 @@ function SourceCorrelationTrace({
 			renderable && envelope
 				? {
 						sourceId: source.id,
-						sourceName: source.name,
 						query: renderable.query,
 						values: envelope,
 						valueToY: corrToY,
 						formatValue: (value) => value.toFixed(2),
-						amplitudeLabel: "Correlation r",
 					}
 				: null,
-		[source.id, source.name, renderable, envelope],
+		[source.id, renderable, envelope],
 	);
 
 	useEffect(() => {

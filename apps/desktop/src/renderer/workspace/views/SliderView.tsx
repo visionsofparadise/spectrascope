@@ -3,7 +3,6 @@ import { Curtain } from "../spectral/Curtain";
 import { StripLayout, StripOverlays, StripSourceRender, useStripView } from "../spectral/stripView";
 import { stripClipPath } from "./sliderClip";
 import { sourcePairOf } from "./sourcePair";
-import { SourcePairSelector } from "./SourcePairSelector";
 import { useTimelineChromeSources } from "./viewAudio";
 import type { DifferenceSelectionProps, PerSourceSpectralViewProps } from "./viewProps";
 
@@ -16,7 +15,6 @@ export function SliderView({
 	settings,
 	differenceA,
 	differenceB,
-	onDifferenceChange,
 	onFrequencyRangeChange,
 	onTransportControlChange,
 }: SliderViewProps) {
@@ -51,11 +49,7 @@ export function SliderView({
 	const count = pairEntries.length;
 
 	return (
-		<StripLayout
-			channelInput={channelInput}
-			view={view}
-			header={<SourcePairSelector sources={sources} pair={pair} onPairChange={onDifferenceChange} />}
-		>
+		<StripLayout channelInput={channelInput} view={view}>
 			{count > 0 && (
 				<>
 					<div className="absolute inset-0">

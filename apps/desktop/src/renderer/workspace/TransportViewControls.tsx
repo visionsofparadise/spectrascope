@@ -1,7 +1,7 @@
 import { Icon } from "@iconify/react";
 import { Knob } from "../components/Knob";
 import { Select } from "../components/Select";
-import { FFT_OPTIONS, HOP_LABELS, HOP_OPTIONS, METRICS } from "./viewSettings";
+import { FFT_OPTIONS, HOP_LABELS, HOP_OPTIONS } from "./viewSettings";
 import type { ViewControlSettings } from "./viewSettings";
 import type { ViewId } from "./Workspace";
 
@@ -13,14 +13,7 @@ interface TransportViewControlsProps {
 	readonly onSyncEnabledChange: (next: boolean) => void;
 }
 
-const VIEW_CONTROL_VIEWS: ReadonlySet<ViewId> = new Set([
-	"timeline",
-	"overlay",
-	"slider",
-	"difference",
-	"sum",
-	"loudness",
-]);
+const VIEW_CONTROL_VIEWS: ReadonlySet<ViewId> = new Set(["timeline", "overlay", "slider", "difference", "sum"]);
 
 export function hasTransportViewControls(view: ViewId): boolean {
 	return VIEW_CONTROL_VIEWS.has(view);
@@ -40,10 +33,6 @@ const FREQUENCY_SCALE_OPTIONS = [
 const HOP_SELECT_OPTIONS = HOP_OPTIONS.map((value, index) => ({
 	value,
 	label: HOP_LABELS[index] ?? value,
-}));
-const METRIC_SELECT_OPTIONS = METRICS.map((metric) => ({
-	value: metric.id,
-	label: metric.label,
 }));
 
 const SAMPLING_OPTIONS = [
@@ -312,24 +301,6 @@ export function TransportViewControls({
 				<LayerOpacityKnobs settings={settings} onSettingsChange={onSettingsChange} />
 				<SpectrogramSelectors settings={settings} onSettingsChange={onSettingsChange} />
 			</div>
-		);
-	}
-
-	if (activeView === "loudness") {
-		return (
-			<Select
-				ariaLabel="Loudness metric"
-				variant="chip"
-				direction="up"
-				menuClassName="w-40"
-				value={settings.loudnessMetric}
-				options={METRIC_SELECT_OPTIONS}
-				onChange={(value) => {
-					const metric = METRICS.find((entry) => entry.id === value);
-
-					if (metric) onSettingsChange({ ...settings, loudnessMetric: metric.id });
-				}}
-			/>
 		);
 	}
 

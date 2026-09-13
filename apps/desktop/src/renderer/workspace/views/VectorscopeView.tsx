@@ -1,20 +1,22 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef } from "react";
 import { VectorscopeCanvas } from "spectral-display";
 import { rangeTransformOf } from "../spectral/chartMarks";
 import { hexToRgb255 } from "../spectral/colorUtil";
 import { ComputeProgress } from "../spectral/ComputeProgress";
 import { useFirstComputeProgress, useReportComputeState } from "../spectral/firstComputeProgress";
+import { EMPTY_READOUT } from "../spectral/readoutRows";
 import { ScrollTrack } from "../spectral/ScrollTrack";
 import { scrollTrackTextsOf, trackValueTextOf } from "../spectral/scrollTrackTexts";
 import { useTraceCompute } from "../spectral/traceCompute";
 import { useContainerSize } from "../spectral/useContainerSize";
-import { useDisabledTransport } from "../spectral/viewScaffold";
-import { axisFractionOf, FULL_AXIS_RANGE } from "../utils/axisRange";
+import { ViewProgressProvider, ViewProgressToast } from "../spectral/viewProgress";
+import { usePointerReadoutTransport } from "../spectral/viewScaffold";
+import { axisFractionOf } from "../utils/axisRange";
 import { resolveVisibleSourceAudio } from "./viewAudio";
 import type { Source } from "../source";
 import type { ComputeState } from "../spectral/firstComputeProgress";
 import type { AudioData } from "../spectral/types";
-import type { TransportControl } from "../Transport";
+import type { TransportControl, TransportReadoutRow } from "../Transport";
 import type { AxisRange } from "../utils/axisRange";
 import type { SpectralOptions } from "spectral-display";
 
@@ -49,6 +51,38 @@ export function crossLinePositionsOf(
 	yRange: AxisRange,
 ): { readonly x: number | undefined; readonly y: number | undefined } {
 	return { x: visibleFractionOf(xRange), y: visibleFractionOf(yRange) };
+}
+
+function levelReadoutOf(amplitude: number): string {
+	return amplitude === 0 ? "−∞ dB" : `${(20 * Math.log10(Math.abs(amplitude))).toFixed(1)} dB`;
+}
+
+export function stereoReadoutRowsOf(side: number, mid: number): ReadonlyArray<TransportReadoutRow> {
+	const magnitude = Math.abs(mid) + Math.abs(side);
+
+	return [
+		{ label: "L", cursor: levelReadoutOf(mid + side), in: EMPTY_READOUT, out: EMPTY_READOUT },
+		{ label: "R", cursor: levelReadoutOf(mid - side), in: EMPTY_READOUT, out: EMPTY_READOUT },
+		{
+			label: "Width",
+			cursor: magnitude === 0 ? EMPTY_READOUT : (Math.abs(side) / magnitude).toFixed(2),
+			in: EMPTY_READOUT,
+			out: EMPTY_READOUT,
+		},
+	];
+}
+
+const EMPTY_STEREO_ROWS = ["L", "R", "Width"].map((label) => ({
+	label,
+	cursor: EMPTY_READOUT,
+	in: EMPTY_READOUT,
+	out: EMPTY_READOUT,
+}));
+
+function stereoPointerReadoutRowsOf(
+	pointer: { readonly x: number; readonly y: number } | null,
+): ReadonlyArray<TransportReadoutRow> {
+	return pointer ? stereoReadoutRowsOf(2 * pointer.x - 1, 1 - 2 * pointer.y) : EMPTY_STEREO_ROWS;
 }
 
 export function canvasScaleOf(baseScale: number, visibleSpan: number): number {
@@ -151,75 +185,81 @@ function SourceCloud({ source, audioData, onComputeState, visibleSpan }: SourceC
 export function VectorscopeView({ sources, sourceAudio, onTransportControlChange }: VectorscopeViewProps) {
 	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
+	const { xRange, setXRange, yRange, setYRange, onMouseMove, onMouseLeave } = usePointerReadoutTransport(
+		renderableSources,
+		stereoPointerReadoutRowsOf,
+		onTransportControlChange,
+	);
+
 	const progress = useFirstComputeProgress();
 
-	useDisabledTransport(onTransportControlChange);
-
-	const [xRange, setXRange] = useState<AxisRange>(FULL_AXIS_RANGE);
-	const [yRange, setYRange] = useState<AxisRange>(FULL_AXIS_RANGE);
-
 	return (
-		<div className="flex h-full min-h-0 w-full flex-col bg-void">
-			<div className="flex min-h-0 flex-1">
-				{renderableSources.length === 0 ? (
-					<div className="flex min-w-0 flex-1 items-center justify-center bg-void">
-						<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
-					</div>
-				) : (
-					<div className="flex min-h-0 min-w-0 flex-1">
-						<div
-							className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center"
-							style={{ containerType: "size" }}
-						>
-							<FullBleedAxes xRange={xRange} yRange={yRange} />
-							<div
-								className="relative aspect-square overflow-hidden"
-								style={{ width: "100cqmin", height: "100cqmin" }}
-							>
-								<div
-									className="absolute inset-0"
-									style={{
-										mixBlendMode: "lighten",
-										transform: cloudTransformOf(xRange, yRange),
-										transformOrigin: "0 0",
-									}}
-								>
-									{renderableSources.map(({ source, audioData }) => (
-										<SourceCloud
-											key={source.id}
-											source={source}
-											audioData={audioData}
-											onComputeState={progress.handleComputeState}
-											visibleSpan={Math.min(xRange.end - xRange.start, yRange.end - yRange.start)}
-										/>
-									))}
-								</div>
-								<ScopeDiagonals xRange={xRange} yRange={yRange} />
-							</div>
-							{progress.firstComputing && <ComputeProgress fraction={progress.fraction} />}
+		<ViewProgressProvider>
+			<div className="flex h-full min-h-0 w-full flex-col bg-void">
+				<div className="flex min-h-0 flex-1">
+					{renderableSources.length === 0 ? (
+						<div className="flex min-w-0 flex-1 items-center justify-center bg-void">
+							<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
 						</div>
-					</div>
-				)}
-				<ScrollTrack
-					axis="y"
-					className="shrink-0"
-					range={yRange}
-					minSpan={SCOPE_MIN_SPAN}
-					onRangeChange={setYRange}
-					{...scrollTrackTextsOf("y", "Mid range", yRange, (fraction) => trackValueTextOf(1 - 2 * fraction))}
-				/>
+					) : (
+						<div className="flex min-h-0 min-w-0 flex-1">
+							<div
+								className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center"
+								style={{ containerType: "size" }}
+							>
+								<FullBleedAxes xRange={xRange} yRange={yRange} />
+								<div
+									className="relative aspect-square overflow-hidden"
+									style={{ width: "100cqmin", height: "100cqmin" }}
+									onMouseMove={onMouseMove}
+									onMouseLeave={onMouseLeave}
+								>
+									<div
+										className="absolute inset-0"
+										style={{
+											mixBlendMode: "lighten",
+											transform: cloudTransformOf(xRange, yRange),
+											transformOrigin: "0 0",
+										}}
+									>
+										{renderableSources.map(({ source, audioData }) => (
+											<SourceCloud
+												key={source.id}
+												source={source}
+												audioData={audioData}
+												onComputeState={progress.handleComputeState}
+												visibleSpan={Math.min(xRange.end - xRange.start, yRange.end - yRange.start)}
+											/>
+										))}
+									</div>
+									<ScopeDiagonals xRange={xRange} yRange={yRange} />
+								</div>
+								{progress.firstComputing && <ComputeProgress fraction={progress.fraction} />}
+								<ViewProgressToast />
+							</div>
+						</div>
+					)}
+					<ScrollTrack
+						axis="y"
+						className="shrink-0"
+						range={yRange}
+						minSpan={SCOPE_MIN_SPAN}
+						onRangeChange={setYRange}
+						{...scrollTrackTextsOf("y", "Mid range", yRange, (fraction) => trackValueTextOf(1 - 2 * fraction))}
+					/>
+				</div>
+				<div className="flex shrink-0">
+					<ScrollTrack
+						axis="x"
+						className="min-w-0 flex-1"
+						range={xRange}
+						minSpan={SCOPE_MIN_SPAN}
+						onRangeChange={setXRange}
+						{...scrollTrackTextsOf("x", "Side range", xRange, (fraction) => trackValueTextOf(2 * fraction - 1))}
+					/>
+					<div className="w-2 shrink-0" />
+				</div>
 			</div>
-			<div className="flex shrink-0">
-				<ScrollTrack
-					axis="x"
-					className="min-w-0 flex-1"
-					range={xRange}
-					minSpan={SCOPE_MIN_SPAN}
-					onRangeChange={setXRange}
-					{...scrollTrackTextsOf("x", "Side range", xRange, (fraction) => trackValueTextOf(2 * fraction - 1))}
-				/>
-				<div className="w-2 shrink-0" />
-			</div>
-		</div>
+		</ViewProgressProvider>
 	);
 }

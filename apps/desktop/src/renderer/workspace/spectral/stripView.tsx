@@ -9,6 +9,7 @@ import { FrequencyMinimap } from "./FrequencyMinimap";
 import { GridOverlay } from "./GridOverlay";
 import { MinimapDisplay } from "./MinimapDisplay";
 import { useWaveformReadouts } from "./useWaveformReadouts";
+import { ViewProgressProvider, ViewProgressToast } from "./viewProgress";
 import { usePublishedTransportControl, useTransportPlayback, useViewportScrub } from "./viewScaffold";
 import type { LayerColor } from "../layers";
 import type { Source } from "../source";
@@ -49,10 +50,8 @@ export function useStripView(
 		() => ({
 			...playback,
 			...readouts.control,
-			selectionInSec: viewSync.selection !== null ? viewSync.selection.start / 1000 : undefined,
-			selectionOutSec: viewSync.selection !== null ? viewSync.selection.end / 1000 : undefined,
 		}),
-		[playback, readouts.control, viewSync.selection],
+		[playback, readouts.control],
 	);
 
 	usePublishedTransportControl(control, onTransportControlChange);
@@ -102,78 +101,73 @@ export function StripOverlays({ view, settings, spectrogram = true }: StripOverl
 
 interface StripLayoutProps {
 	readonly view: StripView;
-	readonly header?: React.ReactNode;
 	readonly children: React.ReactNode;
 	readonly channelInput: ChannelInput;
 	readonly spectrogram?: boolean;
 }
 
-export function StripLayout({ view, header, children, channelInput, spectrogram = true }: StripLayoutProps) {
+export function StripLayout({ view, children, channelInput, spectrogram = true }: StripLayoutProps) {
 	return (
-		<div
-			className={
-				header
-					? "flex h-full min-h-0 w-full flex-col overflow-hidden bg-void"
-					: "flex h-full min-h-0 w-full overflow-hidden bg-void"
-			}
-		>
-			{header}
-			<div
-				className="min-h-0 min-w-0 flex-1 overflow-hidden"
-				style={{
-					display: "grid",
-					gridTemplateColumns: `${spectrogram ? "2.5rem" : "0px"} minmax(0, 1fr) auto auto`,
-					gridTemplateRows: "2rem minmax(0, 1fr) 2rem",
-				}}
-			>
-				<div className="bg-void" />
-				<TimeRuler startMs={view.viewport.startMs} endMs={view.viewport.endMs} />
-				<div className="bg-void" />
-				<div className="bg-void" />
+		<ViewProgressProvider>
+			<div className="flex h-full min-h-0 w-full overflow-hidden bg-void">
+				<div
+					className="min-h-0 min-w-0 flex-1 overflow-hidden"
+					style={{
+						display: "grid",
+						gridTemplateColumns: `${spectrogram ? "2.5rem" : "0px"} minmax(0, 1fr) auto auto`,
+						gridTemplateRows: "2rem minmax(0, 1fr) 2rem",
+					}}
+				>
+					<div className="bg-void" />
+					<TimeRuler startMs={view.viewport.startMs} endMs={view.viewport.endMs} />
+					<div className="bg-void" />
+					<div className="bg-void" />
 
-				{spectrogram ? (
-					<FrequencyAxis
-						sampleRate={view.chromeAudio.sampleRate}
+					{spectrogram ? (
+						<FrequencyAxis
+							sampleRate={view.chromeAudio.sampleRate}
+							frequencyRange={view.frequencyRange}
+							frequencyScale={view.frequencyScale}
+						/>
+					) : (
+						<div className="bg-void" />
+					)}
+
+					<CursorSurface
+						surfaceRef={view.viewport.wheelHandlers.ref}
+						className="relative cursor-crosshair overflow-hidden bg-void"
+						startMs={view.viewport.startMs}
+						endMs={view.viewport.endMs}
+						cursorMs={view.viewSync.cursor}
+						onCursorChange={view.viewSync.setCursor}
+					>
+						{children}
+						<ViewProgressToast />
+					</CursorSurface>
+
+					<FrequencyMinimap
+						amplitude={!spectrogram}
 						frequencyRange={view.frequencyRange}
 						frequencyScale={view.frequencyScale}
+						onFrequencyRangeChange={view.onFrequencyRangeChange}
+						sampleRate={view.chromeAudio.sampleRate}
 					/>
-				) : (
+					<DbAxis verticalRange={view.frequencyRange} />
+
 					<div className="bg-void" />
-				)}
-
-				<CursorSurface
-					surfaceRef={view.viewport.wheelHandlers.ref}
-					className="relative cursor-crosshair overflow-hidden bg-void"
-					startMs={view.viewport.startMs}
-					endMs={view.viewport.endMs}
-					cursorMs={view.viewSync.cursor}
-					onCursorChange={view.viewSync.setCursor}
-				>
-					{children}
-				</CursorSurface>
-
-				<FrequencyMinimap
-					amplitude={!spectrogram}
-					frequencyRange={view.frequencyRange}
-					frequencyScale={view.frequencyScale}
-					onFrequencyRangeChange={view.onFrequencyRangeChange}
-					sampleRate={view.chromeAudio.sampleRate}
-				/>
-				<DbAxis verticalRange={view.frequencyRange} />
-
-				<div className="bg-void" />
-				<MinimapDisplay
-					audioData={view.chromeAudio}
-					viewStartFrac={view.viewStartFrac}
-					viewEndFrac={view.viewEndFrac}
-					waveformColor={hexToRgb255(view.layerColor.primary)}
-					channelInput={channelInput}
-					onScrubToFraction={view.setViewportToFraction}
-				/>
-				<div className="bg-void" />
-				<div className="bg-void" />
+					<MinimapDisplay
+						audioData={view.chromeAudio}
+						viewStartFrac={view.viewStartFrac}
+						viewEndFrac={view.viewEndFrac}
+						waveformColor={hexToRgb255(view.layerColor.primary)}
+						channelInput={channelInput}
+						onScrubToFraction={view.setViewportToFraction}
+					/>
+					<div className="bg-void" />
+					<div className="bg-void" />
+				</div>
 			</div>
-		</div>
+		</ViewProgressProvider>
 	);
 }
 

@@ -10,13 +10,12 @@ import { relinkSource } from "../../comparison/utils/relinkSource";
 import { useComparisonHistory } from "../../state/useComparisonHistory";
 import { AppShell } from "../../workspace/AppShell";
 import { WorkspacePlaybackProvider } from "../../workspace/playback";
-import { Sidebar } from "../../workspace/Sidebar";
 import { MeasurementSessionProvider } from "../../workspace/spectral/MeasurementSession";
-import { ViewProgressProvider, useViewProgressState } from "../../workspace/spectral/viewProgress";
 import { SyncProvider } from "../../workspace/sync";
 import { Transport } from "../../workspace/Transport";
 import { hasTransportViewControls, TransportViewControls } from "../../workspace/TransportViewControls";
 import { normalizeSelection } from "../../workspace/utils/selection";
+import { ViewTopBar } from "../../workspace/ViewTopBar";
 import { Workspace } from "../../workspace/Workspace";
 import { LoadingToast } from "../LoadingToast";
 import type { ExportControl } from "../../export/ExportControl";
@@ -60,6 +59,7 @@ const INITIAL_TRANSPORT_CONTROL: TransportControl = {
 	durationSec: 0,
 	onPlayToggle: () => {},
 	onSeek: () => {},
+	readoutRows: [],
 };
 
 export function ComparisonTab({ context, comparison, onHistoryControlChange, onExportControlChange }: Props) {
@@ -86,6 +86,10 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 	const setViewSettings = useCallback(
 		(value: ViewControlSettings) => updateSettings({ viewSettings: value }),
 		[updateSettings],
+	);
+	const changeViewSettings = useCallback(
+		(changes: Partial<ViewControlSettings>) => setViewSettings({ ...viewSettings, ...changes }),
+		[setViewSettings, viewSettings],
 	);
 	const onRelinkSource = useCallback(
 		(sourceId: string): void => {
@@ -130,7 +134,7 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 	const activeView = comparison.activeView;
 
 	const setDifference = useCallback(
-		(differenceA: string, differenceB: string) => {
+		(differenceA: string | null, differenceB: string | null) => {
 			appStore.mutate(app, (proxy) => {
 				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
 
@@ -157,15 +161,10 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 
 	const derivedAudio = activeView === "difference" ? diffAudio : sumAudio;
 
-	const activeStreamInfo =
-		activeView === "frequency-distribution" || activeView === "vectorscope"
-			? null
-			: activeView === "difference"
-				? diffInfo
-				: sumInfo;
+	const activeStreamInfo = activeView === "difference" ? diffInfo : sumInfo;
 
-	const playbackStreamUrl = activeStreamInfo === null ? null : streamUrl(activeStreamInfo.key, "wav");
-	const playbackDurationSec = activeStreamInfo === null ? 0 : activeStreamInfo.durationMs / 1000;
+	const playbackStreamUrl = activeStreamInfo ? streamUrl(activeStreamInfo.key, "wav") : null;
+	const playbackDurationSec = activeStreamInfo ? activeStreamInfo.durationMs / 1000 : 0;
 	const comparisonDurationMs = sources.reduce(
 		(duration, source) => Math.max(duration, source.timelineOffsetMs + (sourceAudio.get(source.id)?.durationMs ?? 0)),
 		playbackDurationSec * 1000,
@@ -299,10 +298,8 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 			durationSec: player.durationSec > 0 ? player.durationSec : transportControl.durationSec,
 			onPlayToggle: player.onPlayToggle,
 			onSeek: player.onSeek,
-			selectionInSec: selection ? selection.start / 1000 : undefined,
-			selectionOutSec: selection ? selection.end / 1000 : undefined,
 		}),
-		[transportControl, playbackStreamUrl, player, selection],
+		[transportControl, playbackStreamUrl, player],
 	);
 
 	const appendSources = useCallback(
@@ -439,87 +436,80 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 		};
 	}, [undo, redo]);
 
-	const viewProgress = useViewProgressState();
-
 	return (
 		<WorkspacePlaybackProvider value={workspacePlayback}>
-			<div className="relative flex flex-1 flex-col bg-void">
+			<div className="relative flex min-h-0 flex-1 flex-col bg-void">
 				<AppShell
-					sidebar={
-						<Sidebar
-							activeView={activeView}
-							onActiveViewChange={handleActiveViewChange}
-							channelInput={comparison.channelInput}
-							onChannelInputChange={handleChannelInputChange}
-							sources={sources}
-							sourceStatus={status}
-							sourceErrors={sourceErrors}
-							onRetrySource={retrySource}
-							onRelinkSource={onRelinkSource}
-							onSourcesChange={handleSourcesChange}
-						/>
-					}
 					workspace={
-						<ViewProgressProvider report={viewProgress.report}>
-							<MeasurementSessionProvider sessionId={comparison.id} sourceAudio={sourceAudio}>
-								<SyncProvider enabled={syncEnabled} initial={INITIAL_SYNC_STATE}>
-									<Workspace
-										sources={sources}
-										sourceAudio={sourceAudio}
-										derivedAudio={derivedAudio}
-										theme={app.theme}
-										activeView={activeView}
-										channelInput={comparison.channelInput}
-										settings={viewSettings}
-										onFrequencyRangeChange={(frequencyRange) =>
-											setViewSettings({ ...viewSettings, frequencyRange })
-										}
-										differenceA={comparison.differenceA}
-										differenceB={comparison.differenceB}
-										onDifferenceChange={setDifference}
-										onSourceOffsetChange={handleSourceOffsetChange}
-										onTransportControlChange={setTransportControl}
-									/>
-								</SyncProvider>
-							</MeasurementSessionProvider>
-						</ViewProgressProvider>
+						<div className="relative flex h-full min-h-0 flex-col bg-void">
+							<ViewTopBar
+								activeView={activeView}
+								onActiveViewChange={handleActiveViewChange}
+								channelInput={comparison.channelInput}
+								onChannelInputChange={handleChannelInputChange}
+								settings={viewSettings}
+								onSettingsChange={changeViewSettings}
+								sources={sources}
+								differenceA={comparison.differenceA}
+								differenceB={comparison.differenceB}
+								onDifferenceChange={setDifference}
+							/>
+							<div className="relative min-h-0 flex-1 overflow-hidden px-4">
+								<MeasurementSessionProvider sessionId={comparison.id} sourceAudio={sourceAudio}>
+									<SyncProvider enabled={syncEnabled} initial={INITIAL_SYNC_STATE}>
+										<Workspace
+											sources={sources}
+											sourceAudio={sourceAudio}
+											derivedAudio={derivedAudio}
+											theme={app.theme}
+											activeView={activeView}
+											channelInput={comparison.channelInput}
+											settings={viewSettings}
+											onFrequencyRangeChange={(frequencyRange) =>
+												setViewSettings({ ...viewSettings, frequencyRange })
+											}
+											differenceA={comparison.differenceA}
+											differenceB={comparison.differenceB}
+											onSourceOffsetChange={handleSourceOffsetChange}
+											onTransportControlChange={setTransportControl}
+											sourceStatus={status}
+											sourceErrors={sourceErrors}
+											onRetrySource={retrySource}
+											onRelinkSource={onRelinkSource}
+											onSourcesChange={handleSourcesChange}
+											onAddSources={addSourcesFromDialog}
+										/>
+									</SyncProvider>
+								</MeasurementSessionProvider>
+							</div>
+						</div>
 					}
 					transport={
-						activeView === "frequency-distribution" || activeView === "vectorscope" ? undefined : (
-							<Transport
-								control={boundTransportControl}
-								playbackRate={playbackRate}
-								onPlaybackRateChange={setPlaybackRate}
-								looping={looping}
-								onLoopingChange={setLooping}
-								sampleRate={activeStreamInfo?.sampleRate ?? 48000}
-								volume={volume}
-								onVolumeChange={handleVolumeChange}
-								viewControls={
-									hasTransportViewControls(activeView) ? (
-										<TransportViewControls
-											activeView={activeView}
-											settings={viewSettings}
-											onSettingsChange={setViewSettings}
-											syncEnabled={syncEnabled}
-											onSyncEnabledChange={setSyncEnabled}
-										/>
-									) : undefined
-								}
-							/>
-						)
+						<Transport
+							control={boundTransportControl}
+							playbackRate={playbackRate}
+							onPlaybackRateChange={setPlaybackRate}
+							looping={looping}
+							onLoopingChange={setLooping}
+							sampleRate={activeStreamInfo?.sampleRate ?? 48000}
+							volume={volume}
+							onVolumeChange={handleVolumeChange}
+							viewControls={
+								hasTransportViewControls(activeView) ? (
+									<TransportViewControls
+										activeView={activeView}
+										settings={viewSettings}
+										onSettingsChange={setViewSettings}
+										syncEnabled={syncEnabled}
+										onSyncEnabledChange={setSyncEnabled}
+									/>
+								) : undefined
+							}
+						/>
 					}
 				/>
-				{preparing || derivedPreparing ? (
+				{(preparing || derivedPreparing) && (
 					<LoadingToast label="Preparing audio…" className="absolute right-2 top-2" />
-				) : (
-					viewProgress.progress.active && (
-						<LoadingToast
-							label="Rendering…"
-							fraction={viewProgress.progress.fraction}
-							className="absolute right-2 top-2 min-w-40"
-						/>
-					)
 				)}
 				{relinkError && (
 					<div

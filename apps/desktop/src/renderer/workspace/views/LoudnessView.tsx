@@ -135,23 +135,14 @@ function SourceLoudnessTrace({
 
 		if (values === null) return null;
 
-		const units =
-			metric.id === "integrated" || metric.id === "momentary" || metric.id === "shortTerm"
-				? "LUFS"
-				: metric.id === "truePeak"
-					? "dBTP"
-					: "dBFS";
-
 		return {
 			sourceId: source.id,
-			sourceName: source.name,
 			query: renderable.query,
 			values,
 			valueToY: (value) => dbToY(value, metric.axisMin),
 			formatValue: (value) => (value === -Infinity ? "−∞" : value.toFixed(1)),
-			amplitudeLabel: `${scalar ? `Analyzed window ${(renderable.query.startMs / 1000).toFixed(3)}–${(renderable.query.endMs / 1000).toFixed(3)} s ` : ""}${metric.label} ${units}`,
 		};
-	}, [source.id, source.name, renderable, loudnessData, metric]);
+	}, [source.id, renderable, loudnessData, metric]);
 
 	useEffect(() => {
 		onTraceChange(source.id, readout);
@@ -360,10 +351,11 @@ export function LoudnessView({ sources, sourceAudio, settings, onTransportContro
 			min: metricSpec.axisMin,
 			formatValue: (value) => `${value.toFixed(1)} dB`,
 			rangeLabel: "Loudness range",
+			readoutLabel: metricSpec.label,
 			unit: "dB",
 			emptyValue: "— dB",
 		}),
-		[metricSpec.axisMin],
+		[metricSpec.axisMin, metricSpec.label],
 	);
 
 	const chart = useChartView(chromeAudio, layerColor, axis, onTransportControlChange);

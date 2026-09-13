@@ -9,6 +9,7 @@ import { ScrollTrack } from "./ScrollTrack";
 import { scrollTrackTextsOf, trackValueTextOf } from "./scrollTrackTexts";
 import { SelectionSurface } from "./SelectionSurface";
 import { useChartReadouts } from "./useChartReadouts";
+import { ViewProgressProvider, ViewProgressToast } from "./viewProgress";
 import { usePublishedTransportControl, useTransportPlayback, useViewportScrub } from "./viewScaffold";
 import type { LayerColor } from "../layers";
 import type { TransportControl } from "../Transport";
@@ -22,6 +23,7 @@ export interface ChartAxis {
 	readonly formatValue: (value: number) => string;
 	readonly emptyValue: string;
 	readonly rangeLabel: string;
+	readonly readoutLabel: string;
 	readonly unit: string;
 }
 
@@ -42,7 +44,7 @@ export function useChartView(
 
 	const playback = useTransportPlayback(chromeAudio.durationMs / 1000);
 
-	const readouts = useChartReadouts();
+	const readouts = useChartReadouts(axis.readoutLabel);
 
 	const [yRange, setYRange] = useState<AxisRange>(FULL_AXIS_RANGE);
 
@@ -101,65 +103,68 @@ export function ChartLayout({ chart, tickCount, isEmpty, children }: ChartLayout
 	const { max, min, rangeLabel, unit } = chart.axis;
 
 	return (
-		<div className="flex h-full min-h-0 w-full flex-col bg-void">
-			<div className="flex min-h-0 flex-1 flex-col pr-4">
-				<div className="flex shrink-0">
-					<div className="w-10 shrink-0 bg-void" />
-					<div className="min-w-0 flex-1">
-						<TimeRuler startMs={chart.viewport.startMs} endMs={chart.viewport.endMs} />
+		<ViewProgressProvider>
+			<div className="flex h-full min-h-0 w-full flex-col bg-void">
+				<div className="flex min-h-0 flex-1 flex-col pr-4">
+					<div className="flex shrink-0">
+						<div className="w-10 shrink-0 bg-void" />
+						<div className="min-w-0 flex-1">
+							<TimeRuler startMs={chart.viewport.startMs} endMs={chart.viewport.endMs} />
+						</div>
+						<div className="w-2 shrink-0" />
 					</div>
-					<div className="w-2 shrink-0" />
-				</div>
-				<div className="flex min-h-0 flex-1">
-					<LinearDbAxis min={min} max={max} tickCount={tickCount} range={chart.yRange} />
-					<SelectionSurface
-						ref={chart.viewport.wheelHandlers.ref}
-						startMs={chart.viewport.startMs}
-						endMs={chart.viewport.endMs}
-						seekOnClick
-						className="relative min-w-0 flex-1"
-						onMouseMove={chart.handleChartMouseMove}
-					>
-						{isEmpty ? (
-							<div className="flex h-full items-center justify-center bg-void">
-								<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
-							</div>
-						) : (
-							<>
-								{children}
-								{chart.progress.firstComputing && <ComputeProgress fraction={chart.progress.fraction} />}
-							</>
-						)}
-					</SelectionSurface>
-					<ScrollTrack
-						axis="y"
-						className="shrink-0"
-						range={chart.yRange}
-						minSpan={CHART_MIN_VALUE_SPAN}
-						onRangeChange={chart.setYRange}
-						{...scrollTrackTextsOf(
-							"y",
-							rangeLabel,
-							chart.yRange,
-							(fraction) => trackValueTextOf(max - fraction * (max - min)),
-							unit,
-						)}
-					/>
-				</div>
-				<div className="flex shrink-0">
-					<div className="w-10 shrink-0 bg-void" />
-					<div className="min-w-0 flex-1">
-						<MinimapDisplay
-							audioData={chart.chromeAudio}
-							viewStartFrac={chart.viewStartFrac}
-							viewEndFrac={chart.viewEndFrac}
-							waveformColor={hexToRgb255(chart.layerColor.primary)}
-							onScrubToFraction={chart.setViewportToFraction}
+					<div className="flex min-h-0 flex-1">
+						<LinearDbAxis min={min} max={max} tickCount={tickCount} range={chart.yRange} />
+						<SelectionSurface
+							ref={chart.viewport.wheelHandlers.ref}
+							startMs={chart.viewport.startMs}
+							endMs={chart.viewport.endMs}
+							seekOnClick
+							className="relative min-w-0 flex-1"
+							onMouseMove={chart.handleChartMouseMove}
+						>
+							{isEmpty ? (
+								<div className="flex h-full items-center justify-center bg-void">
+									<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
+								</div>
+							) : (
+								<>
+									{children}
+									{chart.progress.firstComputing && <ComputeProgress fraction={chart.progress.fraction} />}
+								</>
+							)}
+							<ViewProgressToast />
+						</SelectionSurface>
+						<ScrollTrack
+							axis="y"
+							className="shrink-0"
+							range={chart.yRange}
+							minSpan={CHART_MIN_VALUE_SPAN}
+							onRangeChange={chart.setYRange}
+							{...scrollTrackTextsOf(
+								"y",
+								rangeLabel,
+								chart.yRange,
+								(fraction) => trackValueTextOf(max - fraction * (max - min)),
+								unit,
+							)}
 						/>
 					</div>
-					<div className="w-2 shrink-0" />
+					<div className="flex shrink-0">
+						<div className="w-10 shrink-0 bg-void" />
+						<div className="min-w-0 flex-1">
+							<MinimapDisplay
+								audioData={chart.chromeAudio}
+								viewStartFrac={chart.viewStartFrac}
+								viewEndFrac={chart.viewEndFrac}
+								waveformColor={hexToRgb255(chart.layerColor.primary)}
+								onScrubToFraction={chart.setViewportToFraction}
+							/>
+						</div>
+						<div className="w-2 shrink-0" />
+					</div>
 				</div>
 			</div>
-		</div>
+		</ViewProgressProvider>
 	);
 }
