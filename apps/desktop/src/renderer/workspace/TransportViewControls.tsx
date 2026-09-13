@@ -13,6 +13,19 @@ interface TransportViewControlsProps {
 	readonly onSyncEnabledChange: (next: boolean) => void;
 }
 
+const VIEW_CONTROL_VIEWS: ReadonlySet<ViewId> = new Set([
+	"timeline",
+	"overlay",
+	"slider",
+	"difference",
+	"sum",
+	"loudness",
+]);
+
+export function hasTransportViewControls(view: ViewId): boolean {
+	return VIEW_CONTROL_VIEWS.has(view);
+}
+
 const FFT_SELECT_OPTIONS = FFT_OPTIONS.map((value) => ({ value, label: value }));
 const COLORMAP_OPTIONS = [
 	{ value: "lava", label: "Lava" },

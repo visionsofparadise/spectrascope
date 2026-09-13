@@ -46,18 +46,29 @@ it("keeps the same fixed button geometry and direct action while Play becomes Pa
 	const toggle = vi.fn();
 	const before = render(false, toggle).find((element) => element.props["aria-label"] === "Play")!;
 	const after = render(true, toggle).find((element) => element.props["aria-label"] === "Pause")!;
-	for (const [button, icon] of [
-		[before, "lucide:play"],
-		[after, "lucide:pause"],
+	for (const [button, shapes] of [
+		[before, ["path"]],
+		[after, ["rect", "rect"]],
 	] as const) {
 		expect(button.props.className).toContain("shrink-0 items-center justify-center p-1.5");
 		const children = elements(button.props.children);
 		expect(children[0]?.props.className).toContain("size-6");
-		expect(children.find((element) => element.type === "mock-icon")?.props).toMatchObject({
-			icon,
-			width: 24,
-			height: 24,
+		expect(children.some((element) => element.type === "mock-icon")).toBe(false);
+		const svg = children.find((element) => element.type === "svg")!;
+		expect(svg.props).toMatchObject({
+			width: "24",
+			height: "24",
+			viewBox: "0 0 24 24",
+			fill: "none",
+			stroke: "currentColor",
+			strokeWidth: "2",
 		});
+		expect(
+			elements(svg.props.children)
+				.filter((element) => element.type !== svg.type)
+				.map((element) => element.type)
+				.filter((type) => typeof type === "string"),
+		).toEqual(shapes);
 		(button.props.onClick as NonNullable<ComponentProps<"button">["onClick"]>)(
 			{} as React.MouseEvent<HTMLButtonElement>,
 		);
@@ -101,6 +112,11 @@ it("chooses playback speed through an upward chip selector", () => {
 		"1.5x",
 		"2x",
 	]);
+	expect(speed.props.disabled).toBe(false);
 	(speed.props.onChange as (value: string) => void)("1.5");
 	expect(onPlaybackRateChange).toHaveBeenCalledExactlyOnceWith(1.5);
+	const disabledSpeed = render(false, vi.fn(), true).find(
+		(element) => element.type === "mock-select" && element.props.ariaLabel === "Playback speed",
+	)!;
+	expect(disabledSpeed.props.disabled).toBe(true);
 });

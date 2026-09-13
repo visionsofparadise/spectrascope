@@ -18,11 +18,11 @@ describe("last opened label", () => {
 		[HOUR_MS - 1, "59 minutes ago"],
 		[HOUR_MS, "1 hour ago"],
 		[DAY_MS - 1, "23 hours ago"],
-		[DAY_MS, "yesterday"],
+		[DAY_MS, "1 day ago"],
 		[7 * DAY_MS - 1, "6 days ago"],
-		[7 * DAY_MS, "last week"],
+		[7 * DAY_MS, "1 week ago"],
 		[30 * DAY_MS - 1, "4 weeks ago"],
-		[30 * DAY_MS, "last month"],
+		[30 * DAY_MS, "1 month ago"],
 		[90 * DAY_MS, "3 months ago"],
 	])("labels %i ms elapsed as %s", (elapsedMs, label) => {
 		expect(labelAfter(elapsedMs)).toBe(label);

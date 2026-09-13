@@ -14,7 +14,7 @@ import { Sidebar } from "../../workspace/Sidebar";
 import { MeasurementSessionProvider } from "../../workspace/spectral/MeasurementSession";
 import { SyncProvider } from "../../workspace/sync";
 import { Transport } from "../../workspace/Transport";
-import { TransportViewControls } from "../../workspace/TransportViewControls";
+import { hasTransportViewControls, TransportViewControls } from "../../workspace/TransportViewControls";
 import { normalizeSelection } from "../../workspace/utils/selection";
 import { Workspace } from "../../workspace/Workspace";
 import { LoadingToast } from "../LoadingToast";
@@ -51,15 +51,6 @@ const INITIAL_SYNC_STATE: SyncState = {
 	cursor: null,
 	selection: null,
 };
-
-const VIEW_CONTROL_VIEWS: ReadonlySet<ViewId> = new Set([
-	"timeline",
-	"overlay",
-	"slider",
-	"difference",
-	"sum",
-	"loudness",
-]);
 
 const INITIAL_TRANSPORT_CONTROL: TransportControl = {
 	disabled: false,
@@ -500,7 +491,7 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 								volume={volume}
 								onVolumeChange={handleVolumeChange}
 								viewControls={
-									VIEW_CONTROL_VIEWS.has(activeView) ? (
+									hasTransportViewControls(activeView) ? (
 										<TransportViewControls
 											activeView={activeView}
 											settings={viewSettings}

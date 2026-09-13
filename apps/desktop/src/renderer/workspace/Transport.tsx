@@ -78,6 +78,31 @@ function formatTimecode(sec: number): string {
 	return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
 }
 
+function PlaybackGlyph({ playing }: { readonly playing: boolean }) {
+	return (
+		<svg
+			width="24"
+			height="24"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			aria-hidden="true"
+		>
+			{playing ? (
+				<>
+					<rect x="14" y="3" width="5" height="18" rx="1" />
+					<rect x="5" y="3" width="5" height="18" rx="1" />
+				</>
+			) : (
+				<path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+			)}
+		</svg>
+	);
+}
+
 function MediaButton({
 	icon,
 	label,
@@ -86,7 +111,7 @@ function MediaButton({
 	disabled,
 	onClick,
 }: {
-	readonly icon: string;
+	readonly icon: ReactNode;
 	readonly label: string;
 	readonly large?: boolean;
 	readonly active?: boolean;
@@ -117,7 +142,7 @@ function MediaButton({
 					active && !disabled ? "bg-primary" : ""
 				}`}
 			>
-				<Icon icon={icon} width={iconSize} height={iconSize} />
+				{typeof icon === "string" ? <Icon icon={icon} width={iconSize} height={iconSize} /> : icon}
 			</span>
 		</button>
 	);
@@ -147,10 +172,10 @@ function TransportCluster({
 					aria-label={label === "View" ? "View controls" : label}
 					title={label === "View" ? "View controls" : label}
 					popoverTarget={id}
-					className="flex h-8 min-w-8 shrink-0 items-center justify-center gap-1 bg-chrome-raised px-1.5 font-technical text-xs text-chrome-text hover:text-primary"
+					className="flex h-8 min-w-6 shrink-0 items-center justify-center gap-1 bg-chrome-raised px-1 font-technical text-xs text-chrome-text hover:text-primary @[500px]:min-w-8 @[500px]:px-1.5"
 				>
 					<Icon icon={icon} width={16} height={16} />
-					<span className="hidden @[500px]:inline">{label}</span>
+					<span className="hidden @[900px]:inline">{label}</span>
 				</button>
 				<div
 					id={id}
@@ -212,7 +237,7 @@ function ReadoutPanel({
 			<span />
 			<span />
 
-			<span className={`${rowLabelClass} max-w-28 truncate`} title={amplitudeLabel}>
+			<span className={`${rowLabelClass} max-w-24 truncate`} title={amplitudeLabel}>
 				{amplitudeLabel ?? "Amp"}
 			</span>
 			<span className={valueClass}>{cursor.amp}</span>
@@ -388,7 +413,7 @@ export function Transport({
 								onClick={() => onSeek(Math.max(0, positionSec - 1 / sampleRate))}
 							/>
 							<MediaButton
-								icon={playing ? "lucide:pause" : "lucide:play"}
+								icon={<PlaybackGlyph playing={playing} />}
 								label={playing ? "Pause" : "Play"}
 								large
 								active={playing}
@@ -448,12 +473,12 @@ export function Transport({
 				</div>
 
 				<div className="flex min-w-0 flex-1 basis-0 items-center">
-					<div className="min-w-4 flex-1" />
+					<div className="min-w-0 flex-1 @[1360px]:min-w-4" />
 					<TransportCluster
 						label="Measurements"
 						icon="lucide:ruler"
-						inlineClassName="hidden shrink-0 @[1280px]:block"
-						compactClassName="shrink-0 @[1280px]:hidden"
+						inlineClassName="hidden shrink-0 @[1360px]:block"
+						compactClassName="shrink-0 @[1360px]:hidden"
 					>
 						<div className="max-w-[calc(100vw-48px)]">
 							<ReadoutPanel
@@ -475,12 +500,12 @@ export function Transport({
 							/>
 						</div>
 					</TransportCluster>
-					<div className="min-w-4 flex-1" />
+					<div className="min-w-0 flex-1 @[700px]:min-w-4" />
 					<TransportCluster
 						label="Volume"
 						icon="lucide:volume-2"
-						inlineClassName="hidden shrink-0 @[600px]:block"
-						compactClassName="shrink-0 @[600px]:hidden"
+						inlineClassName="hidden shrink-0 @[700px]:block"
+						compactClassName="shrink-0 @[700px]:hidden"
 					>
 						<VolumeSlider volume={volume} onVolumeChange={onVolumeChange} />
 					</TransportCluster>

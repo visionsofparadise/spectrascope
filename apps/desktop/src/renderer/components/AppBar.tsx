@@ -9,6 +9,7 @@ import {
 	DropdownMenuTrigger,
 } from "./DropdownMenu";
 import { IconButton } from "./IconButton";
+import { LoadingToast } from "./LoadingToast";
 import type { AppContext } from "../models/Context";
 import type { HistoryControl } from "../state/useComparisonHistory";
 
@@ -20,6 +21,7 @@ interface Props {
 	 */
 	readonly historyControl: HistoryControl | null;
 	readonly canExport: boolean;
+	readonly exportBusy: boolean;
 	readonly onExport: () => void;
 	readonly onPreferences: () => void;
 }
@@ -27,7 +29,7 @@ interface Props {
 const DRAG = { WebkitAppRegion: "drag" } as React.CSSProperties;
 const NO_DRAG = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
 
-export function AppBar({ context, historyControl, canExport, onExport, onPreferences }: Props) {
+export function AppBar({ context, historyControl, canExport, exportBusy, onExport, onPreferences }: Props) {
 	const { app, appStore } = context;
 
 	const [editingTabId, setEditingTabId] = useState<string | null>(null);
@@ -221,6 +223,8 @@ export function AppBar({ context, historyControl, canExport, onExport, onPrefere
 					/>
 				</div>
 			</div>
+
+			{exportBusy && <LoadingToast label="Exporting…" className="shrink-0" />}
 
 			{hasActiveTab && (
 				<div className="flex shrink-0 items-center gap-1.5" style={NO_DRAG}>

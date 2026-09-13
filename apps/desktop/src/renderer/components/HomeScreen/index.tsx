@@ -1,4 +1,5 @@
 import { Icon } from "@iconify/react";
+import { useEffect, useState } from "react";
 import { TerrainShader } from "../TerrainShader";
 import { lastOpenedLabelOf } from "./utils/lastOpenedLabel";
 import type { AppContext } from "../../models/Context";
@@ -7,7 +8,17 @@ interface Props {
 	readonly context: AppContext;
 }
 
+const LABEL_REFRESH_MS = 60_000;
+
 export function HomeScreen({ context }: Props) {
+	const [now, setNow] = useState(() => Date.now());
+
+	useEffect(() => {
+		const interval = setInterval(() => setNow(Date.now()), LABEL_REFRESH_MS);
+
+		return () => clearInterval(interval);
+	}, []);
+
 	return (
 		<div className="relative flex flex-1 flex-col overflow-hidden bg-void">
 			<TerrainShader theme={context.app.theme} className="absolute inset-0" />
@@ -38,7 +49,7 @@ export function HomeScreen({ context }: Props) {
 												{session.filePath}
 											</span>
 											<span className="shrink-0 font-technical text-[length:var(--text-xs)] text-chrome-text-dim">
-												{lastOpenedLabelOf(session.lastOpenedAt, Date.now())}
+												{lastOpenedLabelOf(session.lastOpenedAt, now)}
 											</span>
 										</button>
 										<button

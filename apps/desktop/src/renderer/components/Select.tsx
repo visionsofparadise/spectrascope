@@ -1,5 +1,5 @@
 import { Icon } from "@iconify/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { cn } from "../cn";
 
 interface SelectOption {
@@ -41,9 +41,25 @@ export function Select({
 }: SelectProps) {
 	const [open, setOpen] = useState(false);
 	const rootRef = useRef<HTMLDivElement>(null);
+	const triggerRef = useRef<HTMLButtonElement>(null);
+	const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+	const listboxId = useId();
+	const menuOpen = open && !disabled;
+	const selectedIndex = Math.max(
+		0,
+		options.findIndex((option) => option.value === value),
+	);
 
 	useEffect(() => {
-		if (!open) return;
+		if (disabled) setOpen(false);
+	}, [disabled]);
+
+	useEffect(() => {
+		if (menuOpen) optionRefs.current[selectedIndex]?.focus();
+	}, [menuOpen, selectedIndex]);
+
+	useEffect(() => {
+		if (!menuOpen) return;
 
 		const onPointerDown = (event: PointerEvent) => {
 			if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
@@ -52,7 +68,10 @@ export function Select({
 		};
 
 		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key === "Escape") setOpen(false);
+			if (event.key === "Escape") {
+				setOpen(false);
+				triggerRef.current?.focus();
+			}
 		};
 
 		document.addEventListener("pointerdown", onPointerDown);
@@ -62,21 +81,42 @@ export function Select({
 			document.removeEventListener("pointerdown", onPointerDown);
 			document.removeEventListener("keydown", onKeyDown);
 		};
-	}, [open]);
+	}, [menuOpen]);
 
 	const handleSelect = useCallback(
 		(next: string) => {
 			onChange(next);
 			setOpen(false);
+			triggerRef.current?.focus();
 		},
 		[onChange],
 	);
 
+	const handleOptionKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+		const lastIndex = options.length - 1;
+		const nextIndex =
+			event.key === "ArrowDown"
+				? Math.min(lastIndex, index + 1)
+				: event.key === "ArrowUp"
+					? Math.max(0, index - 1)
+					: event.key === "Home"
+						? 0
+						: event.key === "End"
+							? lastIndex
+							: undefined;
+
+		if (nextIndex === undefined) return;
+
+		event.preventDefault();
+		optionRefs.current[nextIndex]?.focus();
+	};
+
 	const selected = options.find((option) => option.value === value);
 	const displayLabel = selected?.label ?? value;
 
-	const menu = open ? (
+	const menu = menuOpen ? (
 		<div
+			id={listboxId}
 			role="listbox"
 			className={cn(
 				"absolute left-0 z-50 flex flex-col bg-chrome-raised py-1 shadow-[0_8px_24px_rgba(0,0,0,0.5)]",
@@ -85,14 +125,21 @@ export function Select({
 				menuClassName,
 			)}
 		>
-			{options.map((option) => {
+			{options.map((option, index) => {
 				const isActive = option.value === value;
 
 				return (
 					<button
 						key={option.value}
+						ref={(element) => {
+							optionRefs.current[index] = element;
+						}}
 						type="button"
 						role="option"
+						tabIndex={index === selectedIndex ? 0 : -1}
+						onKeyDown={(event) => {
+							handleOptionKeyDown(event, index);
+						}}
 						aria-selected={isActive}
 						onClick={() => {
 							handleSelect(option.value);
@@ -109,38 +156,34 @@ export function Select({
 		</div>
 	) : null;
 
-	const trigger =
-		variant === "field" ? (
-			<button
-				type="button"
-				aria-haspopup="listbox"
-				aria-label={ariaLabel ?? label}
-				aria-expanded={open}
-				onClick={() => {
-					setOpen((previous) => !previous);
-				}}
-				disabled={disabled}
-				className="flex w-full items-center justify-between gap-2 border border-chrome-border bg-void px-2 py-1.5 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text hover:border-chrome-text-dim"
-			>
-				<span>{displayLabel}</span>
-				<Icon icon="lucide:chevron-down" width={14} height={14} className="shrink-0 text-chrome-text-dim" />
-			</button>
-		) : (
-			<button
-				type="button"
-				aria-haspopup="listbox"
-				aria-label={ariaLabel ?? label}
-				aria-expanded={open}
-				onClick={() => {
-					setOpen((previous) => !previous);
-				}}
-				disabled={disabled}
-				className={cn(
-					"flex items-center px-1 py-0.5 font-technical uppercase tracking-[0.06em]",
-					size === "sm" ? "text-[length:var(--text-sm)]" : "text-[length:var(--text-xs)]",
-					disabled ? "cursor-not-allowed text-chrome-text-dim" : "text-chrome-text",
-				)}
-			>
+	const trigger = (
+		<button
+			type="button"
+			ref={triggerRef}
+			aria-haspopup="listbox"
+			aria-controls={listboxId}
+			aria-label={ariaLabel ?? label}
+			aria-expanded={menuOpen}
+			onClick={() => {
+				setOpen((previous) => !previous);
+			}}
+			disabled={disabled}
+			className={
+				variant === "field"
+					? "flex w-full items-center justify-between gap-2 border border-chrome-border bg-void px-2 py-1.5 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text hover:border-chrome-text-dim"
+					: cn(
+							"flex items-center px-1 py-0.5 font-technical uppercase tracking-[0.06em]",
+							size === "sm" ? "text-[length:var(--text-sm)]" : "text-[length:var(--text-xs)]",
+							disabled ? "cursor-not-allowed text-chrome-text-dim" : "text-chrome-text",
+						)
+			}
+		>
+			{variant === "field" ? (
+				<>
+					<span>{displayLabel}</span>
+					<Icon icon="lucide:chevron-down" width={14} height={14} className="shrink-0 text-chrome-text-dim" />
+				</>
+			) : (
 				<span
 					className={cn(
 						"flex items-center whitespace-nowrap bg-chrome-raised",
@@ -150,8 +193,9 @@ export function Select({
 					<span>{displayLabel}</span>
 					<Icon icon="lucide:chevron-down" width={size === "sm" ? 12 : 10} height={size === "sm" ? 12 : 10} />
 				</span>
-			</button>
-		);
+			)}
+		</button>
+	);
 
 	if (label) {
 		return (

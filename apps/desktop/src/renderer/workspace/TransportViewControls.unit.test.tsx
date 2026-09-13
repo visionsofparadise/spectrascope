@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { TransportViewControls } from "./TransportViewControls";
+import { hasTransportViewControls, TransportViewControls } from "./TransportViewControls";
 import { INITIAL_VIEW_CONTROL_SETTINGS } from "./viewSettings";
 import type { ReactElement } from "react";
 import type { ViewId } from "./Workspace";
@@ -168,5 +168,20 @@ describe("transport view control layout", () => {
 
 	it("renders nothing for Correlation", () => {
 		expect(render("correlation")).toEqual([]);
+	});
+
+	it.each([
+		["timeline", true],
+		["overlay", true],
+		["slider", true],
+		["difference", true],
+		["sum", true],
+		["loudness", true],
+		["frequency-distribution", false],
+		["correlation", false],
+		["vectorscope", false],
+	] as const)("reports whether %s has view controls", (view, expected) => {
+		expect(hasTransportViewControls(view)).toBe(expected);
+		expect(render(view).length > 0).toBe(expected);
 	});
 });
