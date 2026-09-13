@@ -189,8 +189,8 @@ function ReadoutPanel({
 
 	return (
 		<div
-			className="grid min-w-0 max-w-xl flex-1 items-baseline gap-x-3 gap-y-1 leading-none"
-			style={{ gridTemplateColumns: "auto repeat(3, minmax(0, 1fr))" }}
+			className="grid items-baseline gap-x-3 gap-y-1 leading-none"
+			style={{ gridTemplateColumns: "auto repeat(3, minmax(max-content, 1fr))" }}
 		>
 			<span />
 			<span className={headClass}>Cursor</span>
@@ -351,19 +351,21 @@ export function Transport({
 			aria-label="Transport"
 			className="@container h-[92px] w-full border-t border-chrome-border-subtle bg-void"
 		>
-			<div className="flex h-full min-w-0 items-center justify-between gap-2 px-2">
-				{viewControls && (
-					<TransportCluster
-						label="View"
-						icon="lucide:sliders-horizontal"
-						inlineClassName="hidden min-w-0 @[1280px]:block"
-						compactClassName="shrink-0 @[1280px]:hidden"
-					>
-						<div className="[&_[role=listbox]]:bottom-full [&_[role=listbox]]:top-auto">{viewControls}</div>
-					</TransportCluster>
-				)}
+			<div className="flex h-full min-w-0 items-center px-2">
+				<div className="flex min-w-0 flex-1 basis-0 items-center">
+					{viewControls && (
+						<TransportCluster
+							label="View"
+							icon="lucide:sliders-horizontal"
+							inlineClassName="hidden min-w-0 @[1280px]:block"
+							compactClassName="shrink-0 @[1280px]:hidden"
+						>
+							<div className="[&_[role=listbox]]:bottom-full [&_[role=listbox]]:top-auto">{viewControls}</div>
+						</TransportCluster>
+					)}
+				</div>
 
-				<div className="flex shrink-0 flex-col items-center justify-center gap-1.5">
+				<div className="mx-4 flex shrink-0 flex-col items-center justify-center gap-1.5">
 					<div className="flex items-center gap-2">
 						<div className="flex items-center">
 							<MediaButton
@@ -448,40 +450,42 @@ export function Transport({
 					</div>
 				</div>
 
-				<TransportCluster
-					label="Measurements"
-					icon="lucide:ruler"
-					inlineClassName="hidden min-w-0 @[960px]:block"
-					compactClassName="shrink-0 @[960px]:hidden"
-				>
-					<div className="w-[420px] max-w-[calc(100vw-48px)]">
-						<ReadoutPanel
-							amplitudeLabel={amplitudeLabel}
-							cursor={{
-								time: cursorReadout?.time ?? "—",
-								freq: cursorReadout?.freq ?? "— Hz",
-								amp: cursorReadout?.amp ?? "—",
-							}}
-							selectionIn={{
-								time: selectionInLabel,
-								amp: selectionInAmp ?? "—",
-							}}
-							selectionOut={{
-								time: selectionOutLabel,
-								amp: selectionOutAmp ?? "—",
-							}}
-							disabled={disabled}
-						/>
-					</div>
-				</TransportCluster>
-				<TransportCluster
-					label="Volume"
-					icon="lucide:volume-2"
-					inlineClassName="hidden shrink-0 @[600px]:block"
-					compactClassName="shrink-0 @[600px]:hidden"
-				>
-					<VolumeSlider volume={volume} onVolumeChange={onVolumeChange} />
-				</TransportCluster>
+				<div className="flex min-w-0 flex-1 basis-0 items-center justify-end gap-2">
+					<TransportCluster
+						label="Measurements"
+						icon="lucide:ruler"
+						inlineClassName="hidden min-w-0 @[1280px]:block"
+						compactClassName="shrink-0 @[1280px]:hidden"
+					>
+						<div className="max-w-[calc(100vw-48px)]">
+							<ReadoutPanel
+								amplitudeLabel={amplitudeLabel}
+								cursor={{
+									time: cursorReadout?.time ?? "—",
+									freq: cursorReadout?.freq ?? "— Hz",
+									amp: cursorReadout?.amp ?? "—",
+								}}
+								selectionIn={{
+									time: selectionInLabel,
+									amp: selectionInAmp ?? "—",
+								}}
+								selectionOut={{
+									time: selectionOutLabel,
+									amp: selectionOutAmp ?? "—",
+								}}
+								disabled={disabled}
+							/>
+						</div>
+					</TransportCluster>
+					<TransportCluster
+						label="Volume"
+						icon="lucide:volume-2"
+						inlineClassName="hidden shrink-0 @[600px]:block"
+						compactClassName="shrink-0 @[600px]:hidden"
+					>
+						<VolumeSlider volume={volume} onVolumeChange={onVolumeChange} />
+					</TransportCluster>
+				</div>
 			</div>
 		</div>
 	);

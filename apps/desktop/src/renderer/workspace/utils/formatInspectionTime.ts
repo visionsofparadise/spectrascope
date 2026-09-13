@@ -1,4 +1,4 @@
-export function formatInspectionTime(timeMs: number, precision = 6): string {
+export function formatInspectionTime(timeMs: number, precision = 3): string {
 	if (!Number.isFinite(timeMs) || timeMs < 0) return "—";
 
 	const digits = Math.max(0, Math.min(6, precision));
