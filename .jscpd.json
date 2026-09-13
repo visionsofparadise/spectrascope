@@ -12,6 +12,7 @@
 		"**/*.test.ts",
 		"**/*.test.tsx",
 		"**/__fixtures__/**",
+		"apps/desktop/designs/**",
 		"**/types/*.d.ts",
 		"packages/spectral-display/src/engine/sample-scan.ts",
 		"**/package.json",

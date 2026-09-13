@@ -8,5 +8,13 @@
 			}
 		]
 	},
-	"ignoreFiles": ["**/node_modules/**", "**/dist/**", "**/out/**", "**/build/**", "**/coverage/**", "**/.*/**"]
+	"ignoreFiles": [
+		"**/node_modules/**",
+		"**/dist/**",
+		"**/out/**",
+		"**/build/**",
+		"**/coverage/**",
+		"**/.*/**",
+		"apps/desktop/designs/**"
+	]
 }

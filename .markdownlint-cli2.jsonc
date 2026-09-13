@@ -1,6 +1,6 @@
 {
 	"gitignore": true,
-	"ignores": ["**/.*/**"],
+	"ignores": ["**/.*/**", "apps/desktop/designs/**"],
 	"noProgress": true,
 	"noBanner": true,
 	"config": {
