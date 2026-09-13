@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  * { box-sizing: border-box; }
+  body { background: #0D0D0F; --font-sans: 'Outfit', system-ui, sans-serif; --font-mono: 'JetBrains Mono', ui-monospace, monospace; --font-display: 'Bricolage Grotesque', sans-serif; }
+  a { color: var(--accent, var(--accent)); text-decoration: none; }
+  a:hover { opacity: 0.85; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #28282E; }
+  ::-webkit-scrollbar-track { background: #020204; }
+  button { font-family: inherit; }
+  iconify-icon { display: inline-block; line-height: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&amp;family=Outfit:wght@300..700&amp;family=JetBrains+Mono:wght@400..600&amp;family=Space+Grotesk:wght@400;500;600;700&amp;family=Space+Mono:wght@400;700&amp;family=Manrope:wght@400;500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=Sora:wght@400;500;600;700&amp;family=Martian+Mono:wght@400;500;600&amp;family=Hanken+Grotesk:wght@400;500;600;700&amp;family=Spline+Sans+Mono:wght@400;500;600&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;family=Fragment+Mono&amp;family=Instrument+Sans:wght@400;500;600;700&amp;family=DM+Mono:wght@400;500&amp;family=Familjen+Grotesk:wght@400;500;600;700&amp;family=Red+Hat+Mono:wght@400;500;600&amp;family=Archivo:wght@400;500;600;700&amp;family=Azeret+Mono:wght@400;500;600&amp;family=Chivo:wght@400;500;600;700&amp;family=Sono:wght@400;500;600&amp;family=Syne:wght@600;700;800&amp;family=Unbounded:wght@500;600;700;800&amp;family=Orbitron:wght@500;600;700;800;900&amp;family=Michroma&amp;family=Chakra+Petch:wght@500;600;700&amp;family=Oxanium:wght@500;600;700;800&amp;family=Big+Shoulders+Display:wght@600;700;800;900&amp;family=Anton&amp;display=swap" rel="stylesheet">
+<script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
+<script src="spectrascope-viz.js"></script>
+</helmet>
+
+<div style="--accent:{{ themeAccent }};--tint:{{ themeTint }};--font-sans:{{ fontSansVar }};--font-mono:{{ fontMonoVar }};--font-display:{{ fontDisplayVar }};display:flex;flex-direction:column;height:100vh;min-width:1200px;overflow:hidden;background:#0D0D0F;color:#B8B8C0;font-family:var(--font-sans)">
+
+  <sc-if value="{{ anyMenuOpen }}"><div onClick="{{ onCloseMenu }}" style="position:fixed;inset:0;z-index:40"></div></sc-if>
+
+  <nav style="height:36px;flex-shrink:0;display:flex;align-items:center;border-bottom:1px solid #2A2A30;background:#1E1E23;padding:0 8px">
+    <span style="margin-right:12px;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#44444C">Demo</span>
+    <sc-for list="{{ pageButtons }}" as="pg" hint-placeholder-count="3">
+      <button type="button" onClick="{{ pg.onClick }}" style="padding:4px 8px;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;background:none;border:none;cursor:pointer;color:#6E6E78" style-hover="color:#B8B8C0">
+        <span style="{{ pg.chipStyle }}">{{ pg.label }}</span>
+      </button>
+    </sc-for>
+  </nav>
+
+  <main style="flex:1;min-height:0;overflow:hidden">
+
+    <!-- ============================= APP (Home + Workspace share this chrome) ============================= -->
+    <sc-if value="{{ isApp }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;height:100%;flex-direction:column">
+
+      <!-- App menu / open-document tabs bar -->
+      <div style="height:48px;flex-shrink:0;display:flex;align-items:center;gap:8px;background:#020204;padding:0 12px">
+        <!-- App menu dropdown -->
+        <div style="position:relative;flex-shrink:0">
+          <button type="button" aria-label="Menu" onClick="{{ onAppMenu }}" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;cursor:pointer;color:#6E6E78" style-hover="color:#B8B8C0">
+            <span style="display:flex;align-items:center;justify-content:center;background:#28282E"><iconify-icon icon="lucide:menu" style="font-size:20px"></iconify-icon></span>
+          </button>
+          <sc-if value="{{ appMenuOpen }}">
+            <div style="position:absolute;left:0;top:100%;margin-top:4px;z-index:50;display:flex;width:200px;flex-direction:column;padding:4px 0;background:#28282E;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
+              <sc-for list="{{ appMenuItems }}" as="mi" hint-placeholder-count="8">
+                <sc-if value="{{ mi.divider }}"><div style="margin:4px 8px;height:1px;background:#1F1F24"></div></sc-if>
+                <sc-if value="{{ mi.isItem }}"><button type="button" onClick="{{ mi.onClick }}" style="display:block;width:100%;text-align:left;padding:5px 12px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0" style-hover="background:#1F1F24">{{ mi.label }}</button></sc-if>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+        <div style="height:24px;width:1px;flex-shrink:0;background:#1F1F24"></div>
+        <!-- Open-document tabs -->
+        <div style="display:flex;min-width:0;flex:1;align-items:center;gap:8px;overflow:hidden">
+          <sc-for list="{{ docTabs }}" as="dt" hint-placeholder-count="1">
+            <button type="button" onClick="{{ dt.onClick }}" style="{{ dt.chipStyle }}">
+              <span style="font-family:var(--font-sans);font-size:0.875rem;white-space:nowrap">{{ dt.name }}</span>
+              <span aria-label="Close tab" style="display:flex;align-items:center;padding:0;color:{{ dt.closeColor }}"><iconify-icon icon="lucide:x" style="font-size:14px"></iconify-icon></span>
+            </button>
+          </sc-for>
+          <button type="button" aria-label="New tab" onClick="{{ onNewTab }}" style="display:flex;flex-shrink:0;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;cursor:pointer;color:#6E6E78" style-hover="color:#B8B8C0">
+            <span style="{{ newTabChip }}"><iconify-icon icon="lucide:plus" style="font-size:20px"></iconify-icon></span>
+          </button>
+        </div>
+        <!-- Undo / redo -->
+        <sc-if value="{{ isWorkspace }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-shrink:0;align-items:center;gap:6px">
+          <div style="height:24px;width:1px;flex-shrink:0;background:#1F1F24"></div>
+          <button type="button" aria-label="Undo" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;color:#44444C;cursor:not-allowed"><iconify-icon icon="lucide:undo-2" style="font-size:16px"></iconify-icon></button>
+          <button type="button" aria-label="Redo" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;color:#44444C;cursor:not-allowed"><iconify-icon icon="lucide:redo-2" style="font-size:16px"></iconify-icon></button>
+        </div>
+        </sc-if>
+      </div>
+
+      <!-- ===== WORKSPACE body ===== -->
+      <sc-if value="{{ isWorkspace }}" hint-placeholder-val="{{ true }}">
+      <!-- AppShell -->
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:190px 1fr;grid-template-rows:{{ shellRows }};background:#020204;color:#B8B8C0">
+
+        <!-- Sidebar : Sources panel -->
+        <aside style="grid-column:1;grid-row:{{ sidebarRow }};min-height:0;overflow:visible;background:#020204">
+          <div style="display:flex;height:100%;flex-direction:column;background:#020204">
+
+            <!-- VIEW selector -->
+            <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;padding:12px 16px">
+              <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#6E6E78">View</span>
+              <div style="position:relative;display:flex;align-items:center">
+                <button type="button" onClick="{{ onViewMenu }}" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0">
+                  <span style="display:flex;align-items:center;gap:4px;white-space:nowrap;background:#28282E"><span>{{ currentViewLabel }}</span><iconify-icon icon="lucide:chevron-down" style="font-size:12px"></iconify-icon></span>
+                </button>
+                <sc-if value="{{ viewMenuOpen }}">
+                  <div style="position:absolute;left:0;top:100%;margin-top:4px;z-index:50;display:flex;min-width:160px;flex-direction:column;padding:4px 0;background:#28282E;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
+                    <sc-for list="{{ viewOptions }}" as="vo" hint-placeholder-count="9">
+                      <button type="button" onClick="{{ vo.onClick }}" style="{{ vo.rowStyle }}" style-hover="background:#1F1F24">{{ vo.label }}</button>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+
+            <!-- CHANNELS selector -->
+            <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;padding:12px 16px">
+              <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#6E6E78">Channels</span>
+              <div style="position:relative;display:flex;align-items:center">
+                <button type="button" onClick="{{ onChannelMenu }}" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0">
+                  <span style="display:flex;align-items:center;gap:4px;white-space:nowrap;background:#28282E"><span>{{ currentChannelLabel }}</span><iconify-icon icon="lucide:chevron-down" style="font-size:12px"></iconify-icon></span>
+                </button>
+                <sc-if value="{{ channelMenuOpen }}">
+                  <div style="position:absolute;left:0;top:100%;margin-top:4px;z-index:50;display:flex;min-width:160px;flex-direction:column;padding:4px 0;background:#28282E;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
+                    <sc-for list="{{ channelOptions }}" as="co" hint-placeholder-count="3">
+                      <button type="button" onClick="{{ co.onClick }}" style="{{ co.rowStyle }}" style-hover="background:#1F1F24">{{ co.label }}</button>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+
+            <!-- SOURCES -->
+            <div style="height:40px;flex-shrink:0;display:flex;align-items:center;padding:0 16px">
+              <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#6E6E78">Sources</span>
+            </div>
+            <div style="min-height:0;flex:1;overflow-y:auto">
+              <div style="display:flex;flex-direction:column">
+                <sc-for list="{{ sourceRows }}" as="src" hint-placeholder-count="3">
+                  <div style="position:relative;display:flex;flex-direction:row;align-items:flex-start;gap:12px;padding:12px 16px" style-hover="background:#1F1F24">
+                    <button type="button" aria-label="Edit layer color" style="position:relative;display:block;height:28px;width:28px;flex-shrink:0;border:none;padding:0;cursor:pointer;background:{{ src.primary }}">
+                      <span style="position:absolute;right:0;top:0;bottom:0;width:5px;background:{{ src.secondary }}"></span>
+                    </button>
+                    <div style="display:flex;min-width:0;flex:1;flex-direction:column;gap:4px">
+                      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-sans);font-size:0.875rem;font-weight:500;line-height:1.15;color:#B8B8C0">{{ src.name }}</span>
+                      <span style="display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-sans);font-size:0.75rem;color:#44444C;direction:rtl;text-align:left">{{ src.path }}</span>
+                      <div style="display:flex;align-items:center;gap:4px;padding-top:4px">
+                        <button type="button" aria-label="Toggle visibility" onClick="{{ src.onEye }}" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;cursor:pointer">
+                          <span style="{{ src.visChip }}"><iconify-icon icon="{{ src.eyeIcon }}" style="font-size:16px"></iconify-icon></span>
+                        </button>
+                        <button type="button" aria-label="Toggle mute" onClick="{{ src.onMute }}" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;cursor:pointer">
+                          <span style="{{ src.muteChip }}"><iconify-icon icon="{{ src.muteIcon }}" style="font-size:16px"></iconify-icon></span>
+                        </button>
+                        <button type="button" aria-label="Toggle solo" onClick="{{ src.onSolo }}" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;cursor:pointer">
+                          <span style="{{ src.soloChip }}"><iconify-icon icon="lucide:headphones" style="font-size:16px"></iconify-icon></span>
+                        </button>
+                        <button type="button" aria-label="Source actions" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;cursor:pointer;color:#6E6E78" style-hover="color:#B8B8C0">
+                          <span style="display:flex;align-items:center;justify-content:center;background:#28282E"><iconify-icon icon="lucide:more-horizontal" style="font-size:18px"></iconify-icon></span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="padding:12px">
+                <button type="button" style="display:flex;align-items:center;padding:4px 8px;background:none;border:none;cursor:pointer;color:#020204;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em">
+                  <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;background:var(--accent)"><iconify-icon icon="lucide:plus" style="font-size:16px"></iconify-icon>Add Source</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Workspace pane : ViewTabs + active view -->
+        <div style="grid-column:2;grid-row:1;min-height:0;min-width:0;overflow:hidden;background:#020204">
+          <div style="display:flex;height:100%;min-height:0;flex-direction:column;background:#020204;position:relative">
+
+            <!-- Loading toast -->
+            <sc-if value="{{ isLoading }}">
+              <div role="status" style="position:absolute;top:8px;right:8px;z-index:40;display:flex;align-items:center;gap:8px;padding:6px 10px;background:#28282E;box-shadow:0 8px 24px rgba(0,0,0,0.5);font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#B8B8C0;pointer-events:none">
+                <iconify-icon icon="lucide:loader-circle" style="font-size:14px;color:var(--accent);animation:spin 0.9s linear infinite"></iconify-icon>
+                <span>{{ loadingLabel }}</span>
+              </div>
+            </sc-if>
+
+            <!-- View body -->
+            <div style="min-height:0;flex:1;overflow:hidden">
+
+              <!-- ===== SPECTRAL GROUP (overlay / slider / sum / difference) ===== -->
+              <sc-if value="{{ isSpectralGroup }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;height:100%;min-height:0;width:100%;overflow:hidden;background:#020204">
+                <div style="min-height:0;min-width:0;flex:1;overflow:hidden;display:grid;grid-template-columns:2.5rem minmax(0,1fr) auto auto;grid-template-rows:2rem minmax(0,1fr) 2rem">
+                  <!-- Row 1 -->
+                  <div style="background:#020204"></div>
+                  <div style="position:relative;height:2rem;background:#020204;font-family:var(--font-mono);font-size:0.75rem;letter-spacing:0.02em;font-variant-numeric:tabular-nums;color:#6E6E78">
+                    <sc-for list="{{ timeMajors }}" as="tk" hint-placeholder-count="7">
+                      <div style="position:absolute;bottom:0;left:{{ tk.left }}"><span style="position:absolute;bottom:0;left:0;height:10px;width:1px;background:#6E6E78"></span><span style="position:absolute;bottom:2px;left:6px">{{ tk.label }}</span></div>
+                    </sc-for>
+                    <div style="position:absolute;bottom:0;left:0;right:0;height:1px;background:#2A2A30"></div>
+                  </div>
+                  <div style="background:#020204"></div>
+                  <div style="background:#020204"></div>
+
+                  <!-- Row 2 : freq axis | content | freq minimap | db axis -->
+                  <div style="position:relative;background:#020204;font-family:var(--font-mono);font-size:0.75rem;letter-spacing:0.02em;font-variant-numeric:tabular-nums;color:#6E6E78">
+                    <sc-for list="{{ freqLabels }}" as="fl" hint-placeholder-count="8">
+                      <div style="position:absolute;right:0;display:flex;align-items:center;top:{{ fl.top }};transform:translateY(-50%)"><span style="padding-right:4px">{{ fl.label }}</span></div>
+                    </sc-for>
+                  </div>
+
+                  <div data-curtain-track="1" onMouseMove="{{ onCellMove }}" style="position:relative;cursor:crosshair;overflow:hidden;background:#020204">
+                    <!-- overlay -->
+                    <sc-if value="{{ isOverlay }}" hint-placeholder-val="{{ true }}">
+                      <div style="position:absolute;inset:0;mix-blend-mode:lighten">
+                        <sc-for list="{{ overlaySources }}" as="os" hint-placeholder-count="3">
+                          <spectro-strip primary="{{ os.primary }}" secondary="{{ os.secondary }}" seed="{{ os.id }}" channel="{{ channel }}" startfrac="0.3" endfrac="0.5" spec-op="0" style="position:absolute;inset:0;opacity:0.5"></spectro-strip>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                    <!-- sum -->
+                    <sc-if value="{{ isSum }}">
+                      <spectro-strip primary="{{ themeAccent }}" secondary="{{ themeTint }}" seed="sum" channel="{{ channel }}" startfrac="0.3" endfrac="0.5" style="position:absolute;inset:0"></spectro-strip>
+                    </sc-if>
+                    <!-- difference -->
+                    <sc-if value="{{ isDifference }}">
+                      <spectro-strip primary="{{ diffColor.primary }}" secondary="{{ diffColor.secondary }}" seed="difference" channel="{{ channel }}" startfrac="0.3" endfrac="0.5" style="position:absolute;inset:0"></spectro-strip>
+                    </sc-if>
+                    <!-- slider -->
+                    <sc-if value="{{ isSlider }}">
+                      <sc-if value="{{ hasPair }}">
+                        <spectro-strip primary="{{ sliderBottom.primary }}" secondary="{{ sliderBottom.secondary }}" seed="{{ sliderBottom.id }}" channel="{{ channel }}" startfrac="0.3" endfrac="0.5" style="position:absolute;inset:0"></spectro-strip>
+                        <spectro-strip primary="{{ sliderTop.primary }}" secondary="{{ sliderTop.secondary }}" seed="{{ sliderTop.id }}" channel="{{ channel }}" startfrac="0.3" endfrac="0.5" clip="{{ curtainClip }}" style="position:absolute;inset:0"></spectro-strip>
+                        <div style="position:absolute;top:0;bottom:0;left:{{ curtainLeft }};transform:translateX(-1px)">
+                          <div style="position:absolute;top:0;bottom:0;width:2px;background:#B8B8C0"></div>
+                          <button type="button" aria-label="Curtain position" onPointerDown="{{ onCurtainDown }}" style="position:absolute;top:50%;left:50%;display:flex;height:24px;width:12px;transform:translate(-50%,-50%);cursor:ew-resize;align-items:center;justify-content:center;gap:2px;background:#B8B8C0;border:none;padding:0" style-hover="background:var(--accent)">
+                            <span style="display:block;height:12px;width:1px;background:rgba(2,2,4,0.6)"></span>
+                            <span style="display:block;height:12px;width:1px;background:rgba(2,2,4,0.6)"></span>
+                          </button>
+                        </div>
+                      </sc-if>
+                    </sc-if>
+
+                    <!-- grid overlay -->
+                    <div style="pointer-events:none;position:absolute;inset:0;opacity:0.3">
+                      <sc-for list="{{ gridV }}" as="gv" hint-placeholder-count="7"><div style="position:absolute;top:0;bottom:0;width:1px;background:#B8B8C0;left:{{ gv.left }}"></div></sc-for>
+                      <sc-for list="{{ gridH }}" as="gh" hint-placeholder-count="8"><div style="position:absolute;left:0;right:0;height:1px;background:#B8B8C0;top:{{ gh.top }}"></div></sc-for>
+                    </div>
+                  </div>
+
+                  <freq-mini vstart="0.18" vend="0.78" style="width:8px;background:#020204"></freq-mini>
+
+                  <div style="position:relative;width:2rem;background:#020204;font-family:var(--font-mono);font-size:0.75rem;letter-spacing:0.02em;font-variant-numeric:tabular-nums;color:#6E6E78">
+                    <sc-for list="{{ dbLabels }}" as="dl" hint-placeholder-count="11">
+                      <div style="position:absolute;left:0;display:flex;align-items:center;top:{{ dl.top }};transform:translateY(-50%)"><span style="padding-left:4px">{{ dl.label }}</span></div>
+                    </sc-for>
+                  </div>
+
+                  <!-- Row 3 : wave minimap -->
+                  <div style="background:#020204"></div>
+                  <wave-mini primary="{{ diffColor.primary }}" seed="{{ diffColor.id }}" vstart="0.3" vend="0.5" style="height: 2rem; background: #020204"></wave-mini>
+                  <div style="background:#020204"></div>
+                  <div style="background:#020204"></div>
+                </div>
+              </div>
+              </sc-if>
+
+              <!-- ===== TIMELINE ===== -->
+              <sc-if value="{{ isTimeline }}">
+              <div style="display:flex;height:100%;min-height:0;width:100%;overflow:hidden;background:#020204">
+                <div style="min-height:0;min-width:0;flex:1;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto">
+                  <div style="position:relative;height:2rem;background:#020204;font-family:var(--font-mono);font-size:0.75rem;letter-spacing:0.02em;font-variant-numeric:tabular-nums;color:#6E6E78">
+                    <sc-for list="{{ timeMajors }}" as="tk" hint-placeholder-count="7"><div style="position:absolute;bottom:0;left:{{ tk.left }}"><span style="position:absolute;bottom:0;left:0;height:10px;width:1px;background:#6E6E78"></span><span style="position:absolute;bottom:2px;left:6px">{{ tk.label }}</span></div></sc-for>
+                    <div style="position:absolute;bottom:0;left:0;right:0;height:1px;background:#2A2A30"></div>
+                  </div>
+                  <div style="position:relative;display:flex;flex-direction:column;overflow:hidden;background:#020204">
+                    <sc-for list="{{ overlaySources }}" as="os" hint-placeholder-count="3">
+                      <div style="position:relative;min-height:0;flex:1;overflow:hidden">
+                        <spectro-strip primary="{{ os.primary }}" secondary="{{ os.secondary }}" seed="{{ os.id }}" channel="{{ channel }}" startfrac="0" endfrac="1" style="position:absolute;inset:0"></spectro-strip>
+                        <div style="pointer-events:none;position:absolute;inset-y:0;top:0;bottom:0;left:0;width:2px;background:rgba(184,184,192,0.6)"></div>
+                        <div style="position:absolute;top:0;left:0;right:0;display:flex;height:16px;align-items:center;gap:4px;padding:0 6px;background:rgba(40,40,46,0.7)">
+                          <span style="display:flex;align-items:center;gap:2px"><span style="display:block;height:8px;width:1px;background:rgba(184,184,192,0.7)"></span><span style="display:block;height:8px;width:1px;background:rgba(184,184,192,0.7)"></span><span style="display:block;height:8px;width:1px;background:rgba(184,184,192,0.7)"></span></span>
+                          <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">{{ os.name }}</span>
+                        </div>
+                      </div>
+                    </sc-for>
+                    <div style="pointer-events:none;position:absolute;top:0;bottom:0;left:0;width:1px;background:#E0E0E8"></div>
+                  </div>
+                  <wave-mini primary="{{ diffColor.primary }}" seed="{{ diffColor.id }}" vstart="0" vend="1" style="height: 2rem; background: #020204"></wave-mini>
+                </div>
+                <div style="display:flex;flex-direction:column;flex-shrink:0"><div style="height:2rem"></div><scroll-track axis="y" vstart="0" vend="1" style="width:8px;flex-shrink:0;background:#020204"></scroll-track><div style="height:2rem"></div></div>
+              </div>
+              </sc-if>
+
+              <!-- ===== LOUDNESS ===== -->
+              <sc-if value="{{ isLoudness }}">
+              <div style="display:flex;height:100%;min-height:0;width:100%;flex-direction:column;background:#020204">
+                <div style="display:flex;min-height:0;flex:1;flex-direction:column;padding-right:16px">
+                  <div style="display:flex;flex-shrink:0"><div style="width:40px;flex-shrink:0;background:#020204"></div><div style="position:relative;min-width:0;flex:1;height:2rem;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78"><sc-for list="{{ timeMajors }}" as="tk" hint-placeholder-count="7"><div style="position:absolute;bottom:0;left:{{ tk.left }}"><span style="position:absolute;bottom:0;left:0;height:10px;width:1px;background:#6E6E78"></span><span style="position:absolute;bottom:2px;left:6px">{{ tk.label }}</span></div></sc-for><div style="position:absolute;bottom:0;left:0;right:0;height:1px;background:#2A2A30"></div></div></div>
+                  <div style="display:flex;min-height:0;flex:1">
+                    <div style="position:relative;width:2.5rem;flex-shrink:0;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78">
+                      <sc-for list="{{ loudTicks }}" as="lt" hint-placeholder-count="7"><div style="position:absolute;right:0;display:flex;align-items:center;top:{{ lt.top }};transform:translateY(-50%)"><span style="padding-right:4px">{{ lt.label }}</span></div></sc-for>
+                    </div>
+                    <div style="position:relative;min-width:0;flex:1;overflow:hidden;background:#020204">
+                      <sc-for list="{{ loudTicks }}" as="lt" hint-placeholder-count="7"><div style="pointer-events:none;position:absolute;left:0;right:0;height:1px;background:#1F1F24;top:{{ lt.top }}"></div></sc-for>
+                      <loudness-chart sources="{{ chartSources }}" metric="{{ metric }}" axismin="{{ loudAxisMin }}" style="position:absolute;inset:0"></loudness-chart>
+                    </div>
+                    <scroll-track axis="y" vstart="0" vend="1" style="width:8px;flex-shrink:0;background:#020204"></scroll-track>
+                  </div>
+                  <div style="display:flex;flex-shrink:0"><div style="width:40px;flex-shrink:0;background:#020204"></div><wave-mini primary="{{ diffColor.primary }}" seed="{{ diffColor.id }}" vstart="0" vend="1" style="min-width:0;flex:1;height:2rem;background:#020204"></wave-mini><div style="width:8px;flex-shrink:0"></div></div>
+                </div>
+              </div>
+              </sc-if>
+
+              <!-- ===== FREQUENCY DISTRIBUTION ===== -->
+              <sc-if value="{{ isFreqDist }}">
+              <div style="display:flex;height:100%;min-height:0;width:100%;flex-direction:column;background:#020204">
+                <div style="display:flex;min-height:0;flex:1;flex-direction:column;padding:16px 16px 16px 0">
+                  <div style="display:flex;min-height:0;flex:1">
+                    <div style="position:relative;width:2.5rem;flex-shrink:0;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78">
+                      <sc-for list="{{ fdDbTicks }}" as="dt" hint-placeholder-count="10"><div style="position:absolute;right:0;display:flex;align-items:center;top:{{ dt.top }};transform:translateY(-50%)"><span style="padding-right:4px">{{ dt.label }}</span></div></sc-for>
+                    </div>
+                    <div style="position:relative;min-width:0;flex:1;overflow:hidden;background:#020204">
+                      <sc-for list="{{ fdGridV }}" as="gv" hint-placeholder-count="10"><div style="pointer-events:none;position:absolute;top:0;bottom:0;width:1px;background:#1F1F24;left:{{ gv.left }}"></div></sc-for>
+                      <sc-for list="{{ fdGridH }}" as="gh" hint-placeholder-count="10"><div style="pointer-events:none;position:absolute;left:0;right:0;height:1px;background:#1F1F24;top:{{ gh.top }}"></div></sc-for>
+                      <ltas-chart sources="{{ chartSources }}" style="position:absolute;inset:0"></ltas-chart>
+                    </div>
+                    <scroll-track axis="y" vstart="0" vend="1" style="width:8px;flex-shrink:0;background:#020204"></scroll-track>
+                  </div>
+                  <div style="display:flex;flex-shrink:0;padding-top:4px"><div style="width:40px;flex-shrink:0"></div><scroll-track axis="x" vstart="0" vend="1" style="height:8px;min-width:0;flex:1;background:#020204"></scroll-track><div style="width:8px;flex-shrink:0"></div></div>
+                  <div style="display:flex;flex-shrink:0"><div style="width:40px;flex-shrink:0;background:#020204"></div><div style="position:relative;min-width:0;flex:1;height:1.5rem;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78"><div style="position:absolute;top:0;left:0;right:0;height:1px;background:#1F1F24"></div><sc-for list="{{ fdFreqTicks }}" as="ft" hint-placeholder-count="10"><div style="position:absolute;top:0;left:{{ ft.left }};transform:translateX(-50%)"><span style="position:absolute;top:0;left:50%;height:6px;width:1px;transform:translateX(-50%);background:#2A2A30"></span><span style="position:absolute;top:8px;left:50%;transform:translateX(-50%);white-space:nowrap">{{ ft.label }}</span></div></sc-for></div><div style="width:8px;flex-shrink:0"></div></div>
+                </div>
+              </div>
+              </sc-if>
+
+              <!-- ===== CORRELATION ===== -->
+              <sc-if value="{{ isCorrelation }}">
+              <div style="display:flex;height:100%;min-height:0;width:100%;flex-direction:column;background:#020204">
+                <div style="display:flex;min-height:0;flex:1;flex-direction:column;padding-right:16px">
+                  <div style="display:flex;flex-shrink:0"><div style="width:40px;flex-shrink:0;background:#020204"></div><div style="position:relative;min-width:0;flex:1;height:2rem;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78"><sc-for list="{{ timeMajors }}" as="tk" hint-placeholder-count="7"><div style="position:absolute;bottom:0;left:{{ tk.left }}"><span style="position:absolute;bottom:0;left:0;height:10px;width:1px;background:#6E6E78"></span><span style="position:absolute;bottom:2px;left:6px">{{ tk.label }}</span></div></sc-for><div style="position:absolute;bottom:0;left:0;right:0;height:1px;background:#2A2A30"></div></div></div>
+                  <div style="display:flex;min-height:0;flex:1">
+                    <div style="position:relative;width:2.5rem;flex-shrink:0;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78">
+                      <sc-for list="{{ corrTicks }}" as="ct" hint-placeholder-count="5"><div style="position:absolute;right:0;display:flex;align-items:center;top:{{ ct.top }};transform:translateY(-50%)"><span style="padding-right:4px">{{ ct.label }}</span></div></sc-for>
+                    </div>
+                    <div style="position:relative;min-width:0;flex:1;overflow:hidden;background:#020204">
+                      <sc-for list="{{ corrTicks }}" as="ct" hint-placeholder-count="5"><div style="pointer-events:none;position:absolute;left:0;right:0;height:1px;top:{{ ct.top }};background:#1F1F24"></div></sc-for>
+                      <correlation-chart sources="{{ chartSources }}" style="position:absolute;inset:0"></correlation-chart>
+                    </div>
+                    <scroll-track axis="y" vstart="0" vend="1" style="width:8px;flex-shrink:0;background:#020204"></scroll-track>
+                  </div>
+                  <div style="display:flex;flex-shrink:0"><div style="width:40px;flex-shrink:0;background:#020204"></div><wave-mini primary="{{ diffColor.primary }}" seed="{{ diffColor.id }}" vstart="0" vend="1" style="min-width:0;flex:1;height:2rem;background:#020204"></wave-mini><div style="width:8px;flex-shrink:0"></div></div>
+                </div>
+              </div>
+              </sc-if>
+
+              <!-- ===== VECTORSCOPE ===== -->
+              <sc-if value="{{ isVectorscope }}">
+              <div style="display:flex;height:100%;min-height:0;width:100%;flex-direction:column;background:#020204;padding:16px">
+                <div style="display:flex;min-height:0;flex:1;gap:4px">
+                <div style="position:relative;display:flex;min-height:0;min-width:0;flex:1;align-items:center;justify-content:center;container-type:size">
+                  <svg style="pointer-events:none;position:absolute;inset:0;height:100%;width:100%" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
+                    <line x1="0.5" y1="0" x2="0.5" y2="1" stroke="#2A2A30" stroke-width="1" vector-effect="non-scaling-stroke"></line>
+                    <line x1="0" y1="0.5" x2="1" y2="0.5" stroke="#2A2A30" stroke-width="1" vector-effect="non-scaling-stroke"></line>
+                  </svg>
+                  <div style="position:relative;aspect-ratio:1/1;overflow:hidden;width:100cqmin;height:100cqmin">
+                    <vectorscope-scope sources="{{ chartSources }}" style="position:absolute;inset:0"></vectorscope-scope>
+                    <svg style="pointer-events:none;position:absolute;inset:0;height:100%;width:100%" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
+                      <line x1="0" y1="0" x2="1" y2="1" stroke="#44444C" stroke-width="1" vector-effect="non-scaling-stroke"></line>
+                      <line x1="1" y1="0" x2="0" y2="1" stroke="#44444C" stroke-width="1" vector-effect="non-scaling-stroke"></line>
+                    </svg>
+                  </div>
+                </div>
+                <scroll-track axis="y" vstart="0" vend="1" style="width:8px;flex-shrink:0;background:#020204"></scroll-track>
+                </div>
+                <div style="display:flex;flex-shrink:0;padding-top:4px"><scroll-track axis="x" vstart="0" vend="1" style="height:8px;min-width:0;flex:1;background:#020204"></scroll-track><div style="width:12px;flex-shrink:0"></div></div>
+              </div>
+              </sc-if>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- Transport -->
+        <sc-if value="{{ hasTransport }}" hint-placeholder-val="{{ true }}">
+        <div style="grid-column:2;grid-row:2;height:92px">
+          <div style="display:flex;height:100%;align-items:center;background:#020204;padding:0 16px">
+            <!-- view controls (moved here from the per-view side column) -->
+            <div style="display:flex;flex:1;min-width:0;align-items:center">
+              <sc-if value="{{ isSpectralGroup }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="display:flex;flex-direction:column;align-items:center;gap:2px"><knob-dial value="0.3" style="width:24px;height:24px"></knob-dial><iconify-icon icon="lucide:grid-3x3" style="font-size:12px;color:#44444C"></iconify-icon></div>
+                <sc-if value="{{ showSpectrogram }}">
+                <div style="display:flex;align-items:center">
+                  <button type="button" aria-label="Frequency grid" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;cursor:pointer;color:#B8B8C0"><span style="display:flex"><iconify-icon icon="lucide:music" style="font-size:12px"></iconify-icon></span></button>
+                  <button type="button" aria-label="Amplitude grid" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;cursor:pointer;color:#6E6E78" style-hover="color:#B8B8C0"><span style="display:flex"><iconify-icon icon="lucide:gauge" style="font-size:12px"></iconify-icon></span></button>
+                </div>
+                </sc-if>
+                <div style="height:40px;width:1px;background:#1F1F24"></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:2px"><knob-dial value="1" style="width:24px;height:24px"></knob-dial><iconify-icon icon="lucide:audio-waveform" style="font-size:12px;color:#44444C"></iconify-icon></div>
+                <sc-if value="{{ showSpectrogram }}">
+                <div style="height:40px;width:1px;background:#1F1F24"></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:2px"><knob-dial value="1" style="width:24px;height:24px"></knob-dial><iconify-icon icon="lucide:flame" style="font-size:12px;color:#44444C"></iconify-icon></div>
+                <div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px 4px;max-width:150px">
+                  <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>Lava</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
+                  <span title="Approximate overview: 1×, 2×, 4× and 8× choose the highest-RMS FFT window in each time subdivision of a pixel. Full uses every FFT window." style="display:flex"><button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>4×</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button></span>
+                  <div style="{{ spectroInputsStyle }}">
+                    <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>Mel</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
+                    <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>4096</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
+                    <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>1/16</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
+                  </div>
+                </div>
+                </sc-if>
+                <div style="height:40px;width:1px;background:#1F1F24"></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:2px"><knob-dial value="1" style="width:24px;height:24px"></knob-dial><iconify-icon icon="lucide:activity" style="font-size:12px;color:#44444C"></iconify-icon></div>
+              </div>
+              </sc-if>
+              <sc-if value="{{ isTimeline }}">
+              <div style="display:flex;align-items:center;gap:10px">
+                <button type="button" onClick="{{ onSync }}" style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78" style-hover="color:#B8B8C0"><span style="{{ syncChip }}"><iconify-icon icon="lucide:link" style="font-size:14px"></iconify-icon><span>Sync</span></span></button>
+                <div style="height:40px;width:1px;background:#1F1F24"></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:2px"><knob-dial value="0.3" style="width:24px;height:24px"></knob-dial><iconify-icon icon="lucide:grid-3x3" style="font-size:12px;color:#44444C"></iconify-icon></div>
+                <div style="height:40px;width:1px;background:#1F1F24"></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:2px"><knob-dial value="1" style="width:24px;height:24px"></knob-dial><iconify-icon icon="lucide:audio-waveform" style="font-size:12px;color:#44444C"></iconify-icon></div>
+                <div style="height:40px;width:1px;background:#1F1F24"></div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:2px"><knob-dial value="1" style="width:24px;height:24px"></knob-dial><iconify-icon icon="lucide:flame" style="font-size:12px;color:#44444C"></iconify-icon></div>
+                <div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px 4px;max-width:150px">
+                  <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>Lava</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
+                  <span title="Approximate overview: 1×, 2×, 4× and 8× choose the highest-RMS FFT window in each time subdivision of a pixel. Full uses every FFT window." style="display:flex"><button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>4×</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button></span>
+                  <div style="{{ spectroInputsStyle }}">
+                    <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>Mel</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
+                    <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>4096</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
+                    <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>1/16</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
+                  </div>
+                </div>
+              </div>
+              </sc-if>
+              <sc-if value="{{ isLoudness }}">
+              <div style="position:relative;display:flex;align-items:center">
+                <button type="button" onClick="{{ onMetricMenu }}" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>{{ currentMetricLabel }}</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
+                <sc-if value="{{ metricMenuOpen }}">
+                  <div style="position:absolute;left:0;bottom:100%;margin-bottom:4px;z-index:50;display:flex;width:160px;flex-direction:column;padding:4px 0;background:#28282E;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
+                    <sc-for list="{{ metricOptions }}" as="mo" hint-placeholder-count="6">
+                      <button type="button" onClick="{{ mo.onClick }}" style="{{ mo.rowStyle }}" style-hover="background:#1F1F24">{{ mo.label }}</button>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+              </sc-if>
+            </div>
+            <!-- media cluster (centered) -->
+            <div style="display:flex;flex-shrink:0;flex-direction:column;align-items:center;justify-content:center;gap:6px;margin:0 16px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div style="display:flex;align-items:center">
+                  <button type="button" aria-label="Skip to start" style="display:flex;align-items:center;justify-content:center;padding:6px;background:none;border:none;cursor:pointer;color:#6E6E78" style-hover="color:#B8B8C0"><iconify-icon icon="lucide:skip-back" style="font-size:17px"></iconify-icon></button>
+                  <button type="button" aria-label="Jump back" style="display:flex;align-items:center;justify-content:center;padding:6px;background:none;border:none;cursor:pointer;color:#6E6E78" style-hover="color:#B8B8C0"><iconify-icon icon="lucide:chevrons-left" style="font-size:17px"></iconify-icon></button>
+                  <button type="button" aria-label="Frame back" style="display:flex;align-items:center;justify-content:center;padding:6px;background:none;border:none;cursor:pointer;color:#6E6E78" style-hover="color:#B8B8C0"><iconify-icon icon="lucide:chevron-left" style="font-size:17px"></iconify-icon></button>
+                  <button type="button" aria-label="Play" onClick="{{ onPlay }}" style="display:flex;align-items:center;justify-content:center;padding:6px;background:none;border:none;cursor:pointer;color:{{ playColor }}"><span style="{{ playChip }}"><iconify-icon icon="{{ playIcon }}" style="font-size:24px"></iconify-icon></span></button>
+                  <button type="button" aria-label="Frame forward" style="display:flex;align-items:center;justify-content:center;padding:6px;background:none;border:none;cursor:pointer;color:#6E6E78" style-hover="color:#B8B8C0"><iconify-icon icon="lucide:chevron-right" style="font-size:17px"></iconify-icon></button>
+                  <button type="button" aria-label="Jump forward" style="display:flex;align-items:center;justify-content:center;padding:6px;background:none;border:none;cursor:pointer;color:#6E6E78" style-hover="color:#B8B8C0"><iconify-icon icon="lucide:chevrons-right" style="font-size:17px"></iconify-icon></button>
+                  <button type="button" aria-label="Skip to end" style="display:flex;align-items:center;justify-content:center;padding:6px;background:none;border:none;cursor:pointer;color:#6E6E78" style-hover="color:#B8B8C0"><iconify-icon icon="lucide:skip-forward" style="font-size:17px"></iconify-icon></button>
+                </div>
+                <button type="button" aria-label="Loop" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;color:#44444C;cursor:pointer"><iconify-icon icon="lucide:repeat" style="font-size:16px"></iconify-icon></button>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <button type="button" style="display:flex;flex-shrink:0;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;font-style:italic;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>1x</span><iconify-icon icon="lucide:chevron-down" style="font-size:12px"></iconify-icon></span></button>
+                <span style="flex-shrink:0;font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;color:#B8B8C0">00:00.000<span style="color:#6E6E78"> / </span><span style="color:#6E6E78">00:30.000</span></span>
+              </div>
+            </div>
+            <!-- right group : stats readout equally spaced between transport and volume -->
+            <div style="display:flex;flex:1;min-width:0;align-items:center">
+              <div style="flex:1;min-width:16px"></div>
+              <!-- stats readout -->
+              <sc-if value="{{ showReadout }}" hint-placeholder-val="{{ true }}">
+              <div style="flex-shrink:0">
+                <div style="display:grid;align-items:baseline;column-gap:12px;row-gap:4px;line-height:1;grid-template-columns:auto repeat(3,minmax(0,1fr))">
+                  <span></span>
+                  <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;text-align:right;color:#44444C">Cursor</span>
+                  <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;text-align:right;color:#44444C">In</span>
+                  <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;text-align:right;color:#44444C">Out</span>
+                  <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#44444C">Time</span>
+                  <span style="font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">{{ cursor.time }}</span>
+                  <span style="font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">00:07.500</span>
+                  <span style="font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">00:13.500</span>
+                  <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#44444C">Freq</span>
+                  <span style="font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">{{ cursor.freq }}</span>
+                  <span></span>
+                  <span></span>
+                  <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#44444C">Amp</span>
+                  <span style="font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">{{ cursor.amp }}</span>
+                  <span style="font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">-19.7 dB</span>
+                  <span style="font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">-24.3 dB</span>
+                </div>
+              </div>
+              </sc-if>
+              <div style="flex:1;min-width:16px"></div>
+              <!-- volume -->
+              <div style="flex-shrink:0;display:flex;align-items:center;justify-content:flex-end">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <iconify-icon icon="{{ volumeGlyph }}" style="font-size:16px;color:#6E6E78"></iconify-icon>
+                  <div onPointerDown="{{ onVolDown }}" onPointerMove="{{ onVolMove }}" style="position:relative;height:4px;width:96px;flex-shrink:0;cursor:pointer;background:#28282E">
+                    <div style="pointer-events:none;position:absolute;top:0;bottom:0;left:0;background:#B8B8C0;width:{{ volumeWidth }}"></div>
+                    <div style="pointer-events:none;position:absolute;top:50%;height:12px;width:4px;transform:translate(-50%,-50%);background:#B8B8C0;left:{{ volumeWidth }}"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+      </div>
+      </sc-if>
+
+      <!-- ===== HOME body (shares the tab bar above) ===== -->
+      <sc-if value="{{ isHome }}">
+      <div style="position:relative;min-height:0;flex:1;overflow:hidden;background:#020204">
+        <terrain-shader grid-scale="{{ gridScale }}" grid-well="{{ gridWell }}" grid-well-width="{{ gridWellWidth }}" grid-thin="{{ gridThin }}" grid-intensity="{{ gridIntensity }}" grid-cx="{{ gridCenterX }}" grid-cy="{{ gridCenterY }}" grid-parallax="{{ gridParallax }}" grid-tilt="{{ gridTilt }}" theme-ramp="{{ themeRamp }}" theme-sky="{{ themeSky }}" style="position:absolute;inset:0"></terrain-shader>
+        <div style="position:relative;display:flex;height:100%;flex-direction:column;padding:16px">
+          <h1 style="margin:-0.16em 0 0 0;font-family:var(--font-display);font-size:6rem;font-weight:700;line-height:1;letter-spacing:-0.02em;color:#B8B8C0">SPECTRASCOPE</h1>
+          <div style="flex:1"></div>
+          <div style="display:flex;flex-direction:column;gap:24px">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.1em;color:#44444C">Recent Sessions</span>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <sc-for list="{{ recentSessions }}" as="rs" hint-placeholder-count="6">
+                  <button type="button" onClick="{{ onOpenWorkspace }}" style="display:flex;width:fit-content;align-items:baseline;gap:20px;text-align:left;background:none;border:none;cursor:pointer;padding:0" style-hover="background:var(--tint)">
+                    <span style="font-family:var(--font-sans);font-size:0.875rem;color:#B8B8C0">{{ rs.name }}</span>
+                    <span style="font-family:var(--font-mono);font-size:0.75rem;color:#44444C">{{ rs.path }}</span>
+                    <span style="font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#44444C">{{ rs.duration }}</span>
+                    <span style="font-family:var(--font-mono);font-size:0.75rem;color:#44444C">{{ rs.lastOpened }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <button type="button" onClick="{{ onOpenWorkspace }}" style="display:flex;width:fit-content;align-items:center;gap:8px;padding:0;background:none;border:none;cursor:pointer;color:#020204;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em"><span style="display:flex;align-items:center;gap:8px;padding:4px 8px;background:var(--accent)"><iconify-icon icon="lucide:plus" style="font-size:16px"></iconify-icon>New Session</span></button>
+              <button type="button" onClick="{{ onOpenWorkspace }}" style="display:flex;width:fit-content;align-items:center;gap:8px;padding:0;background:none;border:none;cursor:pointer;color:#B8B8C0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em"><span style="display:flex;align-items:center;gap:8px;padding:4px 8px;background:var(--tint)"><iconify-icon icon="lucide:folder-open" style="font-size:16px"></iconify-icon>Open Session</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+    </div>
+    </sc-if>
+
+    <!-- ============================= SHOWCASE (stub) ============================= -->
+    <sc-if value="{{ isShowcase }}">
+    <div style="height:100%;overflow:auto;background:#020204;font-family:var(--font-sans)">
+
+      <!-- Header -->
+      <div style="display:flex;flex-direction:column;gap:8px;background:#020204;padding:24px">
+        <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.15em;color:#44444C">Design System</span>
+        <h1 style="margin:0;font-family:'Bricolage Grotesque',sans-serif;font-size:3rem;font-weight:700;line-height:1;letter-spacing:-0.02em;color:#B8B8C0">SPECTRASCOPE</h1>
+        <p style="margin:0;font-family:var(--font-sans);font-size:1.125rem;color:#6E6E78">Spectral Audio Inspector</p>
+        <span style="font-family:var(--font-mono);font-size:0.75rem;color:#44444C">v0.1.0</span>
+      </div>
+
+      <!-- Source Strip -->
+      <div style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">Source Strip</p>
+        <p style="margin:0;font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">The atomic per-source visual unit — spectrogram plus waveform rendered in one source's layer color, no internal chrome. Used by Overlay, Timeline, Slider, Difference, and Sum.</p>
+        <div style="position:relative;width:480px;height:120px;overflow:hidden;border:1px solid #2A2A30;background:#020204"><spectro-strip primary="#F59E0B" secondary="#7C2D12" seed="a" startfrac="0.3" endfrac="0.5" style="position:absolute;inset:0"></spectro-strip></div>
+      </div>
+
+      <!-- View Tabs -->
+      <div style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">View Tabs</p>
+        <p style="margin:0;font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">The nine view tabs that drive the workspace switcher. Active state is a background-value shift; no underline. The right-side cluster is global: a Sync toggle, a Mono / Mid / Side channel-input selector, and undo / redo.</p>
+        <div style="width:100%;max-width:900px;border:1px solid #2A2A30">
+          <div style="height:40px;display:flex;align-items:stretch;background:#020204">
+            <div style="display:flex;min-width:0;flex:1;align-items:stretch;overflow-x:auto">
+              <sc-for list="{{ viewTabs }}" as="tab" hint-placeholder-count="9">
+                <button type="button" onClick="{{ tab.onClick }}" style="display:flex;flex-shrink:0;align-items:center;padding:10px 12px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78" style-hover="color:#B8B8C0"><span style="{{ tab.chipStyle }}">{{ tab.label }}</span></button>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-shrink:0;align-items:center;gap:8px;padding-right:12px">
+              <button type="button" onClick="{{ onSync }}" style="display:flex;flex-shrink:0;align-items:center;padding:4px 8px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78" style-hover="color:#B8B8C0"><span style="{{ syncChip }}"><iconify-icon icon="lucide:link" style="font-size:14px"></iconify-icon><span>Sync</span></span></button>
+              <div style="display:flex;flex-shrink:0;align-items:center">
+                <sc-for list="{{ channels }}" as="ch" hint-placeholder-count="3"><button type="button" onClick="{{ ch.onClick }}" style="display:flex;align-items:center;padding:4px 8px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78" style-hover="color:#B8B8C0"><span style="{{ ch.chipStyle }}">{{ ch.label }}</span></button></sc-for>
+              </div>
+              <div style="height:16px;width:1px;flex-shrink:0;background:#1F1F24"></div>
+              <button type="button" aria-label="Undo" style="display:flex;align-items:center;padding:6px 4px;background:none;border:none;color:#44444C;cursor:not-allowed"><iconify-icon icon="lucide:undo-2" style="font-size:16px"></iconify-icon></button>
+              <button type="button" aria-label="Redo" style="display:flex;align-items:center;padding:6px 4px;background:none;border:none;color:#44444C;cursor:not-allowed"><iconify-icon icon="lucide:redo-2" style="font-size:16px"></iconify-icon></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Layer Color -->
+      <div style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">Layer Color + LayerColorPicker</p>
+        <p style="margin:0;font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">Paler default layer palette (primary drives waveforms and chart traces; secondary is the accent stripe) plus the picker that edits both endpoints. Layer colors are user data, not design tokens — each source carries its own pair.</p>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+          <sc-for list="{{ layerPalette }}" as="lp" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="display:flex"><div style="height:32px;width:32px;background:{{ lp.primary }}"></div><div style="height:32px;width:32px;background:{{ lp.secondary }}"></div></div>
+              <div><span style="display:block;font-family:var(--font-sans);font-size:0.8125rem;color:#B8B8C0">Layer {{ lp.i }}</span><span style="display:block;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#44444C">{{ lp.pair }}</span></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:24px;border-top:1px solid #1F1F24;padding-top:16px">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">LayerColorPicker</span>
+            <div style="display:flex;align-items:center;gap:4px">
+              <sc-for list="{{ layerPalette }}" as="lp" hint-placeholder-count="4"><button type="button" style="position:relative;height:16px;width:16px;border:none;padding:0;cursor:pointer;background:{{ lp.primary }}"><span style="position:absolute;right:0;top:0;bottom:0;width:3px;background:{{ lp.secondary }}"></span></button></sc-for>
+              <button type="button" style="display:flex;height:16px;width:16px;align-items:center;justify-content:center;border:none;cursor:pointer;background:#28282E;color:#6E6E78"><iconify-icon icon="lucide:plus" style="font-size:10px"></iconify-icon></button>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Spectrogram Ramp (lava, shared by all layers)</span>
+            <div style="height:16px;width:256px;background:linear-gradient(to right, #000000,#05051E,#0F1446,#1E0F32,#500A05,#8C1400,#B93700,#D76405,#F09B19,#FCD246,#FFF08C,#FFFFFF)"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Waveform / Trace (primary)</span>
+            <div style="height:16px;width:64px;background:#F59E0B"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- View Containers -->
+      <div style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">View Containers</p>
+        <p style="margin:0;font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">Each view container composes its own chrome around one or more SourceStrips — or, for the chart views, its own plot. A small sample of each, against three demo sources.</p>
+        <div style="display:flex;flex-direction:column;gap:24px">
+
+          <div style="display:flex;flex-direction:column;gap:8px"><h3 style="margin:0;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">OverlayView</h3><p style="margin:0;font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">N visible sources z-stacked in one viewport, blended via mix-blend-mode: lighten.</p>
+            <div style="position:relative;width:600px;height:280px;overflow:hidden;border:1px solid #2A2A30;background:#020204"><div style="position:absolute;inset:0;mix-blend-mode:lighten"><spectro-strip primary="#F59E0B" secondary="#7C2D12" seed="a" startfrac="0.3" endfrac="0.5" style="position:absolute;inset:0;opacity:0.5"></spectro-strip><spectro-strip primary="#5EC4B6" secondary="#0F3D38" seed="b" startfrac="0.3" endfrac="0.5" style="position:absolute;inset:0;opacity:0.5"></spectro-strip><spectro-strip primary="#EC4899" secondary="#4A044E" seed="c" startfrac="0.3" endfrac="0.5" style="position:absolute;inset:0;opacity:0.5"></spectro-strip></div></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px"><h3 style="margin:0;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">TimelineView</h3><p style="margin:0;font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">N visible sources stacked vertically — one row per source, each a SourceStrip in that source's layer color.</p>
+            <div style="display:flex;flex-direction:column;width:600px;height:280px;overflow:hidden;border:1px solid #2A2A30;background:#020204"><div style="position:relative;flex:1"><spectro-strip primary="#F59E0B" secondary="#7C2D12" seed="a" startfrac="0" endfrac="1" style="position:absolute;inset:0"></spectro-strip></div><div style="position:relative;flex:1"><spectro-strip primary="#5EC4B6" secondary="#0F3D38" seed="b" startfrac="0" endfrac="1" style="position:absolute;inset:0"></spectro-strip></div><div style="position:relative;flex:1"><spectro-strip primary="#EC4899" secondary="#4A044E" seed="c" startfrac="0" endfrac="1" style="position:absolute;inset:0"></spectro-strip></div></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px"><h3 style="margin:0;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">SliderView</h3><p style="margin:0;font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">Two visible sources clipped against each other by a draggable Curtain handle. Left shows A; right shows B.</p>
+            <div style="position:relative;width:600px;height:280px;overflow:hidden;border:1px solid #2A2A30;background:#020204"><spectro-strip primary="#5EC4B6" secondary="#0F3D38" seed="b" startfrac="0.3" endfrac="0.5" style="position:absolute;inset:0"></spectro-strip><spectro-strip primary="#F59E0B" secondary="#7C2D12" seed="a" startfrac="0.3" endfrac="0.5" clip="0.5" style="position:absolute;inset:0"></spectro-strip><div style="position:absolute;top:0;bottom:0;left:50%;transform:translateX(-1px)"><div style="position:absolute;top:0;bottom:0;width:2px;background:#B8B8C0"></div><div style="position:absolute;top:50%;left:50%;display:flex;height:24px;width:12px;transform:translate(-50%,-50%);align-items:center;justify-content:center;gap:2px;background:#B8B8C0"><span style="display:block;height:12px;width:1px;background:rgba(2,2,4,0.6)"></span><span style="display:block;height:12px;width:1px;background:rgba(2,2,4,0.6)"></span></div></div></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px"><h3 style="margin:0;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">DifferenceView</h3><p style="margin:0;font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">N inputs become N-1 derived A-B strips in a neutral layer color.</p>
+            <div style="position:relative;width:600px;height:280px;overflow:hidden;border:1px solid #2A2A30;background:#020204"><spectro-strip primary="#F59E0B" secondary="#7C2D12" seed="difference" startfrac="0.3" endfrac="0.5" style="position:absolute;inset:0"></spectro-strip></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px"><h3 style="margin:0;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">SumView</h3><p style="margin:0;font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">N inputs collapse into one derived sigma strip in a neutral layer color.</p>
+            <div style="position:relative;width:600px;height:280px;overflow:hidden;border:1px solid #2A2A30;background:#020204"><spectro-strip primary="{{ themeAccent }}" secondary="{{ themeTint }}" seed="sum" startfrac="0.3" endfrac="0.5" style="position:absolute;inset:0"></spectro-strip></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px"><h3 style="margin:0;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">FrequencyDistributionView</h3><p style="margin:0;font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">One long-term-average-spectrum (LTAS) polyline per visible source on a single log-frequency / linear-dB chart.</p>
+            <div style="position:relative;width:600px;height:280px;overflow:hidden;border:1px solid #2A2A30;background:#020204;padding:8px"><ltas-chart sources="a:#F59E0B;b:#5EC4B6;c:#EC4899" style="position:absolute;inset:0"></ltas-chart></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px"><h3 style="margin:0;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">LoudnessView</h3><p style="margin:0;font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">Per-source loudness metric traces (LUFS / RMS / true-peak), each in that source's primary.</p>
+            <div style="position:relative;width:600px;height:280px;overflow:hidden;border:1px solid #2A2A30;background:#020204"><loudness-chart sources="a:#F59E0B;b:#5EC4B6;c:#EC4899" metric="momentary" axismin="-40" style="position:absolute;inset:0"></loudness-chart></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px"><h3 style="margin:0;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">CorrelationView</h3><p style="margin:0;font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">One inter-channel correlation trace per visible source on a shared time axis (+1 mono, 0 wide, -1 inverted).</p>
+            <div style="position:relative;width:600px;height:280px;overflow:hidden;border:1px solid #2A2A30;background:#020204"><correlation-chart sources="a:#F59E0B;b:#5EC4B6;c:#EC4899" style="position:absolute;inset:0"></correlation-chart></div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px"><h3 style="margin:0;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">VectorscopeView</h3><p style="margin:0;font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">A single shared (Side, Mid) density scope with every visible source's cloud overlaid, blended via lighten.</p>
+            <div style="position:relative;width:280px;height:280px;overflow:hidden;border:1px solid #2A2A30;background:#020204"><vectorscope-scope sources="a:#F59E0B;b:#5EC4B6;c:#EC4899" style="position:absolute;inset:0"></vectorscope-scope><svg style="pointer-events:none;position:absolute;inset:0;height:100%;width:100%" viewBox="0 0 1 1" preserveAspectRatio="none"><line x1="0.5" y1="0" x2="0.5" y2="1" stroke="#2A2A30" stroke-width="1" vector-effect="non-scaling-stroke"></line><line x1="0" y1="0.5" x2="1" y2="0.5" stroke="#2A2A30" stroke-width="1" vector-effect="non-scaling-stroke"></line><line x1="0" y1="0" x2="1" y2="1" stroke="#44444C" stroke-width="1" vector-effect="non-scaling-stroke"></line><line x1="1" y1="0" x2="0" y2="1" stroke="#44444C" stroke-width="1" vector-effect="non-scaling-stroke"></line></svg></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Transport -->
+      <div style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">Transport</p>
+        <p style="margin:0;font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">Media-only — a cursor / In / Out readout panel on the left, the centered media-control cluster with speed and timecode, and monitor volume on the right. Seeking is done on each view's time ruler.</p>
+        <div style="height:44px;width:100%;border:1px solid #2A2A30;background:#020204;display:flex;align-items:center;gap:16px;padding:0 16px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <button type="button" aria-label="Play" onClick="{{ onPlay }}" style="display:flex;align-items:center;justify-content:center;padding:4px;background:none;border:none;cursor:pointer;color:{{ playColor }}"><span style="{{ playChip }}"><iconify-icon icon="{{ playIcon }}" style="font-size:20px"></iconify-icon></span></button>
+            <span style="font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;color:#B8B8C0">01:07.200<span style="color:#6E6E78"> / </span><span style="color:#6E6E78">03:12.000</span></span>
+          </div>
+          <div style="flex:1"></div>
+          <div style="display:flex;align-items:center;gap:8px"><iconify-icon icon="{{ volumeGlyph }}" style="font-size:16px;color:#6E6E78"></iconify-icon><div onPointerDown="{{ onVolDown }}" onPointerMove="{{ onVolMove }}" style="position:relative;height:4px;width:96px;cursor:pointer;background:#28282E"><div style="pointer-events:none;position:absolute;top:0;bottom:0;left:0;background:#B8B8C0;width:{{ volumeWidth }}"></div><div style="pointer-events:none;position:absolute;top:50%;height:12px;width:4px;transform:translate(-50%,-50%);background:#B8B8C0;left:{{ volumeWidth }}"></div></div></div>
+        </div>
+      </div>
+
+      <!-- Chrome Palette -->
+      <div style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">Chrome Palette</p>
+        <div style="display:flex">
+          <sc-for list="{{ chromePalette }}" as="c" hint-placeholder-count="9">
+            <div style="display:flex;flex:1;flex-direction:column;justify-content:flex-end;padding:12px;min-height:72px;background:{{ c.hex }}">
+              <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:{{ c.top }}">{{ c.token }}</span>
+              <span style="font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:{{ c.bot }}">{{ c.hex }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- Chrome Accent -->
+      <div style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">Chrome Accent</p>
+        <div style="display:flex;gap:24px">
+          <sc-for list="{{ accents }}" as="c" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:12px"><div style="height:40px;width:40px;background:{{ c.hex }}"></div><div><span style="display:block;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">{{ c.token }}</span><span style="display:block;font-family:var(--font-sans);font-size:0.875rem;color:#B8B8C0">{{ c.label }}</span><span style="display:block;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#44444C">{{ c.hex }}</span></div></div></sc-for>
+        </div>
+      </div>
+
+      <!-- State -->
+      <div style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">State</p>
+        <div style="display:flex;gap:24px">
+          <sc-for list="{{ states }}" as="c" hint-placeholder-count="5"><div style="display:flex;align-items:center;gap:12px"><div style="height:40px;width:40px;background:{{ c.hex }}"></div><div><span style="display:block;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">{{ c.token }}</span><span style="display:block;font-family:var(--font-sans);font-size:0.875rem;color:#B8B8C0">{{ c.label }}</span><span style="display:block;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#44444C">{{ c.hex }}</span></div></div></sc-for>
+        </div>
+      </div>
+
+      <!-- Data Cursors & Selection -->
+      <div style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">Data Cursors &amp; Selection</p>
+        <div style="display:flex;gap:24px">
+          <sc-for list="{{ dataOverlay }}" as="c" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:12px"><div style="height:40px;width:40px;background:{{ c.hex }}"></div><div><span style="display:block;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">{{ c.token }}</span><span style="display:block;font-family:var(--font-sans);font-size:0.875rem;color:#B8B8C0">{{ c.label }}</span><span style="display:block;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#44444C">{{ c.hex }}</span></div></div></sc-for>
+        </div>
+      </div>
+
+      <!-- Edges -->
+      <div style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">Edges</p>
+        <div style="display:flex;gap:24px">
+          <sc-for list="{{ edges }}" as="c" hint-placeholder-count="3"><div style="display:flex;align-items:center;gap:12px"><div style="width:40px;display:flex;align-items:center"><div style="width:40px;height:2px;background:{{ c.hex }}"></div></div><div><span style="display:block;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">{{ c.token }}</span><span style="display:block;font-family:var(--font-sans);font-size:0.875rem;color:#B8B8C0">{{ c.label }}</span><span style="display:block;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#44444C">{{ c.hex }}</span></div></div></sc-for>
+        </div>
+      </div>
+
+      <!-- Typography -->
+      <div style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">Typography</p>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px">
+          <div style="grid-column:span 2;display:flex;flex-direction:column;gap:4px">
+            <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Display — Bricolage Grotesque</span>
+            <span style="font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">Hero text, logo, large display headings</span>
+            <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px"><span style="font-family:'Bricolage Grotesque',sans-serif;font-size:3rem;font-weight:700;line-height:1;letter-spacing:-0.02em;color:#B8B8C0">Spectrascope</span><span style="font-family:'Bricolage Grotesque',sans-serif;font-size:2rem;font-weight:600;line-height:1;color:#B8B8C0">Spectral Inspector</span><span style="font-family:'Bricolage Grotesque',sans-serif;font-size:1.5rem;font-weight:500;line-height:1;color:#B8B8C0">Layered Display</span></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Scale</span>
+            <sc-for list="{{ typeScale }}" as="t" hint-placeholder-count="8"><div style="display:flex;align-items:baseline;justify-content:space-between"><span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">{{ t.token }}</span><span style="font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#44444C">{{ t.rem }}</span></div></sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Body — Outfit</span>
+            <span style="font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">Readable body text, descriptions, layer names</span>
+            <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px"><span style="font-family:var(--font-sans);font-size:1.5rem;color:#B8B8C0">Voice Denoise</span><span style="font-family:var(--font-sans);font-size:1.125rem;color:#B8B8C0">Reference mix vs candidate, freq-zoom 200 Hz to 8 kHz</span><span style="font-family:var(--font-sans);font-size:0.875rem;color:#6E6E78">Secondary content text at body sizes</span></div>
+          </div>
+          <div style="grid-column:span 2;display:flex;flex-direction:column;gap:4px">
+            <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Technical — JetBrains Mono</span>
+            <span style="font-family:var(--font-sans);font-size:0.8125rem;color:#6E6E78">Units, values, axes, labels, buttons, tags, timecodes</span>
+            <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px"><span style="font-family:var(--font-mono);font-size:1.5rem;font-variant-numeric:tabular-nums;color:#B8B8C0">−24.5 dB  00:01:32.450  44 100 Hz</span><span style="font-family:var(--font-mono);font-size:0.875rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">RENDER  BYPASS  EXPORT  DELETE</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Spacing -->
+      <div style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">Spacing</p>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ spacingScale }}" as="sp" hint-placeholder-count="5"><div style="display:flex;align-items:center;gap:16px"><span style="width:112px;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">{{ sp.token }}</span><span style="width:64px;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#44444C">{{ sp.rem }}</span><span style="width:48px;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#44444C">{{ sp.px }}</span><div style="height:12px;background:var(--accent);width:{{ sp.px }}"></div><span style="font-family:var(--font-sans);font-size:0.75rem;color:#6E6E78">{{ sp.usage }}</span></div></sc-for>
+        </div>
+      </div>
+
+      <!-- Icons -->
+      <div style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">Icons</p>
+        <span style="font-family:var(--font-sans);font-size:0.75rem;color:#6E6E78">Lucide icons rendered at 16 px with a 1 px stroke in chrome-text-secondary. No filled icons, no decorative color.</span>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:16px">
+          <sc-for list="{{ showcaseIcons }}" as="ic" hint-placeholder-count="10"><div style="display:flex;flex-direction:column;align-items:center;gap:4px"><iconify-icon icon="{{ ic.icon }}" style="font-size:16px;color:#6E6E78"></iconify-icon><span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#44444C">{{ ic.name }}</span></div></sc-for>
+        </div>
+      </div>
+
+      <!-- Inspection Primitives -->
+      <div style="display:flex;flex-direction:column;gap:24px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">Inspection Primitives</p>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Curtain · two-layer strip</span>
+          <div style="position:relative;height:32px;width:100%;max-width:600px;overflow:hidden;background:#020204"><div style="position:absolute;inset:0;background:linear-gradient(to right,#020204,#7C2D12);clip-path:inset(0 50% 0 0)"></div><div style="position:absolute;inset:0;background:linear-gradient(to right,#020204,#0F3D38);clip-path:inset(0 0 0 50%)"></div><div style="position:absolute;top:0;bottom:0;left:50%;transform:translateX(-1px)"><div style="position:absolute;top:0;bottom:0;width:2px;background:#B8B8C0"></div><div style="position:absolute;top:50%;left:50%;display:flex;height:24px;width:12px;transform:translate(-50%,-50%);align-items:center;justify-content:center;gap:2px;background:#B8B8C0"><span style="display:block;height:12px;width:1px;background:rgba(2,2,4,0.6)"></span><span style="display:block;height:12px;width:1px;background:rgba(2,2,4,0.6)"></span></div></div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Histogram · single layer</span>
+          <div style="position:relative;height:80px;width:100%;max-width:600px;background:#020204"><histogram-canvas primary="#F59E0B" seed="hist" center="-20" width-db="8" style="position:absolute;inset:0"></histogram-canvas></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Sync · cursor across two views</span>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:600px"><div style="position:relative;height:64px;background:#020204"><histogram-canvas primary="#F59E0B" seed="synca" center="-24" width-db="7" style="position:absolute;inset:0"></histogram-canvas></div><div style="position:relative;height:64px;background:#020204"><histogram-canvas primary="#5EC4B6" seed="syncb" center="-12" width-db="5" style="position:absolute;inset:0"></histogram-canvas></div></div>
+        </div>
+      </div>
+
+      <!-- Components -->
+      <div style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">Components</p>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Buttons</span>
+            <div style="display:flex;align-items:center;gap:12px">
+              <button type="button" style="display:flex;align-items:center;padding:4px 8px;background:none;border:none;cursor:pointer;color:#020204;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em"><span style="background:var(--accent);padding:0">Export</span></button>
+              <button type="button" style="display:flex;align-items:center;padding:4px 8px;background:none;border:none;cursor:pointer;color:#B8B8C0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em"><span style="background:var(--tint)">Render</span></button>
+              <button type="button" style="padding:4px 8px;background:none;border:none;cursor:pointer;color:#6E6E78;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em" style-hover="color:#B8B8C0">Cancel</button>
+              <button type="button" disabled="" style="padding:4px 8px;background:none;border:none;color:#44444C;cursor:not-allowed;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em">Disabled</button>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Inputs</span>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;flex-direction:column;gap:4px"><label style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">Text</label><input type="text" placeholder="Enter value…" style="background:#020204;padding:6px 8px;color:#B8B8C0;border:none;outline:none;font-family:var(--font-sans);font-size:0.8125rem"></div>
+              <div style="display:flex;flex-direction:column;gap:4px"><label style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">Number</label><input type="text" value="-24.5" style="background:#020204;padding:6px 8px;color:#B8B8C0;border:none;outline:none;font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-size:0.8125rem"></div>
+              <div style="display:flex;flex-direction:column;gap:4px"><label style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">File</label><div style="display:flex;align-items:center;gap:8px"><input type="text" value="podcast-clean.wav" style="flex:1;background:#020204;padding:6px 8px;color:#B8B8C0;border:none;outline:none;font-family:var(--font-mono);font-size:0.8125rem"><button type="button" style="display:flex;align-items:center;padding:4px 8px;background:none;border:none;cursor:pointer;color:#B8B8C0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em"><span style="background:var(--tint)">Browse</span></button></div></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Menu</span>
+            <div style="display:flex;width:192px;flex-direction:column;padding:4px 0;background:#28282E">
+              <div style="margin:2px 8px;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0">Noise Reduction</div>
+              <div style="margin:2px 8px;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0;background:#1F1F24">EQ</div>
+              <div style="margin:2px 8px;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0">Compressor</div>
+              <div style="margin:4px 8px;height:1px;background:#1F1F24"></div>
+              <div style="margin:2px 8px;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0">Limiter</div>
+              <div style="margin:2px 8px;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0">Normalize</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div style="display:flex;flex-direction:column;gap:16px;border-bottom:1px solid #1F1F24;padding:24px">
+        <p style="margin:0;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent)">Controls</p>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:24px">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Knobs</span>
+            <div style="display:flex;align-items:flex-end;gap:16px">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;color:#6E6E78">65</span><knob-dial value="0.65" style="width:40px;height:40px"></knob-dial><span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;color:#6E6E78">Gain</span></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;color:#6E6E78">30</span><knob-dial value="0.30" style="width:40px;height:40px"></knob-dial><span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;color:#6E6E78">Freq</span></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:4px"><span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;color:#6E6E78">85</span><knob-dial value="0.85" style="width:40px;height:40px"></knob-dial><span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;color:#6E6E78">Mix</span></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Faders</span>
+            <div style="display:flex;align-items:flex-end;gap:16px">
+              <div style="display:flex;flex-direction:column;align-items:center;gap:8px"><div style="position:relative;width:24px;height:80px;display:flex;justify-content:center"><div style="position:absolute;left:50%;transform:translateX(-0.5px);width:1px;height:100%;background:#020204"></div><div style="position:absolute;width:12px;height:4px;left:50%;bottom:75%;transform:translate(-50%,50%);background:#B8B8C0"></div></div><span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;color:#6E6E78">Vol</span></div>
+              <div style="display:flex;flex-direction:column;align-items:center;gap:8px"><div style="position:relative;width:24px;height:80px;display:flex;justify-content:center"><div style="position:absolute;left:50%;transform:translateX(-0.5px);width:1px;height:100%;background:#020204"></div><div style="position:absolute;width:12px;height:4px;left:50%;bottom:50%;transform:translate(-50%,50%);background:#B8B8C0"></div></div><span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;color:#6E6E78">Pan</span></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Meters</span>
+            <div style="display:flex;align-items:flex-end;gap:8px">
+              <meter-bar level="0.7" secondary="#7C2D12" animated="" style="width:4px;height:80px"></meter-bar>
+              <meter-bar level="0.5" secondary="#7C2D12" animated="" style="width:4px;height:80px"></meter-bar>
+              <meter-bar level="0.85" secondary="#7C2D12" animated="" style="width:4px;height:80px"></meter-bar>
+              <meter-bar level="0.3" secondary="#7C2D12" animated="" style="width:4px;height:80px"></meter-bar>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#44444C">Button Selection</span>
+            <div style="display:flex;flex-wrap:wrap;gap:8px"><button type="button" style="border:none;cursor:pointer;background:none;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">Peak</button><button type="button" style="border:none;cursor:pointer;background:none;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">RMS</button><button type="button" style="border:none;cursor:pointer;background:var(--tint);font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0">LUFS</button></div>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px"><button type="button" style="border:none;cursor:pointer;background:none;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">Mono</button><button type="button" style="border:none;cursor:pointer;background:var(--tint);font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0">Stereo</button><button type="button" style="border:none;cursor:pointer;background:none;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">Mid/Side</button><button type="button" style="border:none;cursor:pointer;background:none;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">Surround</button></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    </sc-if>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;colorTheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Lavamap&quot;,&quot;options&quot;:[&quot;Purple / Green&quot;,&quot;Viridis&quot;,&quot;Lavamap&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Color&quot;},&quot;fontPair&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Space Grotesk / DM Mono&quot;,&quot;options&quot;:[&quot;Outfit / JetBrains Mono&quot;,&quot;Space Grotesk / Space Mono&quot;,&quot;Space Grotesk / DM Mono&quot;,&quot;Manrope / IBM Plex Mono&quot;,&quot;Sora / Martian Mono&quot;,&quot;Hanken Grotesk / Spline Sans Mono&quot;,&quot;Schibsted Grotesk / Fragment Mono&quot;,&quot;Instrument Sans / DM Mono&quot;,&quot;Familjen Grotesk / Red Hat Mono&quot;,&quot;Archivo / Azeret Mono&quot;,&quot;Chivo / Sono&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Typography&quot;},&quot;logoFont&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;Space Grotesk&quot;,&quot;options&quot;:[&quot;Bricolage Grotesque&quot;,&quot;Space Grotesk&quot;,&quot;Syne&quot;,&quot;Unbounded&quot;,&quot;Orbitron&quot;,&quot;Michroma&quot;,&quot;Chakra Petch&quot;,&quot;Oxanium&quot;,&quot;Big Shoulders&quot;,&quot;Anton&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Typography&quot;},&quot;gridScale&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:10,&quot;min&quot;:1,&quot;max&quot;:20,&quot;step&quot;:0.5,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Home grid&quot;},&quot;gridWell&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:-0.95,&quot;min&quot;:-0.95,&quot;max&quot;:6,&quot;step&quot;:0.1,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Home grid&quot;},&quot;gridWellWidth&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1.4,&quot;min&quot;:0.2,&quot;max&quot;:8,&quot;step&quot;:0.1,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Home grid&quot;},&quot;gridCenterX&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:-0.1,&quot;min&quot;:-2,&quot;max&quot;:2,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Home grid&quot;},&quot;gridCenterY&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:-0.85,&quot;min&quot;:-1.5,&quot;max&quot;:1.5,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Home grid&quot;},&quot;gridParallax&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.1,&quot;min&quot;:0,&quot;max&quot;:0.5,&quot;step&quot;:0.01,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Home grid&quot;},&quot;gridTilt&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0,&quot;min&quot;:0,&quot;max&quot;:1,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Home grid&quot;},&quot;gridThin&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.5,&quot;min&quot;:0.1,&quot;max&quot;:2,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Home grid&quot;},&quot;gridIntensity&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:0.16,&quot;min&quot;:0,&quot;max&quot;:1,&quot;step&quot;:0.02,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Home grid&quot;}}">
+class Component extends DCLogic {
+  state = {
+    page: "App",
+    appTab: "vocal",
+    winW: (typeof window !== "undefined" ? window.innerWidth : 1440),
+    tabs: [{ id: "vocal", name: "vocal-comparison.spectra" }],
+    view: "overlay",
+    channel: "mono",
+    sync: false,
+    openMenu: null,
+    loading: "Loading session",
+    volume: 0.8,
+    playing: false,
+    metric: "integrated",
+    curtain: 0.5,
+    cursor: { time: "00:00.000", freq: "— Hz", amp: "— dB" },
+    sources: [
+      { id: "a", name: "Source A", path: "demo/source-a.wav", primary: "#8CD9CD", secondary: "#0F3D38", visible: true, muted: false, soloed: false },
+      { id: "b", name: "Source B", path: "demo/source-b.wav", primary: "#C6B8ED", secondary: "#44355D", visible: true, muted: false, soloed: false },
+      { id: "c", name: "Source C", path: "demo/source-c.wav", primary: "#ACC9F5", secondary: "#0B2545", visible: true, muted: false, soloed: false },
+      { id: "d", name: "Source D", path: "demo/source-d.wav", primary: "#F4C8A8", secondary: "#7C2D12", visible: true, muted: false, soloed: false },
+      { id: "e", name: "Source E", path: "demo/source-e.wav", primary: "#8CD9CD", secondary: "#0F3D38", visible: true, muted: false, soloed: false },
+      { id: "f", name: "Source F", path: "demo/source-f.wav", primary: "#C6B8ED", secondary: "#44355D", visible: false, muted: false, soloed: false },
+      { id: "g", name: "Source G", path: "demo/source-g.wav", primary: "#ACC9F5", secondary: "#0B2545", visible: true, muted: true, soloed: false },
+      { id: "h", name: "Source H", path: "demo/source-h.wav", primary: "#F4C8A8", secondary: "#7C2D12", visible: true, muted: false, soloed: false },
+    ],
+  };
+
+  // --- helpers ---
+  componentDidMount() {
+    this._onResize = () => this.setState({ winW: window.innerWidth });
+    window.addEventListener("resize", this._onResize);
+    this._loadT = setTimeout(() => this.setState({ loading: null }), 1800);
+  }
+  componentWillUnmount() {
+    if (this._onResize) window.removeEventListener("resize", this._onResize);
+    clearTimeout(this._loadT);
+  }
+  clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+  freqToY(hz) {
+    const mel = (h) => 2595 * Math.log10(1 + h / 700);
+    const lo = mel(20), hi = mel(22050);
+    return 1 - (mel(hz) - lo) / (hi - lo);
+  }
+  freqToX(hz) {
+    const l = Math.log10(20), h = Math.log10(20000);
+    return (Math.log10(hz) - l) / (h - l);
+  }
+
+  fmtRuler(ms) {
+    const s = ms / 1000, m = Math.floor(s / 60), sec = Math.floor(s % 60), f = Math.floor((s * 10) % 10);
+    return m + ":" + String(sec).padStart(2, "0") + "." + f;
+  }
+
+  // --- mutations ---
+  setPage(p) { this.setState({ page: p }); }
+  setAppTab(t) { this.setState({ appTab: t }); if (t !== "home") this.startLoading("Loading session"); }
+  setView(v) { this.setState({ view: v }); this.startLoading("Rendering " + v); }
+  setChannel(c) { this.setState({ channel: c }); this.startLoading("Rendering " + c); }
+  startLoading(label) {
+    clearTimeout(this._loadT);
+    this.setState({ loading: label });
+    this._loadT = setTimeout(() => this.setState({ loading: null }), 1400);
+  }
+  toggleMenu(id) { this.setState((st) => ({ openMenu: st.openMenu === id ? null : id })); }
+  closeMenu() { this.setState({ openMenu: null }); }
+  toggleSync() { this.setState((s) => ({ sync: !s.sync })); }
+  setMetric(m) { this.setState({ metric: m }); }
+  togglePlay() { this.setState((s) => ({ playing: !s.playing })); }
+  toggleVisible(id) { this.setState((s) => ({ sources: s.sources.map((x) => x.id === id ? { ...x, visible: !x.visible } : x) })); }
+  toggleMute(id) { this.setState((s) => ({ sources: s.sources.map((x) => x.id === id ? { ...x, muted: !x.muted } : x) })); }
+  toggleSolo(id) { this.setState((s) => ({ sources: s.sources.map((x) => x.id === id ? { ...x, soloed: !x.soloed } : x) })); }
+
+  _volFromX(e) {
+    const r = e.currentTarget.getBoundingClientRect();
+    if (r.width <= 0) return;
+    this.setState({ volume: this.clamp((e.clientX - r.left) / r.width, 0, 1) });
+  }
+  volDown(e) { e.currentTarget.setPointerCapture(e.pointerId); this._volFromX(e); }
+  volMove(e) { if (e.buttons === 0) return; this._volFromX(e); }
+
+  curtainDown(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const track = e.currentTarget.closest("[data-curtain-track]");
+    if (!track) return;
+    const move = (ev) => {
+      const r = track.getBoundingClientRect();
+      if (r.width > 0) this.setState({ curtain: this.clamp((ev.clientX - r.left) / r.width, 0, 1) });
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  cellMove(e) {
+    const r = e.currentTarget.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return;
+    const xf = this.clamp((e.clientX - r.left) / r.width, 0, 1);
+    const yf = this.clamp((e.clientY - r.top) / r.height, 0, 1);
+    const start = 9000, end = 15000;
+    const ms = start + xf * (end - start);
+    const s = ms / 1000, m = Math.floor(s / 60), sec = Math.floor(s % 60), mil = Math.floor((s % 1) * 1000);
+    const time = String(m).padStart(2, "0") + ":" + String(sec).padStart(2, "0") + "." + String(mil).padStart(3, "0");
+    const logMin = Math.log10(20), logMax = Math.log10(20000);
+    const freqHz = Math.pow(10, logMax - yf * (logMax - logMin));
+    const freq = freqHz >= 1000 ? (freqHz / 1000).toFixed(1) + " kHz" : Math.round(freqHz) + " Hz";
+    const amp = (-60 + (1 - yf) * 55).toFixed(1) + " dB";
+    this.setState({ cursor: { time, freq, amp } });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const themes = {
+      "Purple / Green": { accent: "#A3E635", tint: "#440154", ramp: "#000000,#440154,#A3E635", sky: "#1E0024" },
+      "Viridis": { accent: "#FDE725", tint: "#21918C", ramp: "#440154,#482878,#3E4A89,#31688E,#26828E,#1F9E89,#35B779,#6DCD59,#B4DE2C,#FDE725", sky: "#1B1A45" },
+      "Lavamap": { accent: "#F09B19", tint: "#0F1446", ramp: "#000000,#05051E,#0F1446,#1E0F32,#500A05,#8C1400,#B93700,#D76405,#F09B19,#FCD246,#FFF08C,#FFFFFF", sky: "#05051E" },
+    };
+    const theme = themes[this.props.colorTheme] || themes["Purple / Green"];
+    const T = "var(--tint)", TR = "#28282E", TX = "#B8B8C0", TS = "#6E6E78", TD = "#44444C";
+    const self = this;
+
+    // Font pairing (tweakable) — clean/modern sans × technical mono
+    const fontMap = {
+      "Outfit / JetBrains Mono": ["'Outfit',system-ui,sans-serif", "'JetBrains Mono',ui-monospace,monospace"],
+      "Space Grotesk / Space Mono": ["'Space Grotesk',system-ui,sans-serif", "'Space Mono',ui-monospace,monospace"],
+      "Space Grotesk / DM Mono": ["'Space Grotesk',system-ui,sans-serif", "'DM Mono',ui-monospace,monospace"],
+      "Manrope / IBM Plex Mono": ["'Manrope',system-ui,sans-serif", "'IBM Plex Mono',ui-monospace,monospace"],
+      "Sora / Martian Mono": ["'Sora',system-ui,sans-serif", "'Martian Mono',ui-monospace,monospace"],
+      "Hanken Grotesk / Spline Sans Mono": ["'Hanken Grotesk',system-ui,sans-serif", "'Spline Sans Mono',ui-monospace,monospace"],
+      "Schibsted Grotesk / Fragment Mono": ["'Schibsted Grotesk',system-ui,sans-serif", "'Fragment Mono',ui-monospace,monospace"],
+      "Instrument Sans / DM Mono": ["'Instrument Sans',system-ui,sans-serif", "'DM Mono',ui-monospace,monospace"],
+      "Familjen Grotesk / Red Hat Mono": ["'Familjen Grotesk',system-ui,sans-serif", "'Red Hat Mono',ui-monospace,monospace"],
+      "Archivo / Azeret Mono": ["'Archivo',system-ui,sans-serif", "'Azeret Mono',ui-monospace,monospace"],
+      "Chivo / Sono": ["'Chivo',system-ui,sans-serif", "'Sono',ui-monospace,monospace"],
+    };
+    const fp = this.props.fontPair && fontMap[this.props.fontPair] ? this.props.fontPair : "Outfit / JetBrains Mono";
+    const fontSansVar = fontMap[fp][0];
+    const fontMonoVar = fontMap[fp][1];
+
+    // Home logo display font (tweakable)
+    const displayMap = {
+      "Bricolage Grotesque": "'Bricolage Grotesque',sans-serif",
+      "Space Grotesk": "'Space Grotesk',sans-serif",
+      "Syne": "'Syne',sans-serif",
+      "Unbounded": "'Unbounded',sans-serif",
+      "Orbitron": "'Orbitron',sans-serif",
+      "Michroma": "'Michroma',sans-serif",
+      "Chakra Petch": "'Chakra Petch',sans-serif",
+      "Oxanium": "'Oxanium',sans-serif",
+      "Big Shoulders": "'Big Shoulders Display',sans-serif",
+      "Anton": "'Anton',sans-serif",
+    };
+    const lf = this.props.logoFont && displayMap[this.props.logoFont] ? this.props.logoFont : "Bricolage Grotesque";
+    const fontDisplayVar = displayMap[lf];
+
+    // Responsive: at lower widths hide the cursor/selection readout and
+    // stack the spectral-display selection inputs.
+    const narrow = s.winW < 1400;
+    const spectroInputsStyle = "display:flex;align-items:center;gap:4px";
+
+    const pageButtons = [["Showcase", "Showcase"], ["App", "App"]].map(([label, pg]) => ({
+      label,
+      onClick: () => self.setPage(pg),
+      chipStyle: pg === s.page
+        ? "display:flex;align-items:center;background:" + TR + ";color:" + TX
+        : "display:flex;align-items:center",
+    }));
+
+    const tabDefs = [
+      ["timeline", "Timeline"], ["overlay", "Overlay"], ["slider", "Slider"],
+      ["difference", "Difference"], ["sum", "Sum"], ["frequency-distribution", "Freq Dist"],
+      ["loudness", "Loudness"], ["correlation", "Correlation"], ["vectorscope", "Vectorscope"],
+    ];
+    const viewTabs = tabDefs.map(([id, label]) => ({
+      id, label,
+      onClick: () => self.setView(id),
+      chipStyle: id === s.view
+        ? "display:flex;align-items:center;white-space:nowrap;background:" + T + ";color:" + TX
+        : "display:flex;align-items:center;white-space:nowrap",
+    }));
+
+    const channels = [["mono", "Mono"], ["mid", "Mid"], ["side", "Side"]].map(([v, l]) => ({
+      label: l,
+      onClick: () => self.setChannel(v),
+      chipStyle: v === s.channel
+        ? "display:flex;align-items:center;background:" + T + ";color:" + TX
+        : "display:flex;align-items:center",
+    }));
+
+    const currentViewLabel = (tabDefs.find(([id]) => id === s.view) || tabDefs[1])[1];
+    const currentChannelLabel = ({ mono: "Mono", mid: "Mid", side: "Side" })[s.channel] || "Mono";
+    const menuRowBase = "display:block;width:100%;text-align:left;padding:6px 12px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:";
+    const menuRow = (active) => menuRowBase + (active ? "var(--accent)" : "#B8B8C0");
+    const viewOptions = tabDefs.map(([id, label]) => ({
+      id, label,
+      onClick: () => { self.closeMenu(); self.setView(id); },
+      rowStyle: menuRow(id === s.view),
+    }));
+    const channelOptions = [["mono", "Mono"], ["mid", "Mid"], ["side", "Side"]].map(([v, l]) => ({
+      label: l,
+      onClick: () => { self.closeMenu(); self.setChannel(v); },
+      rowStyle: menuRow(v === s.channel),
+    }));
+    const appMenuItems = [
+      { label: "New Session", onClick: () => { self.closeMenu(); self.setAppTab("home"); } },
+      { label: "Open\u2026", onClick: () => self.closeMenu() },
+      { divider: true },
+      { label: "Save", onClick: () => self.closeMenu() },
+      { label: "Save As\u2026", onClick: () => self.closeMenu() },
+      { divider: true },
+      { label: "Export\u2026", onClick: () => self.closeMenu() },
+      { label: "Close Session", onClick: () => self.closeMenu() },
+      { divider: true },
+      { label: "Preferences", onClick: () => self.closeMenu() },
+    ].map((mi) => ({ divider: !!mi.divider, isItem: !mi.divider, label: mi.label || "", onClick: mi.onClick || (() => {}) }));
+
+    const docChip = (active) => active
+      ? "display:flex;flex-shrink:0;align-items:center;gap:6px;padding:0;background:var(--accent);color:#020204;border:none;cursor:pointer"
+      : "display:flex;flex-shrink:0;align-items:center;gap:6px;padding:0;background:#28282E;color:#B8B8C0;border:none;cursor:pointer";
+    const docTabs = s.tabs.map((t) => ({
+      id: t.id, name: t.name,
+      chipStyle: docChip(s.appTab === t.id),
+      closeColor: s.appTab === t.id ? "#020204" : "#44444C",
+      onClick: () => self.setAppTab(t.id),
+    }));
+    const newTabChip = s.appTab === "home"
+      ? "display:flex;align-items:center;justify-content:center;background:var(--accent);color:#020204"
+      : "display:flex;align-items:center;justify-content:center;background:#28282E;color:#6E6E78";
+
+    const iconChip = (active) => "display:flex;align-items:center;justify-content:center;background:" + (active ? T : TR) + ";color:" + (active ? TX : TS);
+    const sourceRows = s.sources.map((x) => ({
+      id: x.id, name: x.name, path: x.path, primary: x.primary, secondary: x.secondary,
+      eyeIcon: x.visible ? "lucide:eye" : "lucide:eye-off",
+      muteIcon: x.muted ? "lucide:volume-x" : "lucide:volume-2",
+      visChip: iconChip(x.visible), muteChip: iconChip(!x.muted), soloChip: iconChip(x.soloed),
+      onEye: () => self.toggleVisible(x.id),
+      onMute: () => self.toggleMute(x.id),
+      onSolo: () => self.toggleSolo(x.id),
+    }));
+
+    const visible = s.sources.filter((x) => x.visible);
+    const overlaySources = visible.map((x) => ({ id: x.id, name: x.name, primary: x.primary, secondary: x.secondary }));
+    const chartSources = visible.map((x) => x.id + ":" + x.primary).join(";");
+    const sliderTop = visible[0] || null;
+    const sliderBottom = visible[1] || null;
+    const hasPair = !!(sliderTop && sliderBottom);
+    const diffColor = visible[0] || { primary: "#B8B8C0", secondary: "#44444C" };
+
+    // axes / grids
+    const freqDefs = [[100, "100"], [200, "200"], [500, "500"], [1000, "1k"], [2000, "2k"], [5000, "5k"], [10000, "10k"], [20000, "20k"]];
+    const freqLabels = freqDefs.map(([hz, label]) => ({ label, top: (this.freqToY(hz) * 100).toFixed(2) + "%" }));
+    const gridH = freqDefs.map(([hz]) => ({ top: (this.freqToY(hz) * 100).toFixed(2) + "%" }));
+
+    const dbHalf = [0, -3, -6, -12, -24];
+    const dbLabels = [];
+    dbHalf.forEach((db) => {
+      const amp = db === 0 ? 1 : Math.pow(10, db / 20);
+      dbLabels.push({ label: String(db), top: ((1 - amp) * 50).toFixed(2) + "%" });
+    });
+    dbLabels.push({ label: "−∞", top: "50%" });
+    dbHalf.forEach((db) => {
+      const amp = db === 0 ? 1 : Math.pow(10, db / 20);
+      dbLabels.push({ label: String(db), top: (50 + amp * 50).toFixed(2) + "%" });
+    });
+
+    const timeMajors = [];
+    for (let t = 9000; t <= 15000; t += 1000) {
+      timeMajors.push({ label: this.fmtRuler(t), left: (((t - 9000) / 6000) * 100).toFixed(2) + "%" });
+    }
+    const gridV = timeMajors.map((t) => ({ left: t.left }));
+
+    // loudness axis
+    const metricDefs = [
+      ["truePeak", "True peak", -60], ["samplePeak", "Sample peak", -60], ["integrated", "Integrated", -40],
+      ["momentary", "Momentary", -40], ["shortTerm", "Short term", -40], ["rms", "RMS", -60],
+    ];
+    const metricTabs = metricDefs.map(([id, label]) => ({
+      id, label, onClick: () => self.setMetric(id),
+      chipStyle: id === s.metric
+        ? "display:flex;align-items:center;white-space:nowrap;background:" + T + ";color:" + TX
+        : "display:flex;align-items:center;white-space:nowrap",
+    }));
+    const activeMetric = metricDefs.find((m) => m[0] === s.metric) || metricDefs[2];
+    const currentMetricLabel = activeMetric[1];
+    const metricOptions = metricDefs.map(([id, label]) => ({
+      id, label,
+      onClick: () => { self.closeMenu(); self.setMetric(id); },
+      rowStyle: menuRow(id === s.metric),
+    }));
+    const loudAxisMin = activeMetric[2];
+    const loudTickVals = loudAxisMin === -60 ? [0, -10, -20, -30, -40, -50, -60] : [0, -5, -10, -15, -20, -25, -30, -35, -40];
+    const loudTicks = loudTickVals.map((db) => ({ label: String(db), top: (((0 - db) / (0 - loudAxisMin)) * 100).toFixed(2) + "%" }));
+
+    // correlation axis
+    const corrTicks = [1, 0.5, 0, -0.5, -1].map((c) => ({ label: String(c), top: (((1 - c) / 2) * 100).toFixed(2) + "%", heavy: c === 0 }));
+
+    // freq distribution axes
+    const fdDbTicks = [0, -10, -20, -30, -40, -50, -60, -70, -80, -90].map((db) => ({ label: String(db), top: (((0 - db) / 90) * 100).toFixed(2) + "%" }));
+    const fdFreqDefs = [[20, "20"], [50, "50"], [100, "100"], [200, "200"], [500, "500"], [1000, "1k"], [2000, "2k"], [5000, "5k"], [10000, "10k"], [20000, "20k"]];
+    const fdFreqTicks = fdFreqDefs.map(([hz, label]) => ({ label, left: (this.freqToX(hz) * 100).toFixed(2) + "%" }));
+    const fdGridV = fdFreqTicks.map((t) => ({ left: t.left }));
+    const fdGridH = fdDbTicks.map((t) => ({ top: t.top }));
+
+    // ---- Showcase data ----
+    const scLight = (hex) => parseInt(hex.slice(5, 7), 16) > 100;
+    const swatchTextTop = (hex) => scLight(hex) ? "#0D0D0F" : "#6E6E78";
+    const swatchTextBot = (hex) => scLight(hex) ? "#0D0D0F" : "#44444C";
+    const chromePalette = [
+      ["void", "#020204"], ["chrome-base", "#0D0D0F"], ["chrome-surface", "#1E1E23"],
+      ["chrome-raised", "#28282E"], ["chrome-border", "#2A2A30"], ["chrome-border-subtle", "#1F1F24"],
+      ["chrome-text", "#B8B8C0"], ["chrome-text-secondary", "#6E6E78"], ["chrome-text-dim", "#44444C"],
+    ].map(([token, hex]) => ({ token, hex, top: swatchTextTop(hex), bot: swatchTextBot(hex) }));
+    const accents = [
+      ["primary", "#A3E635", "Neon Lime"], ["secondary", "#440154", "Viridis Purple"],
+      ["interactive-focus", "#A3E635", "Focus Ring (aliases primary)"],
+    ].map(([token, hex, label]) => ({ token, hex, label }));
+    const states = [
+      ["state-rendered", "#34D399", "Rendered"], ["state-stale", "#FBBF24", "Stale"],
+      ["state-processing", "#60A5FA", "Processing"], ["state-error", "#F87171", "Error"],
+      ["state-bypassed", "#44444C", "Bypassed"],
+    ].map(([token, hex, label]) => ({ token, hex, label }));
+    const dataOverlay = [
+      ["data-cursor", "#E0E0E8", "Cursor"], ["data-selection", "#5A9ECF20", "Selection Fill"],
+      ["data-selection-border", "#5A9ECF", "Selection Border"],
+    ].map(([token, hex, label]) => ({ token, hex, label }));
+    const edges = [
+      ["edge-idle", "#2A2A30", "Idle"], ["edge-active", "#60A5FA", "Active"], ["edge-complete", "#34D399", "Complete"],
+    ].map(([token, hex, label]) => ({ token, hex, label }));
+    const typeScale = [
+      ["text-3xl", "3rem", "Logo / display"], ["text-2xl", "2rem", "Hero"], ["text-xl", "1.5rem", "Large headings"],
+      ["text-lg", "1.125rem", "View titles"], ["text-md", "1rem", "Section headers"], ["text-base", "0.875rem", "Primary UI text"],
+      ["text-sm", "0.8125rem", "Labels, parameters"], ["text-xs", "0.75rem", "Axis ticks, metadata"],
+    ].map(([token, rem, usage]) => ({ token, rem, usage }));
+    const spacingScale = [
+      ["space-1", "0.25rem", 4, "Tight internal padding"], ["space-2", "0.5rem", 8, "Standard internal padding"],
+      ["space-3", "0.75rem", 12, "Panel content padding"], ["space-4", "1rem", 16, "Section gaps"],
+      ["space-6", "1.5rem", 24, "Major section separation"],
+    ].map(([token, rem, px, usage]) => ({ token, rem, px: px + "px", usage }));
+    const showcaseIcons = [
+      ["lucide:play", "Play"], ["lucide:pause", "Pause"], ["lucide:square", "Square"], ["lucide:layers", "Layers"],
+      ["lucide:crosshair", "Crosshair"], ["lucide:activity", "Activity"], ["lucide:maximize-2", "Maximize2"],
+      ["lucide:chevron-down", "ChevronDown"], ["lucide:settings", "Settings"], ["lucide:x", "X"],
+    ].map(([icon, name]) => ({ icon, name }));
+    const layerPalette = [
+      { primary: "#8CD9CD", secondary: "#0F3D38", i: 1 }, { primary: "#C6B8ED", secondary: "#44355D", i: 2 },
+      { primary: "#ACC9F5", secondary: "#0B2545", i: 3 }, { primary: "#F4C8A8", secondary: "#7C2D12", i: 4 },
+    ].map((l) => ({ ...l, ramp: "linear-gradient(to right, #000000,#05051E,#0F1446,#1E0F32,#500A05,#8C1400,#B93700,#D76405,#F09B19,#FCD246,#FFF08C,#FFFFFF)", pair: l.primary + " / " + l.secondary }));
+
+    const hasTransport = !(s.view === "frequency-distribution" || s.view === "vectorscope");
+
+    return {
+      page: s.page,
+      fontSansVar, fontMonoVar, fontDisplayVar,
+      showReadout: !narrow,
+      spectroInputsStyle,
+      isApp: s.page === "App",
+      isWorkspace: s.page === "App" && s.appTab !== "home",
+      isHome: s.page === "App" && s.appTab === "home",
+      themeAccent: theme.accent, themeTint: theme.tint, themeRamp: theme.ramp, themeSky: theme.sky,
+      gridScale: this.props.gridScale ?? 6.5,
+      gridWell: this.props.gridWell ?? 2.2,
+      gridWellWidth: this.props.gridWellWidth ?? 2.4,
+      gridThin: this.props.gridThin ?? 0.45,
+      gridIntensity: this.props.gridIntensity ?? 0.16,
+      gridCenterX: this.props.gridCenterX ?? 0,
+      gridCenterY: this.props.gridCenterY ?? 0,
+      gridParallax: this.props.gridParallax ?? 0.04,
+      gridTilt: this.props.gridTilt ?? 0.5,
+      isLoading: !!s.loading,
+      loadingLabel: s.loading || "",
+      isShowcase: s.page === "Showcase",
+      isOverlay: s.view === "overlay",
+      isSlider: s.view === "slider",
+      isSum: s.view === "sum",
+      isDifference: s.view === "difference",
+      isSpectralGroup: s.view === "overlay" || s.view === "slider" || s.view === "sum" || s.view === "difference",
+      isTimeline: s.view === "timeline",
+      showSpectrogram: s.view !== "overlay",
+      isLoudness: s.view === "loudness",
+      isFreqDist: s.view === "frequency-distribution",
+      isCorrelation: s.view === "correlation",
+      isVectorscope: s.view === "vectorscope",
+      hasTransport,
+      shellRows: hasTransport ? "minmax(0, 1fr) auto" : "minmax(0, 1fr)",
+      sidebarRow: hasTransport ? "1 / span 2" : "1",
+      pageButtons, viewTabs, channels, sourceRows, docTabs, newTabChip,
+      currentViewLabel, currentChannelLabel, viewOptions, channelOptions, appMenuItems,
+      appMenuOpen: s.openMenu === "app",
+      viewMenuOpen: s.openMenu === "view",
+      channelMenuOpen: s.openMenu === "channel",
+      anyMenuOpen: s.openMenu !== null,
+      syncIconChip: s.sync
+        ? "display:flex;align-items:center;justify-content:center;background:" + T + ";color:" + TX
+        : "display:flex;align-items:center;justify-content:center;color:#6E6E78",
+      overlaySources, chartSources, sliderTop, sliderBottom, hasPair, diffColor,
+      curtainClip: String(s.curtain),
+      curtainLeft: (s.curtain * 100) + "%",
+      syncChip: s.sync
+        ? "display:flex;align-items:center;gap:4px;background:" + T + ";color:" + TX
+        : "display:flex;align-items:center;gap:4px",
+      channel: s.channel,
+      volumeWidth: (s.volume * 100) + "%",
+      volumeGlyph: s.volume === 0 ? "lucide:volume-x" : s.volume < 0.5 ? "lucide:volume-1" : "lucide:volume-2",
+      playIcon: s.playing ? "lucide:pause" : "lucide:play",
+      playChip: s.playing ? "display:flex;align-items:center;justify-content:center;background:var(--accent)" : "display:flex;align-items:center;justify-content:center",
+      playColor: s.playing ? "#020204" : "#6E6E78",
+      cursor: s.cursor,
+      freqLabels, gridH, dbLabels, timeMajors, gridV,
+      metricTabs, currentMetricLabel, metricOptions, metricMenuOpen: s.openMenu === "metric",
+      loudTicks, loudAxisMin: String(loudAxisMin), metric: s.metric,
+      corrTicks, fdDbTicks, fdFreqTicks, fdGridV, fdGridH,
+      chromePalette, accents, states, dataOverlay, edges, typeScale, spacingScale, showcaseIcons, layerPalette,
+      recentSessions: [
+        { name: "Podcast Episode 47", path: "/recordings/ep47", duration: "01:23:45", lastOpened: "2 hours ago" },
+        { name: "Interview \u2014 Sarah Chen", path: "/recordings/interviews", duration: "00:45:12", lastOpened: "Yesterday" },
+        { name: "Audiobook Ch 12", path: "/recordings/audiobook", duration: "02:10:30", lastOpened: "3 days ago" },
+        { name: "Sound Design \u2014 Intro", path: "/recordings/sfx", duration: "00:02:15", lastOpened: "Last week" },
+        { name: "Voiceover \u2014 Ad Read", path: "/recordings/vo", duration: "00:01:42", lastOpened: "Last week" },
+        { name: "Lecture Recording", path: "/recordings/edu", duration: "01:15:08", lastOpened: "2 weeks ago" },
+      ],
+      onCellMove: (e) => self.cellMove(e),
+      onCurtainDown: (e) => self.curtainDown(e),
+      onVolDown: (e) => self.volDown(e),
+      onVolMove: (e) => self.volMove(e),
+      onPlay: () => self.togglePlay(),
+      onSync: () => self.toggleSync(),
+      onAppMenu: () => self.toggleMenu("app"),
+      onViewMenu: () => self.toggleMenu("view"),
+      onMetricMenu: () => self.toggleMenu("metric"),
+      onChannelMenu: () => self.toggleMenu("channel"),
+      onCloseMenu: () => self.closeMenu(),
+      onNewTab: () => self.setAppTab("home"),
+      onOpenWorkspace: () => self.setAppTab("vocal"),
+    };
+  }
+}
+</script>
+</body>
+</html>
