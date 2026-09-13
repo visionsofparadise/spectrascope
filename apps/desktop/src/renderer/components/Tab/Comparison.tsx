@@ -12,6 +12,7 @@ import { AppShell } from "../../workspace/AppShell";
 import { WorkspacePlaybackProvider } from "../../workspace/playback";
 import { Sidebar } from "../../workspace/Sidebar";
 import { MeasurementSessionProvider } from "../../workspace/spectral/MeasurementSession";
+import { ViewProgressProvider, useViewProgressState } from "../../workspace/spectral/viewProgress";
 import { SyncProvider } from "../../workspace/sync";
 import { Transport } from "../../workspace/Transport";
 import { hasTransportViewControls, TransportViewControls } from "../../workspace/TransportViewControls";
@@ -438,6 +439,8 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 		};
 	}, [undo, redo]);
 
+	const viewProgress = useViewProgressState();
+
 	return (
 		<WorkspacePlaybackProvider value={workspacePlayback}>
 			<div className="relative flex flex-1 flex-col bg-void">
@@ -457,27 +460,29 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 						/>
 					}
 					workspace={
-						<MeasurementSessionProvider sessionId={comparison.id} sourceAudio={sourceAudio}>
-							<SyncProvider enabled={syncEnabled} initial={INITIAL_SYNC_STATE}>
-								<Workspace
-									sources={sources}
-									sourceAudio={sourceAudio}
-									derivedAudio={derivedAudio}
-									theme={app.theme}
-									activeView={activeView}
-									channelInput={comparison.channelInput}
-									settings={viewSettings}
-									onFrequencyRangeChange={(frequencyRange) =>
-										setViewSettings({ ...viewSettings, frequencyRange })
-									}
-									differenceA={comparison.differenceA}
-									differenceB={comparison.differenceB}
-									onDifferenceChange={setDifference}
-									onSourceOffsetChange={handleSourceOffsetChange}
-									onTransportControlChange={setTransportControl}
-								/>
-							</SyncProvider>
-						</MeasurementSessionProvider>
+						<ViewProgressProvider report={viewProgress.report}>
+							<MeasurementSessionProvider sessionId={comparison.id} sourceAudio={sourceAudio}>
+								<SyncProvider enabled={syncEnabled} initial={INITIAL_SYNC_STATE}>
+									<Workspace
+										sources={sources}
+										sourceAudio={sourceAudio}
+										derivedAudio={derivedAudio}
+										theme={app.theme}
+										activeView={activeView}
+										channelInput={comparison.channelInput}
+										settings={viewSettings}
+										onFrequencyRangeChange={(frequencyRange) =>
+											setViewSettings({ ...viewSettings, frequencyRange })
+										}
+										differenceA={comparison.differenceA}
+										differenceB={comparison.differenceB}
+										onDifferenceChange={setDifference}
+										onSourceOffsetChange={handleSourceOffsetChange}
+										onTransportControlChange={setTransportControl}
+									/>
+								</SyncProvider>
+							</MeasurementSessionProvider>
+						</ViewProgressProvider>
 					}
 					transport={
 						activeView === "frequency-distribution" || activeView === "vectorscope" ? undefined : (
@@ -505,8 +510,16 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 						)
 					}
 				/>
-				{(preparing || derivedPreparing) && (
+				{preparing || derivedPreparing ? (
 					<LoadingToast label="Preparing audio…" className="absolute right-2 top-2" />
+				) : (
+					viewProgress.progress.active && (
+						<LoadingToast
+							label="Rendering…"
+							fraction={viewProgress.progress.fraction}
+							className="absolute right-2 top-2 min-w-40"
+						/>
+					)
 				)}
 				{relinkError && (
 					<div

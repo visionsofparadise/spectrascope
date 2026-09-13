@@ -104,7 +104,7 @@ function render(overrides: Partial<SourceRenderProps> = {}) {
 }
 
 function progress() {
-	return render().find((element) => element.props.role === "progressbar");
+	return render().find((element) => element.type === ComputeProgress);
 }
 
 beforeEach(() => {
@@ -273,7 +273,7 @@ describe("replacement analysis progress", () => {
 		expect(runtime.options?.config?.spectrogram).toBe(false);
 		expect(tree.some((element) => element.type === SpectrogramCanvas)).toBe(false);
 		expect(tree.find((element) => element.type === WaveformCanvas)?.props.computeResult).toBe(incoming);
-		expect(render({ spectrogram: false }).some((element) => element.props.role === "progressbar")).toBe(false);
+		expect(render({ spectrogram: false }).some((element) => element.type === ComputeProgress)).toBe(false);
 	});
 
 	it("keeps held canvases visible while reporting source-specific progress without intercepting input", () => {
@@ -281,27 +281,20 @@ describe("replacement analysis progress", () => {
 		runtime.held = held;
 		runtime.result = { status: "computing", fraction: 0.42, previous: held };
 		const tree = render();
-		const indicator = tree.find((element) => element.props.role === "progressbar");
-		expect(indicator?.props).toMatchObject({
-			"aria-label": "Updating analysis for Example audio",
-			"aria-valuenow": 42,
-		});
-		expect(indicator?.props.className).toContain("pointer-events-none");
+		expect(tree.find((element) => element.type === ComputeProgress)?.props.fraction).toBe(0.42);
 		expect(
 			tree
 				.filter((element) => element.type === SpectrogramCanvas || element.type === WaveformCanvas)
 				.map((element) => element.props.computeResult),
 		).toEqual([held, held]);
-		expect(tree.some((element) => element.type === ComputeProgress)).toBe(false);
 		expect(
 			tree.some((element) => (element.props.style as { visibility?: string } | undefined)?.visibility === "hidden"),
 		).toBe(false);
 	});
 
-	it("preserves initial loading and hides replacement progress for ready, failed and empty states", () => {
+	it("reports progress while computing and none for ready, failed and empty states", () => {
 		runtime.result = { status: "computing", fraction: 0.2, previous: null };
-		expect(render().some((element) => element.type === ComputeProgress)).toBe(true);
-		expect(progress()).toBeUndefined();
+		expect(progress()?.props.fraction).toBe(0.2);
 		const held = ready();
 		runtime.held = held;
 		for (const result of [
@@ -321,8 +314,7 @@ describe("replacement analysis progress", () => {
 		const tree = render();
 		expect(tree.find((element) => element.type === WaveformCanvas)?.props.computeResult).toBe(waveform);
 		expect(tree.some((element) => element.type === SpectrogramCanvas)).toBe(false);
-		expect(tree.some((element) => element.type === ComputeProgress)).toBe(false);
-		expect(progress()?.props["aria-valuenow"]).toBe(50);
+		expect(tree.find((element) => element.type === ComputeProgress)?.props.fraction).toBe(0.5);
 	});
 
 	it("keeps old spectral coverage below incoming spectra and every waveform above spectra", () => {
@@ -339,15 +331,5 @@ describe("replacement analysis progress", () => {
 		);
 		expect(canvases.map((element) => element.props.computeResult)).toEqual([old, first, old, first, second]);
 		expect(canvases.slice(2).every((element) => element.type === WaveformCanvas)).toBe(true);
-	});
-
-	it.each([
-		[-1, 0],
-		[1.5, 100],
-		[NaN, 0],
-	])("bounds progress %s to an accessible percentage", (fraction, expected) => {
-		runtime.held = ready();
-		runtime.result = { status: "computing", fraction, previous: runtime.held };
-		expect(progress()?.props["aria-valuenow"]).toBe(expected);
 	});
 });
