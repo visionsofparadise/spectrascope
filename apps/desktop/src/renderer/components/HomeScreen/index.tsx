@@ -1,5 +1,6 @@
 import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
+import { Button } from "../Button";
 import { TerrainShader } from "../TerrainShader";
 import { lastOpenedLabelOf } from "./utils/lastOpenedLabel";
 import type { AppContext } from "../../models/Context";
@@ -66,37 +67,15 @@ export function HomeScreen({ context }: Props) {
 						</section>
 					)}
 
-					<div className="flex flex-col gap-2">
-						<button
-							type="button"
-							onClick={() => void context.newComparison()}
-							className="flex w-fit items-center gap-2 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-void"
-						>
-							<span className="flex items-center gap-2 bg-primary px-2 py-1">
-								<Icon icon="lucide:plus" width={16} />
-								New Session
-							</span>
-						</button>
-						<button
-							type="button"
-							onClick={() => void context.openComparison()}
-							className="flex w-fit items-center gap-2 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text"
-						>
-							<span className="flex items-center gap-2 bg-secondary px-2 py-1">
-								<Icon icon="lucide:folder-open" width={16} />
-								Open Session
-							</span>
-						</button>
-						<button
-							type="button"
-							onClick={() => void context.importAudio()}
-							className="flex w-fit items-center gap-2 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text"
-						>
-							<span className="flex items-center gap-2 bg-secondary px-2 py-1">
-								<Icon icon="lucide:import" width={16} />
-								Import Audio…
-							</span>
-						</button>
+					<div className="flex flex-col items-start gap-2">
+						<Button variant="primary" onClick={() => void context.newComparison()}>
+							<Icon icon="lucide:plus" width={16} height={16} aria-hidden="true" />
+							New Session
+						</Button>
+						<Button variant="secondary" onClick={() => void context.openComparison()}>
+							<Icon icon="lucide:folder-open" width={16} height={16} aria-hidden="true" />
+							Open Session
+						</Button>
 					</div>
 				</div>
 			</div>

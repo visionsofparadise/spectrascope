@@ -204,6 +204,8 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 					onThemeChange={(theme) =>
 						appStore.mutate(app, (proxy) => {
 							proxy.theme = theme;
+
+							for (const comparison of proxy.comparisons) comparison.viewSettings.spectrogramColormap = theme;
 						})
 					}
 					onClose={() => setPreferencesOpen(false)}

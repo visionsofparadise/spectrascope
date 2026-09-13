@@ -2,6 +2,7 @@ import { ComparisonSchema, INITIAL_PREFERENCES, type Preferences } from "../mode
 import { createDefaultSource } from "../workspace/source";
 import { comparisonFingerprint } from "./utils/comparisonFingerprint";
 import type { Comparison, SourceState } from "../models/State/App";
+import type { ThemeId } from "../utils/themePalettes";
 import type { Source } from "../workspace/source";
 
 export const AUDIO_FILE_EXTENSIONS = ["wav", "mp3", "flac", "m4a", "ogg", "aiff"] as const;
@@ -50,13 +51,14 @@ export function createSourceFromFile(filePath: string, index: number): SourceSta
 export function createComparison(
 	filePaths: ReadonlyArray<string>,
 	preferences: Preferences = INITIAL_PREFERENCES,
+	theme: ThemeId = "lava",
 ): Comparison {
 	const comparison = ComparisonSchema.parse({
 		id: generateId(),
 		name: filePaths[0] ? fileNameOf(filePaths[0]).slice(0, 200) : "New Session",
 		volume: preferences.monitorVolume,
 		playbackRate: preferences.playbackRate,
-		viewSettings: { fftSize: preferences.fftSize, hopOverlap: preferences.hopOverlap },
+		viewSettings: { fftSize: preferences.fftSize, hopOverlap: preferences.hopOverlap, spectrogramColormap: theme },
 		sources: filePaths.map((filePath, index) => createSourceFromFile(filePath, index)),
 		activeView: "overlay",
 		channelInput: "mono",

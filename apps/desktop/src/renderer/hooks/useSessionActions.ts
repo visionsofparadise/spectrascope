@@ -11,7 +11,6 @@ import type { AppState, Comparison } from "../models/State/App";
 export interface SessionActions {
 	openComparison: (filePath?: string) => Promise<void>;
 	newComparison: () => Promise<void>;
-	importAudio: () => Promise<void>;
 	saveComparison: (saveAs?: boolean) => Promise<boolean>;
 	closeComparison: (tabId: string) => Promise<void>;
 	renameTab: (tabId: string, name: string) => void;
@@ -130,19 +129,9 @@ export function useSessionActions(app: Snapshot<AppState>, store: ProxyStore, ma
 			clearError: () => setError(null),
 			newComparison: () =>
 				run(() => {
-					openTab(createComparison([], current().preferences));
+					openTab(createComparison([], current().preferences, current().theme));
 
 					return Promise.resolve();
-				}, undefined),
-			importAudio: () =>
-				run(async () => {
-					const paths = await main.showOpenDialog({
-						title: "Import Audio",
-						filters: [{ name: "Audio", extensions: [...AUDIO_FILE_EXTENSIONS] }],
-						properties: ["openFile", "multiSelections"],
-					});
-
-					if (paths?.length) openTab(createComparison(paths, current().preferences));
 				}, undefined),
 			openComparison: (requested) =>
 				run(async () => {
@@ -158,7 +147,7 @@ export function useSessionActions(app: Snapshot<AppState>, store: ProxyStore, ma
 					if (!chosen) return;
 
 					if (AUDIO_FILE_EXTENSIONS.some((extension) => chosen.toLowerCase().endsWith(`.${extension}`))) {
-						openTab(createComparison([chosen], current().preferences));
+						openTab(createComparison([chosen], current().preferences, current().theme));
 
 						return;
 					}
