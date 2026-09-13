@@ -159,43 +159,45 @@ export function VectorscopeView({ sources, sourceAudio, onTransportControlChange
 	const [yRange, setYRange] = useState<AxisRange>(FULL_AXIS_RANGE);
 
 	return (
-		<div className="flex h-full min-h-0 w-full flex-col bg-void p-4">
-			<div className="flex min-h-0 flex-1 gap-1">
+		<div className="flex h-full min-h-0 w-full flex-col bg-void">
+			<div className="flex min-h-0 flex-1">
 				{renderableSources.length === 0 ? (
 					<div className="flex min-w-0 flex-1 items-center justify-center bg-void">
 						<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
 					</div>
 				) : (
-					<div
-						className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center"
-						style={{ containerType: "size" }}
-					>
-						<FullBleedAxes xRange={xRange} yRange={yRange} />
+					<div className="flex min-h-0 min-w-0 flex-1 p-4">
 						<div
-							className="relative aspect-square overflow-hidden"
-							style={{ width: "100cqmin", height: "100cqmin" }}
+							className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center"
+							style={{ containerType: "size" }}
 						>
+							<FullBleedAxes xRange={xRange} yRange={yRange} />
 							<div
-								className="absolute inset-0"
-								style={{
-									mixBlendMode: "lighten",
-									transform: cloudTransformOf(xRange, yRange),
-									transformOrigin: "0 0",
-								}}
+								className="relative aspect-square overflow-hidden"
+								style={{ width: "100cqmin", height: "100cqmin" }}
 							>
-								{renderableSources.map(({ source, audioData }) => (
-									<SourceCloud
-										key={source.id}
-										source={source}
-										audioData={audioData}
-										onComputeState={progress.handleComputeState}
-										visibleSpan={Math.min(xRange.end - xRange.start, yRange.end - yRange.start)}
-									/>
-								))}
+								<div
+									className="absolute inset-0"
+									style={{
+										mixBlendMode: "lighten",
+										transform: cloudTransformOf(xRange, yRange),
+										transformOrigin: "0 0",
+									}}
+								>
+									{renderableSources.map(({ source, audioData }) => (
+										<SourceCloud
+											key={source.id}
+											source={source}
+											audioData={audioData}
+											onComputeState={progress.handleComputeState}
+											visibleSpan={Math.min(xRange.end - xRange.start, yRange.end - yRange.start)}
+										/>
+									))}
+								</div>
+								<ScopeDiagonals xRange={xRange} yRange={yRange} />
 							</div>
-							<ScopeDiagonals xRange={xRange} yRange={yRange} />
+							{progress.firstComputing && <ComputeProgress fraction={progress.fraction} />}
 						</div>
-						{progress.firstComputing && <ComputeProgress fraction={progress.fraction} />}
 					</div>
 				)}
 				<ScrollTrack
@@ -207,7 +209,7 @@ export function VectorscopeView({ sources, sourceAudio, onTransportControlChange
 					{...scrollTrackTextsOf("y", "Mid range", yRange, (fraction) => trackValueTextOf(1 - 2 * fraction))}
 				/>
 			</div>
-			<div className="flex shrink-0 pt-1">
+			<div className="flex shrink-0">
 				<ScrollTrack
 					axis="x"
 					className="min-w-0 flex-1"
@@ -216,7 +218,7 @@ export function VectorscopeView({ sources, sourceAudio, onTransportControlChange
 					onRangeChange={setXRange}
 					{...scrollTrackTextsOf("x", "Side range", xRange, (fraction) => trackValueTextOf(2 * fraction - 1))}
 				/>
-				<div className="w-3 shrink-0" />
+				<div className="w-2 shrink-0" />
 			</div>
 		</div>
 	);
