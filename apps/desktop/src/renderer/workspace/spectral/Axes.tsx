@@ -162,8 +162,6 @@ export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
 					</div>
 				);
 			})}
-
-			<div className="absolute bottom-0 left-0 right-0 h-px bg-chrome-border" />
 		</SelectionSurface>
 	);
 }
