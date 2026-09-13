@@ -44,7 +44,7 @@ const DB_WIDEST_LABEL = "-90";
 const FREQUENCY_MIN_SPAN = 1 / 6;
 const LEVEL_MIN_SPAN = 1 / 32;
 
-function frequencyReadoutRowsOf(
+export function frequencyReadoutRowsOf(
 	pointer: { readonly x: number; readonly y: number } | null,
 ): ReadonlyArray<TransportReadoutRow> {
 	const freqHz = pointer ? xToFreq(pointer.x) : 0;

@@ -11,13 +11,13 @@ import { useComparisonHistory } from "../../state/useComparisonHistory";
 import { AppShell } from "../../workspace/AppShell";
 import { WorkspacePlaybackProvider } from "../../workspace/playback";
 import { MeasurementSessionProvider } from "../../workspace/spectral/MeasurementSession";
+import { ViewLoadingToast } from "../../workspace/spectral/ViewLoadingToast";
 import { SyncProvider } from "../../workspace/sync";
 import { Transport } from "../../workspace/Transport";
 import { hasTransportViewControls, TransportViewControls } from "../../workspace/TransportViewControls";
 import { normalizeSelection } from "../../workspace/utils/selection";
 import { ViewTopBar } from "../../workspace/ViewTopBar";
 import { Workspace } from "../../workspace/Workspace";
-import { LoadingToast } from "../LoadingToast";
 import type { ExportControl } from "../../export/ExportControl";
 import type { AppContext } from "../../models/Context";
 import type { Comparison } from "../../models/State/App";
@@ -455,6 +455,7 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 								onDifferenceChange={setDifference}
 							/>
 							<div className="relative min-h-0 flex-1 overflow-hidden px-4">
+								{(preparing || derivedPreparing) && <ViewLoadingToast label="Preparing audio" />}
 								<MeasurementSessionProvider sessionId={comparison.id} sourceAudio={sourceAudio}>
 									<SyncProvider enabled={syncEnabled} initial={INITIAL_SYNC_STATE}>
 										<Workspace
@@ -507,9 +508,6 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 						/>
 					}
 				/>
-				{(preparing || derivedPreparing) && (
-					<LoadingToast label="Preparing audio…" className="absolute right-2 top-2" />
-				)}
 				{relinkError && (
 					<div
 						role="alert"

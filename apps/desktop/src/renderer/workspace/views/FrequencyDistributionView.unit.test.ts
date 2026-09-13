@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { freqToX, magnitudeToDb, xToFreq } from "./FrequencyDistributionView";
+import { freqToX, frequencyReadoutRowsOf, magnitudeToDb, xToFreq } from "./FrequencyDistributionView";
 
 describe("magnitudeToDb", () => {
 	it("maps unit magnitude to 0 dB", () => {
@@ -32,5 +32,26 @@ describe("xToFreq", () => {
 		expect(xToFreq(0)).toBeCloseTo(20, 10);
 		expect(xToFreq(1)).toBeCloseTo(20000, 6);
 		expect(xToFreq(freqToX(1000))).toBeCloseTo(1000, 6);
+	});
+});
+
+describe("frequencyReadoutRowsOf", () => {
+	it("shows dashes for every value without a pointer", () => {
+		expect(frequencyReadoutRowsOf(null)).toEqual([
+			{ label: "Freq", cursor: "—", in: "—", out: "—" },
+			{ label: "Amp", cursor: "—", in: "—", out: "—" },
+		]);
+	});
+
+	it("reads hertz below 1 kHz and the level from the pointer height", () => {
+		const [freq, amp] = frequencyReadoutRowsOf({ x: freqToX(200), y: 0.5 });
+		expect(freq?.cursor).toBe("200 Hz");
+		expect(amp?.cursor).toBe("-45.0 dB");
+	});
+
+	it("reads kilohertz from 1 kHz up", () => {
+		const [freq, amp] = frequencyReadoutRowsOf({ x: freqToX(2500), y: 0 });
+		expect(freq?.cursor).toBe("2.5 kHz");
+		expect(amp?.cursor).toBe("0.0 dB");
 	});
 });
