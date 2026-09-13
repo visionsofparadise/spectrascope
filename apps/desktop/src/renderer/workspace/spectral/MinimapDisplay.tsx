@@ -12,12 +12,17 @@ import type { SourceWithAudio } from "../views/viewAudio";
 import type { ChannelInput, ComputeResultReady, SpectralOptions } from "spectral-display";
 
 interface MinimapLayer {
+	readonly id: string;
 	readonly audioData: AudioData;
 	readonly color: readonly [number, number, number];
 }
 
 export function minimapLayersOf(sources: ReadonlyArray<SourceWithAudio>): ReadonlyArray<MinimapLayer> {
-	return sources.map(({ source, audioData }) => ({ audioData, color: hexToRgb255(source.layerColor.primary) }));
+	return sources.map(({ source, audioData }) => ({
+		id: source.id,
+		audioData,
+		color: hexToRgb255(source.layerColor.primary),
+	}));
 }
 
 interface MinimapDisplayProps {
@@ -151,9 +156,9 @@ export function MinimapDisplay({
 				}
 			}}
 		>
-			{layers.map((layer, index) => (
+			{layers.map((layer) => (
 				<MinimapLayerTiles
-					key={index}
+					key={layer.id}
 					audioData={layer.audioData}
 					color={layer.color}
 					channelInput={channelInput}

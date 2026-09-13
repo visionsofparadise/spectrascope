@@ -4,6 +4,7 @@ import type { ComponentPropsWithoutRef } from "react";
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;
 export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
+export const DropdownMenuSub = DropdownMenuPrimitive.Sub;
 
 export function DropdownMenuContent({
 	className,
@@ -44,5 +45,38 @@ export function DropdownMenuSeparator({
 }: ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>) {
 	return (
 		<DropdownMenuPrimitive.Separator className={cn("mx-2 my-1 h-px bg-chrome-border-subtle", className)} {...props} />
+	);
+}
+
+export function DropdownMenuSubTrigger({
+	className,
+	...props
+}: ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger>) {
+	return (
+		<DropdownMenuPrimitive.SubTrigger
+			className={cn(
+				"block w-full cursor-pointer px-3 py-[5px] text-left font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text outline-none data-[highlighted]:bg-interactive-hover data-[state=open]:bg-interactive-hover",
+				className,
+			)}
+			{...props}
+		/>
+	);
+}
+
+export function DropdownMenuSubContent({
+	className,
+	sideOffset = 4,
+	collisionPadding = 8,
+	...props
+}: ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>) {
+	return (
+		<DropdownMenuPrimitive.Portal>
+			<DropdownMenuPrimitive.SubContent
+				sideOffset={sideOffset}
+				collisionPadding={collisionPadding}
+				className={cn("z-50 bg-chrome-raised p-2 shadow-[0_8px_24px_rgba(0,0,0,0.5)] outline-none", className)}
+				{...props}
+			/>
+		</DropdownMenuPrimitive.Portal>
 	);
 }

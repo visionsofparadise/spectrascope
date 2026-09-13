@@ -47,6 +47,8 @@ vi.mock("../useTimeViewport", async (importOriginal) => ({
 	},
 }));
 
+vi.mock("../../models/Main", () => ({ main: { pathForFile: () => "" } }));
+
 vi.mock("../playback", () => ({
 	useWorkspacePlayback: () => ({
 		positionSec: 0,
@@ -132,11 +134,11 @@ describe("Timeline viewport rendering", () => {
 describe("Timeline file drop", () => {
 	it("keeps dropped files with an audio extension", () => {
 		const paths = droppedAudioFilePathsOf(
-			["C:\a\take.WAV", "/b/notes.txt", "", "/c/mix.flac", "/d/noext"],
+			["C:\\dir.v2\\take.WAV", "C:\\dir.v2\\notes", "/b/notes.txt", "", "/c/mix.flac", "/d/noext"],
 			(file) => file,
 		);
 
-		expect(paths).toEqual(["C:\a\take.WAV", "/c/mix.flac"]);
+		expect(paths).toEqual(["C:\\dir.v2\\take.WAV", "/c/mix.flac"]);
 	});
 });
 

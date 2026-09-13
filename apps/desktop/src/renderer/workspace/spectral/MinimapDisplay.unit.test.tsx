@@ -37,7 +37,7 @@ beforeEach(() => {
 function render(change: ReturnType<typeof vi.fn>) {
 	runtime.index = 0;
 	return MinimapDisplay({
-		layers: [{ audioData: EMPTY_AUDIO_DATA, color: [255, 255, 255] }],
+		layers: [{ id: "layer-1", audioData: EMPTY_AUDIO_DATA, color: [255, 255, 255] }],
 		viewStartFrac: 0.2,
 		viewEndFrac: 0.4,
 		onScrubToFraction: change,
@@ -133,7 +133,7 @@ it.each(["onPointerCancel", "onLostPointerCapture"] as const)(
 it("crops source-aligned output to the full source extent", () => {
 	runtime.result = { status: "ready", query: { startMs: 0, endMs: 1200 } };
 	const view = MinimapDisplay({
-		layers: [{ audioData: { ...EMPTY_AUDIO_DATA, durationMs: 1000 }, color: [255, 255, 255] }],
+		layers: [{ id: "layer-2", audioData: { ...EMPTY_AUDIO_DATA, durationMs: 1000 }, color: [255, 255, 255] }],
 		viewStartFrac: 0.2,
 		viewEndFrac: 0.4,
 	}) as ReactElement<ComponentProps<"div">>;
@@ -158,7 +158,7 @@ it("reads placed minimap audio from native source and positions it in timeline c
 		timelinePlacement: { source, offsetSamples: 12000 },
 	};
 	const view = MinimapDisplay({
-		layers: [{ audioData, color: [255, 255, 255] }],
+		layers: [{ id: "layer-3", audioData, color: [255, 255, 255] }],
 		viewStartFrac: 0.2,
 		viewEndFrac: 0.4,
 	}) as ReactElement<ComponentProps<"div">>;
@@ -171,7 +171,7 @@ it("reads placed minimap audio from native source and positions it in timeline c
 
 it("overlays every layer with lighten blending only when more than one layer is present", () => {
 	const single = MinimapDisplay({
-		layers: [{ audioData: EMPTY_AUDIO_DATA, color: [255, 0, 0] }],
+		layers: [{ id: "layer-4", audioData: EMPTY_AUDIO_DATA, color: [255, 0, 0] }],
 		viewStartFrac: 0,
 		viewEndFrac: 1,
 	}) as ReactElement<ComponentProps<"div">>;
@@ -180,13 +180,14 @@ it("overlays every layer with lighten blending only when more than one layer is 
 	expect(singleLayers[0] && renderLayer(singleLayers[0]).props.style).toBeUndefined();
 	const overlaid = MinimapDisplay({
 		layers: [
-			{ audioData: EMPTY_AUDIO_DATA, color: [255, 0, 0] },
-			{ audioData: EMPTY_AUDIO_DATA, color: [0, 255, 0] },
+			{ id: "layer-5", audioData: EMPTY_AUDIO_DATA, color: [255, 0, 0] },
+			{ id: "layer-6", audioData: EMPTY_AUDIO_DATA, color: [0, 255, 0] },
 		],
 		viewStartFrac: 0,
 		viewEndFrac: 1,
 	}) as ReactElement<ComponentProps<"div">>;
 	const overlaidLayers = layerElementsOf(overlaid);
+	expect(overlaidLayers.map((layer) => layer.key)).toEqual(["layer-5", "layer-6"]);
 	expect(overlaidLayers.map((layer) => layer.props.color)).toEqual([
 		[255, 0, 0],
 		[0, 255, 0],

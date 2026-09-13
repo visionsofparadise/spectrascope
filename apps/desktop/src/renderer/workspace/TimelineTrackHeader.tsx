@@ -1,7 +1,15 @@
 import { Icon } from "@iconify/react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { cn } from "../cn";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../components/DropdownMenu";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSub,
+	DropdownMenuSubContent,
+	DropdownMenuSubTrigger,
+	DropdownMenuTrigger,
+} from "../components/DropdownMenu";
 import { IconButton } from "../components/IconButton";
 import { LayerColorPicker } from "./LayerColorPicker";
 import type { Source } from "./source";
@@ -34,25 +42,10 @@ export function TimelineTrackHeader({
 	onRelink,
 	onRemove,
 }: TimelineTrackHeaderProps) {
-	const [pickerOpen, setPickerOpen] = useState(false);
-	const headerRef = useRef<HTMLDivElement>(null);
-
-	useEffect(() => {
-		if (!pickerOpen) return;
-
-		function handlePointer(event: PointerEvent) {
-			if (headerRef.current && !headerRef.current.contains(event.target as Node)) setPickerOpen(false);
-		}
-
-		window.addEventListener("pointerdown", handlePointer);
-
-		return () => {
-			window.removeEventListener("pointerdown", handlePointer);
-		};
-	}, [pickerOpen]);
+	const [menuOpen, setMenuOpen] = useState(false);
 
 	return (
-		<div ref={headerRef} className="absolute left-0 z-10 flex items-center gap-1" style={{ top }}>
+		<div className="absolute left-0 z-10 flex items-center gap-1" style={{ top }}>
 			{offsetHandle ? (
 				<button
 					type="button"
@@ -101,7 +94,7 @@ export function TimelineTrackHeader({
 				aria-pressed={source.soloed}
 				onClick={() => onSourceChange?.({ ...source, soloed: !source.soloed })}
 			/>
-			<DropdownMenu>
+			<DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
 				<DropdownMenuTrigger asChild>
 					<button
 						type="button"
@@ -114,7 +107,18 @@ export function TimelineTrackHeader({
 					</button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="start">
-					<DropdownMenuItem onSelect={() => setPickerOpen(true)}>Layer colour</DropdownMenuItem>
+					<DropdownMenuSub>
+						<DropdownMenuSubTrigger>Layer colour</DropdownMenuSubTrigger>
+						<DropdownMenuSubContent aria-label="Layer colour">
+							<LayerColorPicker
+								value={source.layerColor}
+								onChange={(layerColor) => {
+									onSourceChange?.({ ...source, layerColor });
+									setMenuOpen(false);
+								}}
+							/>
+						</DropdownMenuSubContent>
+					</DropdownMenuSub>
 					{onRelink && <DropdownMenuItem onSelect={onRelink}>Replace audio…</DropdownMenuItem>}
 					<DropdownMenuItem disabled className="text-chrome-text-dim" onSelect={(event) => event.preventDefault()}>
 						Duplicate
@@ -129,21 +133,6 @@ export function TimelineTrackHeader({
 					)}
 				</DropdownMenuContent>
 			</DropdownMenu>
-			{pickerOpen && (
-				<div
-					role="dialog"
-					aria-label="Layer colour"
-					className="absolute top-full left-0 z-50 mt-1 bg-chrome-raised p-2"
-				>
-					<LayerColorPicker
-						value={source.layerColor}
-						onChange={(layerColor) => {
-							onSourceChange?.({ ...source, layerColor });
-							setPickerOpen(false);
-						}}
-					/>
-				</div>
-			)}
 		</div>
 	);
 }

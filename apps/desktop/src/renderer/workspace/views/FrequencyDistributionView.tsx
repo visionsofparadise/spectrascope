@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { getBandFrequencies } from "spectral-display";
-import { AxisSpacer, LinearDbAxis, useLabelFit } from "../spectral/Axes";
+import { AxisSpacer, LinearDbAxis, linearAxisSampleOf, useLabelFit } from "../spectral/Axes";
 import { ChartSvg, HorizontalGridlines, TracePolylines, VerticalGridlines } from "../spectral/chartMarks";
 import { ComputeProgress } from "../spectral/ComputeProgress";
 import { useFirstComputeProgress, useReportComputeState } from "../spectral/firstComputeProgress";
@@ -248,12 +248,14 @@ export function FrequencyDistributionView({
 		onTransportControlChange,
 	);
 
+	const axisSample = linearAxisSampleOf(DB_MIN, DB_MAX, DB_TICK_COUNT, yRange, DB_WIDEST_LABEL);
+
 	return (
 		<ViewProgressProvider>
 			<div className="flex h-full min-h-0 w-full flex-col bg-void">
 				<div className="flex min-h-0 flex-1 flex-col">
 					<div className="flex shrink-0">
-						<AxisSpacer sample={DB_WIDEST_LABEL} />
+						<AxisSpacer sample={axisSample} />
 						<div className="min-w-0 flex-1">
 							<HorizontalFrequencyAxis range={xRange} />
 						</div>
@@ -304,7 +306,7 @@ export function FrequencyDistributionView({
 						/>
 					</div>
 					<div className="flex shrink-0">
-						<AxisSpacer sample={DB_WIDEST_LABEL} />
+						<AxisSpacer sample={axisSample} />
 						<ScrollTrack
 							axis="x"
 							className="min-w-0 flex-1"

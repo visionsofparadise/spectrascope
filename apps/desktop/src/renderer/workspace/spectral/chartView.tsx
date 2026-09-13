@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { FULL_AXIS_RANGE } from "../utils/axisRange";
-import { AxisSpacer, LinearDbAxis, TimeRuler } from "./Axes";
+import { AxisSpacer, LinearDbAxis, linearAxisSampleOf, TimeRuler } from "./Axes";
 import { ComputeProgress } from "./ComputeProgress";
 import { useFirstComputeProgress } from "./firstComputeProgress";
 import { MinimapDisplay, minimapLayersOf } from "./MinimapDisplay";
@@ -109,13 +109,14 @@ export function ChartLayout({
 	const leadingSpacer = leadingSpacerClassName && <div className={`${leadingSpacerClassName} shrink-0`} />;
 
 	const { max, min, rangeLabel, unit, widestLabel } = chart.axis;
+	const axisSample = linearAxisSampleOf(min, max, tickCount, chart.yRange, widestLabel);
 
 	return (
 		<ViewProgressProvider>
 			<div className="flex h-full min-h-0 w-full flex-col bg-void">
 				<div className="flex min-h-0 flex-1 flex-col">
 					<div className="flex shrink-0">
-						<AxisSpacer sample={widestLabel} />
+						<AxisSpacer sample={axisSample} />
 						{leadingSpacer}
 						<div className="min-w-0 flex-1">
 							<TimeRuler startMs={chart.viewport.startMs} endMs={chart.viewport.endMs} />
@@ -161,7 +162,7 @@ export function ChartLayout({
 						/>
 					</div>
 					<div className="flex shrink-0">
-						<AxisSpacer sample={widestLabel} />
+						<AxisSpacer sample={axisSample} />
 						{leadingSpacer}
 						<div className="min-w-0 flex-1">
 							<MinimapDisplay

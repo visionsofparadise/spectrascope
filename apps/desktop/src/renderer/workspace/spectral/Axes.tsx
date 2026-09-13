@@ -177,6 +177,18 @@ interface LinearDbAxisProps {
 	readonly sample: string;
 }
 
+export function linearAxisSampleOf(
+	min: number,
+	max: number,
+	tickCount: number,
+	range: AxisRange,
+	minimumSample: string,
+): string {
+	return visibleValueTicksOf(min, max, range, tickCount)
+		.map(String)
+		.reduce((widest, label) => (label.length > widest.length ? label : widest), minimumSample);
+}
+
 export function LinearDbAxis({ min, max, tickCount, range = FULL_AXIS_RANGE, sample }: LinearDbAxisProps) {
 	const span = max - min;
 
@@ -185,7 +197,7 @@ export function LinearDbAxis({ min, max, tickCount, range = FULL_AXIS_RANGE, sam
 			className="relative h-full shrink-0 bg-void font-technical text-chrome-text-secondary"
 			style={AXIS_TEXT_STYLE}
 		>
-			<AxisSizer sample={sample} side="right" />
+			<AxisSizer sample={linearAxisSampleOf(min, max, tickCount, range, sample)} side="right" />
 			{visibleValueTicksOf(min, max, range, tickCount).map((value) => {
 				const position = span > 0 ? axisFractionOf((max - value) / span, range) : 0;
 

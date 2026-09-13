@@ -2,6 +2,7 @@ import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AUDIO_FILE_EXTENSIONS } from "../../comparison/createComparison";
 import { Button } from "../../components/Button";
+import { main } from "../../models/Main";
 import { SourceRender } from "../SourceRender";
 import { TimeRuler } from "../spectral/Axes";
 import { GridOverlay } from "../spectral/GridOverlay";
@@ -490,7 +491,7 @@ export function TimelineView({
 					event.preventDefault();
 
 					const filePaths = droppedAudioFilePathsOf([...event.dataTransfer.files], (file) =>
-						window.main.pathForFile(file),
+						main.pathForFile(file),
 					);
 
 					if (filePaths.length > 0) onAddSourceFiles?.(filePaths);
