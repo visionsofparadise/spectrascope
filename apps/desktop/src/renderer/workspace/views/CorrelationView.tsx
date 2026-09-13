@@ -45,7 +45,14 @@ function SourceCorrelationTrace({
 	onComputeState,
 	onTraceChange,
 }: ChartTraceProps) {
-	const { computeResult, renderable } = useTraceCompute(audioData, startMs, endMs, CORRELATION_CONFIG);
+	const { computeResult, renderable } = useTraceCompute(
+		audioData,
+		startMs,
+		endMs,
+		CORRELATION_CONFIG,
+		source.id,
+		source.timelineOffsetMs,
+	);
 
 	const envelope = renderable ? renderable.correlationEnvelope : null;
 	const readout = useMemo<ChartReadoutTrace | null>(

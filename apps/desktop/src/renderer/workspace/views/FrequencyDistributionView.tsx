@@ -82,7 +82,7 @@ function SourceLtasTrace({
 		[fftSize, hopOverlap, channelInput],
 	);
 
-	const { computeResult, renderable } = useTraceCompute(audioData, 0, audioData.durationMs, ltasConfig);
+	const { computeResult, renderable } = useTraceCompute(audioData, 0, audioData.durationMs, ltasConfig, source.id);
 
 	const ltas = renderable ? renderable.ltas : null;
 	const sampleRate = audioData.sampleRate;

@@ -5,6 +5,7 @@ import { useWindowState } from "../hooks/useWindowState";
 import { main } from "../models/Main";
 import { MainEvents } from "../models/MainEvents";
 import { useAppState, type AppState } from "../models/State/App";
+import { MeasurementSessionsProvider } from "../workspace/spectral/MeasurementSessionsProvider";
 import { AppBar } from "./AppBar";
 import { ExportDialog } from "./ExportDialog";
 import { PreferencesDialog } from "./PreferencesDialog";
@@ -181,11 +182,16 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 					Exporting…
 				</div>
 			)}
-			<TabContent
-				context={context}
-				onHistoryControlChange={setHistoryControl}
-				onExportControlChange={setExportControl}
-			/>
+			<MeasurementSessionsProvider
+				comparisons={app.comparisons}
+				activeSessionId={app.tabs.find((tab) => tab.id === app.activeTabId)?.comparisonId ?? null}
+			>
+				<TabContent
+					context={context}
+					onHistoryControlChange={setHistoryControl}
+					onExportControlChange={setExportControl}
+				/>
+			</MeasurementSessionsProvider>
 			{exportDialog && (
 				<ExportDialog
 					control={exportDialog}

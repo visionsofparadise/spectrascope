@@ -93,7 +93,13 @@ interface SourceCloudProps {
 }
 
 function SourceCloud({ source, audioData, onComputeState }: SourceCloudProps) {
-	const { computeResult, renderable } = useTraceCompute(audioData, 0, audioData.durationMs, VECTORSCOPE_CONFIG);
+	const { computeResult, renderable } = useTraceCompute(
+		audioData,
+		0,
+		audioData.durationMs,
+		VECTORSCOPE_CONFIG,
+		source.id,
+	);
 
 	useReportComputeState(source.id, computeResult, onComputeState);
 

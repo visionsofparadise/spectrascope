@@ -12,7 +12,7 @@ import type { SourceViewProps } from "./viewProps";
 import type { ChartTraceProps } from "../spectral/chartTraceProps";
 import type { ChartReadoutTrace } from "../spectral/useChartReadouts";
 import type { LoudnessMetric, MetricSpec, ViewControlSettings } from "../viewSettings";
-import type { LoudnessData, SpectralOptions } from "spectral-display";
+import type { LoudnessData, SpectralOptions, SpectralQuery } from "spectral-display";
 
 const LOUDNESS_CONFIG: SpectralOptions["config"] = {
 	spectrogram: false,
@@ -93,7 +93,7 @@ function scalarMetricValue(
 
 interface SourceLoudnessTraceProps extends ChartTraceProps {
 	readonly metric: MetricSpec;
-	readonly onLoudnessData: (sourceId: string, data: LoudnessData | null) => void;
+	readonly onLoudnessData: (sourceId: string, data: LoudnessData | null, query?: SpectralQuery) => void;
 }
 
 function SourceLoudnessTrace({
@@ -108,7 +108,14 @@ function SourceLoudnessTrace({
 	onComputeState,
 	onTraceChange,
 }: SourceLoudnessTraceProps) {
-	const { computeResult, renderable } = useTraceCompute(audioData, startMs, endMs, LOUDNESS_CONFIG);
+	const { computeResult, renderable } = useTraceCompute(
+		audioData,
+		startMs,
+		endMs,
+		LOUDNESS_CONFIG,
+		source.id,
+		source.timelineOffsetMs,
+	);
 
 	const loudnessData = renderable ? renderable.loudnessData : null;
 	const readout = useMemo<ChartReadoutTrace | null>(() => {
@@ -140,7 +147,7 @@ function SourceLoudnessTrace({
 			values,
 			valueToY: (value) => dbToY(value, metric.axisMin),
 			formatValue: (value) => (value === -Infinity ? "−∞" : value.toFixed(1)),
-			amplitudeLabel: `${scalar ? "Window " : ""}${metric.label} ${units}`,
+			amplitudeLabel: `${scalar ? `Analyzed window ${(renderable.query.startMs / 1000).toFixed(3)}–${(renderable.query.endMs / 1000).toFixed(3)} s ` : ""}${metric.label} ${units}`,
 		};
 	}, [source.id, source.name, renderable, loudnessData, metric]);
 
@@ -151,12 +158,12 @@ function SourceLoudnessTrace({
 	}, [source.id, readout, onTraceChange]);
 
 	useEffect(() => {
-		onLoudnessData(source.id, loudnessData);
+		onLoudnessData(source.id, loudnessData, renderable?.query);
 
 		return () => {
 			onLoudnessData(source.id, null);
 		};
-	}, [source.id, loudnessData, onLoudnessData]);
+	}, [source.id, loudnessData, renderable?.query, onLoudnessData]);
 
 	useReportComputeState(source.id, computeResult, onComputeState);
 
@@ -238,7 +245,7 @@ function mapperForMetric(metric: LoudnessMetric, floorDb: number): (value: numbe
 
 interface ScalarLabelsProps {
 	readonly visibleSources: ReadonlyArray<Source>;
-	readonly loudnessMap: ReadonlyMap<string, LoudnessData | null>;
+	readonly loudnessMap: ReadonlyMap<string, { data: LoudnessData; query?: SpectralQuery }>;
 	readonly metric: MetricSpec;
 }
 
@@ -246,11 +253,11 @@ function ScalarLabels({ visibleSources, loudnessMap, metric }: ScalarLabelsProps
 	return (
 		<>
 			{visibleSources.map((source) => {
-				const data = loudnessMap.get(source.id);
+				const measurement = loudnessMap.get(source.id);
 
-				if (!data) return null;
+				if (!measurement) return null;
 
-				const scalar = scalarMetricValue(data, metric.id);
+				const scalar = scalarMetricValue(measurement.data, metric.id);
 
 				if (!scalar || !Number.isFinite(scalar.value)) return null;
 
@@ -263,6 +270,12 @@ function ScalarLabels({ visibleSources, loudnessMap, metric }: ScalarLabelsProps
 						style={{ top: `${yPct}%`, color: source.layerColor.primary }}
 					>
 						{scalar.text}
+						{measurement.query && (
+							<span className="ml-2 text-chrome-text-secondary">
+								Analyzed window {(measurement.query.startMs / 1000).toFixed(3)}–
+								{(measurement.query.endMs / 1000).toFixed(3)} s
+							</span>
+						)}
 					</div>
 				);
 			})}
@@ -276,16 +289,18 @@ interface ChartCanvasProps extends ChartCanvasBaseProps {
 
 function ChartCanvas({ chart, renderableSources, metric }: ChartCanvasProps) {
 	const { committedStartMs, committedEndMs, startMs: liveStartMs, endMs: liveEndMs } = chart.viewport;
-	const [loudnessMap, setLoudnessMap] = useState<Map<string, LoudnessData | null>>(() => new Map());
+	const [loudnessMap, setLoudnessMap] = useState<Map<string, { data: LoudnessData; query?: SpectralQuery }>>(
+		() => new Map(),
+	);
 
-	const handleLoudnessData = useCallback((sourceId: string, data: LoudnessData | null) => {
+	const handleLoudnessData = useCallback((sourceId: string, data: LoudnessData | null, query?: SpectralQuery) => {
 		setLoudnessMap((previous) => {
 			const next = new Map(previous);
 
 			if (data === null) {
 				next.delete(sourceId);
 			} else {
-				next.set(sourceId, data);
+				next.set(sourceId, { data, query });
 			}
 
 			return next;

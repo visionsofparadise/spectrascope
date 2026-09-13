@@ -28,4 +28,18 @@ describe("buildPolylineSegments", () => {
 	it("returns no segments for an empty input", () => {
 		expect(buildPolylineSegments(new Float32Array(0), identityY)).toEqual([]);
 	});
+
+	it("bounds long traces while keeping their endpoints and narrow extrema", () => {
+		const values = new Float32Array(100000).fill(0.5);
+		values[12345] = 1;
+		values[12346] = -1;
+		const points = buildPolylineSegments(values, identityY, (index) => index)
+			.join(" ")
+			.split(" ");
+		expect(points.length).toBeLessThanOrEqual(8192);
+		expect(points).toContain("12345,1");
+		expect(points).toContain("12346,-1");
+		expect(points[0]).toBe("0,0.5");
+		expect(points[points.length - 1]).toBe("99999,0.5");
+	});
 });

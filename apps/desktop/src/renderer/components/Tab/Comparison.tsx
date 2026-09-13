@@ -11,6 +11,7 @@ import { useComparisonHistory } from "../../state/useComparisonHistory";
 import { AppShell } from "../../workspace/AppShell";
 import { WorkspacePlaybackProvider } from "../../workspace/playback";
 import { Sidebar } from "../../workspace/Sidebar";
+import { MeasurementSessionProvider } from "../../workspace/spectral/MeasurementSession";
 import { SyncProvider } from "../../workspace/sync";
 import { Transport } from "../../workspace/Transport";
 import { TransportViewControls } from "../../workspace/TransportViewControls";
@@ -455,24 +456,26 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 						/>
 					}
 					workspace={
-						<SyncProvider enabled={syncEnabled} initial={INITIAL_SYNC_STATE}>
-							<Workspace
-								sources={sources}
-								sourceAudio={sourceAudio}
-								derivedAudio={derivedAudio}
-								activeView={activeView}
-								channelInput={comparison.channelInput}
-								settings={viewSettings}
-								onFrequencyRangeChange={(frequencyRange) =>
-									setViewSettings({ ...viewSettings, frequencyRange })
-								}
-								differenceA={comparison.differenceA}
-								differenceB={comparison.differenceB}
-								onDifferenceChange={setDifference}
-								onSourceOffsetChange={handleSourceOffsetChange}
-								onTransportControlChange={setTransportControl}
-							/>
-						</SyncProvider>
+						<MeasurementSessionProvider sessionId={comparison.id} sourceAudio={sourceAudio}>
+							<SyncProvider enabled={syncEnabled} initial={INITIAL_SYNC_STATE}>
+								<Workspace
+									sources={sources}
+									sourceAudio={sourceAudio}
+									derivedAudio={derivedAudio}
+									activeView={activeView}
+									channelInput={comparison.channelInput}
+									settings={viewSettings}
+									onFrequencyRangeChange={(frequencyRange) =>
+										setViewSettings({ ...viewSettings, frequencyRange })
+									}
+									differenceA={comparison.differenceA}
+									differenceB={comparison.differenceB}
+									onDifferenceChange={setDifference}
+									onSourceOffsetChange={handleSourceOffsetChange}
+									onTransportControlChange={setTransportControl}
+								/>
+							</SyncProvider>
+						</MeasurementSessionProvider>
 					}
 					transport={
 						activeView === "frequency-distribution" || activeView === "vectorscope" ? undefined : (
