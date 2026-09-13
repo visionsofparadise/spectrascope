@@ -85,11 +85,19 @@ describe("stream query ownership", () => {
 		const options = derivedStreamQueryOptions({ inputs: [{ pcmPath: "/prepared.wav", offsetMs: 0, gain: 1 }] });
 		const entry = await client.fetchQuery(options);
 		const release = retainStreamQuery(entry);
+		if (!release) throw new Error("Missing retention");
 		client.removeQueries({ queryKey: options.queryKey });
 		expect(calls.releaseStream).not.toHaveBeenCalled();
 		release();
 		release();
 		await vi.waitFor(() => expect(calls.releaseStream).toHaveBeenCalledTimes(1));
+	});
+	it("declines to retain an entry whose owners already released it", async () => {
+		const options = derivedStreamQueryOptions({ inputs: [{ pcmPath: "/prepared.wav", offsetMs: 0, gain: 1 }] });
+		const entry = await client.fetchQuery(options);
+		client.removeQueries({ queryKey: options.queryKey });
+		await vi.waitFor(() => expect(calls.releaseStream).toHaveBeenCalledTimes(1));
+		expect(retainStreamQuery(entry)).toBeNull();
 	});
 	it("allows explicit retry after a failed preparation", async () => {
 		calls.prepareSource.mockRejectedValueOnce(new Error("Missing source file"));
@@ -124,6 +132,7 @@ describe("stream query ownership", () => {
 		const previous = observer.getCurrentResult().data;
 		if (!previous) throw new Error("Missing result");
 		const release = retainStreamQuery(previous);
+		if (!release) throw new Error("Missing retention");
 		await observer.refetch();
 		expect(calls.registerStream).toHaveBeenCalledTimes(2);
 		expect(calls.releaseStream).not.toHaveBeenCalled();

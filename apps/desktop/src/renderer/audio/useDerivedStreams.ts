@@ -45,11 +45,17 @@ function useRegisteredDerivedStream(spec: StreamSpec | null) {
 	const held = useRef<StreamQueryEntry | null>(null);
 	const entry = spec === null ? null : (result.data ?? held.current);
 
-	useEffect(() => {
-		held.current = entry;
+	const { refetch } = result;
 
-		if (entry) return retainStreamQuery(entry);
-	}, [entry]);
+	useEffect(() => {
+		const release = entry ? retainStreamQuery(entry) : null;
+
+		held.current = release ? entry : null;
+
+		if (entry && !release) void refetch();
+
+		return release ?? undefined;
+	}, [entry, refetch]);
 
 	return { result, entry, preparing: spec !== null && result.isFetching };
 }

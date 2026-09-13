@@ -32,10 +32,10 @@ function releaseEntry(entry: object): void {
 	if (state.owners === 0) state.dispose();
 }
 
-export function retainStreamQuery(entry: StreamQueryEntry): () => void {
+export function retainStreamQuery(entry: StreamQueryEntry): (() => void) | null {
 	const state = ownership.get(entry);
 
-	if (!state || state.owners === 0) throw new Error("Audio stream has been released");
+	if (!state || state.owners === 0) return null;
 
 	state.owners++;
 
