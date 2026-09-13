@@ -24,20 +24,25 @@ export function viewProgressOf(fractions: ReadonlyArray<number>): ViewProgress {
 }
 
 function useViewProgressState(): { readonly report: ReportViewProgress; readonly progress: ViewProgress } {
+	const reportToParent = useContext(ViewProgressContext);
 	const [fractions, setFractions] = useState<ReadonlyMap<string, number>>(() => new Map());
 
-	const report = useCallback<ReportViewProgress>((key, fraction) => {
-		setFractions((previous) => {
-			if (fraction === null ? !previous.has(key) : previous.get(key) === fraction) return previous;
+	const report = useCallback<ReportViewProgress>(
+		(key, fraction) => {
+			reportToParent?.(key, fraction);
+			setFractions((previous) => {
+				if (fraction === null ? !previous.has(key) : previous.get(key) === fraction) return previous;
 
-			const next = new Map(previous);
+				const next = new Map(previous);
 
-			if (fraction === null) next.delete(key);
-			else next.set(key, fraction);
+				if (fraction === null) next.delete(key);
+				else next.set(key, fraction);
 
-			return next;
-		});
-	}, []);
+				return next;
+			});
+		},
+		[reportToParent],
+	);
 
 	const progress = useMemo(() => viewProgressOf([...fractions.values()]), [fractions]);
 

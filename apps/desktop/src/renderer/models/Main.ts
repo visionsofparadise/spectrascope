@@ -13,6 +13,8 @@ export type Main = {
 	};
 
 	send: (channel: string, ...args: Array<unknown>) => void;
+
+	pathForFile: (file: File) => string;
 };
 
 export const main = window.main;

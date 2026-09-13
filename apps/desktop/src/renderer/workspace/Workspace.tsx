@@ -66,6 +66,7 @@ export function Workspace({
 	onRelinkSource,
 	onSourcesChange,
 	onAddSources,
+	onAddSourceFiles,
 }: WorkspaceProps) {
 	return (
 		<div className="h-full min-h-0 w-full overflow-hidden bg-void">
@@ -83,6 +84,7 @@ export function Workspace({
 					onRelinkSource={onRelinkSource}
 					onSourcesChange={onSourcesChange}
 					onAddSources={onAddSources}
+					onAddSourceFiles={onAddSourceFiles}
 				/>
 			)}
 			{activeView === "overlay" && (

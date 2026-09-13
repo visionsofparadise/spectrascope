@@ -1,4 +1,5 @@
 import { Icon } from "@iconify/react";
+import { cn } from "../cn";
 import type { ComponentPropsWithoutRef } from "react";
 
 type ButtonProps = ComponentPropsWithoutRef<"button">;
@@ -46,15 +47,18 @@ export function IconButton({
 			? "bg-chrome-raised"
 			: "";
 
-	const disabledClass = disabled ? " cursor-not-allowed" : "";
-
 	return (
 		<button
 			{...buttonProps}
 			type={type}
 			disabled={disabled}
 			aria-label={label}
-			className={`flex items-center justify-center px-1 py-1.5 ${textColor}${disabledClass}${className ? ` ${className}` : ""}`}
+			className={cn(
+				"flex items-center justify-center px-1 py-1.5",
+				textColor,
+				disabled === true && "cursor-not-allowed",
+				className,
+			)}
 		>
 			<span className={`flex items-center justify-center ${bgClass}`}>
 				<Icon icon={icon} width={size} height={size} />

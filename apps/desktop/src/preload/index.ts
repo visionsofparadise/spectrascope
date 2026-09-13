@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "electron";
 import { ASYNC_RENDERER_IPCS } from "../shared/ipc/asyncRendererIpcs";
 import type { MainEventMap } from "../shared/utilities/emitToRenderer";
 
@@ -21,6 +21,8 @@ const mainApi = {
 	send: (eventName: string, ...args: Array<unknown>) => {
 		ipcRenderer.send(eventName, ...args);
 	},
+
+	pathForFile: (file: File) => webUtils.getPathForFile(file),
 };
 
 contextBridge.exposeInMainWorld("main", mainApi);

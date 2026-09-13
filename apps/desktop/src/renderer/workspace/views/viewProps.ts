@@ -31,4 +31,5 @@ export interface SourceManagementProps {
 	readonly onRelinkSource?: (sourceId: string) => void;
 	readonly onSourcesChange?: (next: ReadonlyArray<Source>) => void;
 	readonly onAddSources?: () => void;
+	readonly onAddSourceFiles?: (filePaths: ReadonlyArray<string>) => void;
 }

@@ -478,6 +478,7 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 											onRelinkSource={onRelinkSource}
 											onSourcesChange={handleSourcesChange}
 											onAddSources={addSourcesFromDialog}
+											onAddSourceFiles={appendSources}
 										/>
 									</SyncProvider>
 								</MeasurementSessionProvider>

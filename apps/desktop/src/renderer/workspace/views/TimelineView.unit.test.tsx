@@ -3,7 +3,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createDefaultSource } from "../source";
 import { INITIAL_VIEW_CONTROL_SETTINGS } from "../viewSettings";
-import { trackHandleTopOf, trackStackStyleOf, TimelineView, visibleTracksOf } from "./TimelineView";
+import {
+	defaultTrackRangeOf,
+	droppedAudioFilePathsOf,
+	trackHandleTopOf,
+	trackHeightOf,
+	trackStackShareOf,
+	trackStackStyleOf,
+	TimelineView,
+	visibleTracksOf,
+} from "./TimelineView";
 import { EMPTY_AUDIO_DATA } from "./viewAudio";
 import type { SpectralOptions } from "spectral-display";
 
@@ -120,6 +129,57 @@ describe("Timeline viewport rendering", () => {
 	});
 });
 
+describe("Timeline file drop", () => {
+	it("keeps dropped files with an audio extension", () => {
+		const paths = droppedAudioFilePathsOf(
+			["C:\a\take.WAV", "/b/notes.txt", "", "/c/mix.flac", "/d/noext"],
+			(file) => file,
+		);
+
+		expect(paths).toEqual(["C:\a\take.WAV", "/c/mix.flac"]);
+	});
+});
+
+describe("Timeline strip headers", () => {
+	it("keeps a hidden source's strip header without rendering its audio", () => {
+		compute.mockClear();
+		const hidden = createDefaultSource(0, { id: "hidden", name: "Hidden take", visible: false });
+		const html = renderToStaticMarkup(
+			createElement(TimelineView, {
+				sources: [hidden],
+				sourceAudio: new Map([["hidden", { ...EMPTY_AUDIO_DATA, durationMs: 1000, totalSamples: 48000 }]]),
+				channelInput: "mono",
+				settings: INITIAL_VIEW_CONTROL_SETTINGS,
+			}),
+		);
+
+		expect(html).toContain("Hidden take");
+		expect(html).toContain('aria-label="Show source"');
+		expect(html).toContain("height:80%");
+		expect(compute).not.toHaveBeenCalled();
+	});
+
+	it("shows a source error with relink and retry inside the strip", () => {
+		const broken = createDefaultSource(0, { id: "broken", audioFilePath: "/missing.wav" });
+		const html = renderToStaticMarkup(
+			createElement(TimelineView, {
+				sources: [broken],
+				sourceAudio: new Map(),
+				channelInput: "mono",
+				settings: INITIAL_VIEW_CONTROL_SETTINGS,
+				sourceStatus: new Map([["broken", "error" as const]]),
+				sourceErrors: new Map([["broken", "File not found"]]),
+				onRetrySource: () => {},
+				onRelinkSource: () => {},
+			}),
+		);
+
+		expect(html).toContain("File not found");
+		expect(html).toContain("Locate audio…");
+		expect(html).toContain("Retry source");
+	});
+});
+
 describe("Timeline track range", () => {
 	it("doubles the track stack and lifts it by half a viewport at a half range", () => {
 		expect(trackStackStyleOf({ start: 0.5, end: 1 })).toEqual({ height: "200%", top: "-100%" });
@@ -131,13 +191,32 @@ describe("Timeline track range", () => {
 		expect(visibleTracksOf({ start: 0, end: 1 }, 5)).toEqual({ first: 1, last: 5 });
 		expect(visibleTracksOf({ start: 0.3, end: 0.5 }, 5)).toEqual({ first: 2, last: 3 });
 		expect(visibleTracksOf({ start: 0.4, end: 0.6 }, 5)).toEqual({ first: 3, last: 3 });
+		expect(visibleTracksOf({ start: 0, end: 0.5 }, 20)).toEqual({ first: 1, last: 10 });
+		expect(visibleTracksOf({ start: 0, end: 1 }, 1)).toEqual({ first: 1, last: 1 });
+	});
+
+	it("sizes tracks between a tenth and four fifths of the strip viewport", () => {
+		expect(trackHeightOf(1)).toBe(0.8);
+		expect(trackHeightOf(2)).toBe(0.5);
+		expect(trackHeightOf(5)).toBe(0.2);
+		expect(trackHeightOf(20)).toBe(0.1);
+	});
+
+	it("defaults the track range to one viewport of track heights", () => {
+		expect(defaultTrackRangeOf(0)).toEqual({ start: 0, end: 1 });
+		expect(defaultTrackRangeOf(1)).toEqual({ start: 0, end: 1 });
+		expect(defaultTrackRangeOf(4)).toEqual({ start: 0, end: 1 });
+		expect(defaultTrackRangeOf(20)).toEqual({ start: 0, end: 0.5 });
+		expect(trackStackShareOf(1)).toBe(0.8);
+		expect(trackStackShareOf(4)).toBe(0.25);
+		expect(trackStackShareOf(20)).toBe(0.05);
 	});
 
 	it("keeps a track's offset handle at the visible top of the track", () => {
-		expect(trackHandleTopOf({ start: 0, end: 0.5 }, 0, 2)).toBe("clamp(0px, 0%, calc(100% - 1rem))");
-		expect(trackHandleTopOf({ start: 0.25, end: 0.75 }, 0, 2)).toBe("clamp(0px, 50%, calc(100% - 1rem))");
-		expect(trackHandleTopOf({ start: 0.25, end: 0.75 }, 1, 2)).toBe("clamp(0px, 0%, calc(100% - 1rem))");
-		expect(trackHandleTopOf({ start: 0.75, end: 1 }, 0, 2)).toBe("clamp(0px, 150%, calc(100% - 1rem))");
+		expect(trackHandleTopOf({ start: 0, end: 0.5 }, 0, 2)).toBe("clamp(0px, 0%, calc(100% - 1.25rem))");
+		expect(trackHandleTopOf({ start: 0.25, end: 0.75 }, 0, 2)).toBe("clamp(0px, 50%, calc(100% - 1.25rem))");
+		expect(trackHandleTopOf({ start: 0.25, end: 0.75 }, 1, 2)).toBe("clamp(0px, 0%, calc(100% - 1.25rem))");
+		expect(trackHandleTopOf({ start: 0.75, end: 1 }, 0, 2)).toBe("clamp(0px, 150%, calc(100% - 1.25rem))");
 	});
 
 	it("renders only the spacer column without visible tracks", () => {

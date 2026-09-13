@@ -1,4 +1,7 @@
+import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AUDIO_FILE_EXTENSIONS } from "../../comparison/createComparison";
+import { Button } from "../../components/Button";
 import { SourceRender } from "../SourceRender";
 import { TimeRuler } from "../spectral/Axes";
 import { GridOverlay } from "../spectral/GridOverlay";
@@ -7,16 +10,20 @@ import { trackPointerDrag } from "../spectral/pointerDrag";
 import { ScrollTrack } from "../spectral/ScrollTrack";
 import { SelectionSurface } from "../spectral/SelectionSurface";
 import { useWaveformReadouts } from "../spectral/useWaveformReadouts";
+import { ViewLoadingToast } from "../spectral/ViewLoadingToast";
 import { ViewProgressProvider, ViewProgressToast } from "../spectral/viewProgress";
 import { useTransportPlayback } from "../spectral/viewScaffold";
+import { TimelineTrackHeader } from "../TimelineTrackHeader";
 import { useTimeViewport } from "../useTimeViewport";
-import { FULL_AXIS_RANGE } from "../utils/axisRange";
+import { panAxisRange } from "../utils/axisRange";
 import { placeAudioOnTimeline } from "../utils/placeAudioOnTimeline";
 import { clipWindowIntersection, computeTimelineExtent } from "./timelineExtent";
 import { resolveVisibleSourceAudio } from "./viewAudio";
 import type { Source } from "../source";
 import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { TimelineDrag } from "./timelineExtent";
+import type { SourceStreamStatus } from "../../audio/useSourceStreams";
+import type { TimelineOffsetHandle } from "../TimelineTrackHeader";
 import type { SourceManagementProps } from "./viewProps";
 import type { AudioData } from "../spectral/types";
 import type { DisplayedWaveform } from "../spectral/useWaveformReadouts";
@@ -28,6 +35,28 @@ import type { ChannelInput } from "spectral-display";
 
 const TRACK_MIN_SPAN = 1 / 4;
 const TRACK_EDGE_EPSILON = 1e-9;
+const SINGLE_TRACK_HEIGHT = 0.8;
+const MIN_TRACK_HEIGHT = 0.1;
+
+export function trackHeightOf(count: number): number {
+	return count <= 1 ? SINGLE_TRACK_HEIGHT : Math.max(1 / count, MIN_TRACK_HEIGHT);
+}
+
+export function defaultTrackRangeOf(count: number): AxisRange {
+	return { start: 0, end: count > 0 ? Math.min(1, 1 / (count * trackHeightOf(count))) : 1 };
+}
+
+export function trackStackShareOf(count: number): number {
+	return count > 0 ? Math.min(trackHeightOf(count), 1 / count) : 1;
+}
+
+export function droppedAudioFilePathsOf<T>(files: ReadonlyArray<T>, pathForFile: (file: T) => string): Array<string> {
+	const extensions: ReadonlyArray<string> = AUDIO_FILE_EXTENSIONS;
+
+	return files
+		.map(pathForFile)
+		.filter((filePath) => extensions.includes(filePath.split(".").pop()?.toLowerCase() ?? ""));
+}
 
 export function trackStackStyleOf(range: AxisRange): { readonly height: string; readonly top: string } {
 	const span = range.end - range.start;
@@ -36,21 +65,25 @@ export function trackStackStyleOf(range: AxisRange): { readonly height: string; 
 }
 
 export function visibleTracksOf(range: AxisRange, count: number): { readonly first: number; readonly last: number } {
-	const first = Math.min(count, Math.floor(range.start * count + TRACK_EDGE_EPSILON) + 1);
-	const last = Math.max(first, Math.min(count, Math.ceil(range.end * count - TRACK_EDGE_EPSILON)));
+	const share = trackStackShareOf(count);
+	const first = Math.min(count, Math.floor(range.start / share + TRACK_EDGE_EPSILON) + 1);
+	const last = Math.max(first, Math.min(count, Math.ceil(range.end / share - TRACK_EDGE_EPSILON)));
 
 	return { first, last };
 }
 
 export function trackHandleTopOf(range: AxisRange, index: number, count: number): string {
-	const hiddenFraction = Math.max(0, range.start * count - index);
+	const hiddenFraction = Math.max(0, range.start / trackStackShareOf(count) - index);
 
-	return `clamp(0px, ${hiddenFraction * 100}%, calc(100% - 1rem))`;
+	return `clamp(0px, ${hiddenFraction * 100}%, calc(100% - 1.25rem))`;
 }
 
 function TimelineTrack({
 	source,
 	audioData,
+	status,
+	error,
+	height,
 	offsetMs,
 	windowStartMs,
 	windowEndMs,
@@ -73,9 +106,16 @@ function TimelineTrack({
 	onDisplayedResultChange,
 	onDragMove,
 	onCommit,
+	onSourceChange,
+	onRetry,
+	onRelink,
+	onRemove,
 }: {
 	readonly source: Source;
-	readonly audioData: AudioData;
+	readonly audioData: AudioData | undefined;
+	readonly status: SourceStreamStatus | undefined;
+	readonly error: string | undefined;
+	readonly height: string;
 	/** This source's effective placement on the shared timeline, in ms (≥ 0) —
 	 *  the stored offset between drags, the live drag offset during one. */
 	readonly offsetMs: number;
@@ -102,10 +142,14 @@ function TimelineTrack({
 	/** Emits the final (floored ≥ 0) offset — once per drag (pointer-up) and once
 	 *  per arrow-key nudge. */
 	readonly onCommit: (offsetMs: number) => void;
+	readonly onSourceChange?: (next: Source) => void;
+	readonly onRetry?: () => void;
+	readonly onRelink?: () => void;
+	readonly onRemove?: () => void;
 }) {
 	const trackRef = useRef<HTMLDivElement>(null);
 
-	const durationMs = audioData.durationMs;
+	const durationMs = audioData?.durationMs ?? 0;
 
 	const onDragMoveRef = useRef(onDragMove);
 	const onCommitRef = useRef(onCommit);
@@ -188,70 +232,88 @@ function TimelineTrack({
 	});
 	const leftPct = liveWindow ? ((offsetMs + liveWindow.startMs - windowStartMs) / span) * 100 : 0;
 	const widthPct = liveWindow ? ((liveWindow.endMs - liveWindow.startMs) / span) * 100 : 0;
+	const offsetHandle: TimelineOffsetHandle | undefined =
+		draggable && audioData
+			? { valueMaxMs: extentEndMs, onPointerDown: handlePointerDown, onKeyDown: handleKeyDown }
+			: undefined;
 
 	return (
-		<div ref={trackRef} className="relative min-h-0 flex-1 overflow-hidden">
-			{liveWindow && (
-				<div className="absolute inset-y-0" style={{ left: `${leftPct}%`, width: `${widthPct}%` }}>
-					{computeWindow && (
-						<SourceRender
-							onDisplayedResultChange={onDisplayedResultChange}
-							source={source}
-							audioData={audioData}
-							startMs={computeWindow.startMs}
-							endMs={computeWindow.endMs}
-							liveStartMs={liveWindow.startMs}
-							liveEndMs={liveWindow.endMs}
-							readoutTimeOffsetMs={offsetMs}
-							freezeCompute={freezeCompute}
-							frequencyScale={frequencyScale}
-							spectrogramSampling={spectrogramSampling}
-							spectrogramColormap={spectrogramColormap}
-							fftSize={fftSize}
-							hopOverlap={hopOverlap}
-							channelInput={channelInput}
-							waveformOpacity={waveformOpacity}
-							spectrogramOpacity={spectrogramOpacity}
-							onCursorMove={onCursorMove}
-						/>
-					)}
-					{liveWindow.startMs === 0 && (
-						<div
-							aria-hidden
-							className={`pointer-events-none absolute inset-y-0 left-0 w-0.5 ${
-								dragging ? "bg-primary" : "bg-chrome-text/60"
-							}`}
-						/>
-					)}
-					{draggable && (
-						<button
-							type="button"
-							onPointerDown={handlePointerDown}
-							onKeyDown={handleKeyDown}
-							aria-label={`Timeline offset for ${source.name}`}
-							role="slider"
-							aria-valuemin={0}
-							aria-valuemax={Math.round(extentEndMs)}
-							aria-valuenow={Math.round(offsetMs)}
-							aria-valuetext={`${(offsetMs / 1000).toFixed(2)} seconds`}
-							style={{ top: handleTop }}
-							className={`absolute left-0 right-0 flex h-4 cursor-ew-resize items-center gap-1 px-1.5 outline-none focus-visible:ring-1 focus-visible:ring-primary ${
-								dragging ? "bg-primary/30" : "bg-chrome-raised/70 hover:bg-chrome-raised"
-							}`}
-						>
-							<span aria-hidden className="flex items-center gap-0.5">
-								<span className="block h-2 w-px bg-chrome-text/70" />
-								<span className="block h-2 w-px bg-chrome-text/70" />
-								<span className="block h-2 w-px bg-chrome-text/70" />
-							</span>
-							<span className="truncate font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-secondary">
-								{source.name}
-							</span>
-						</button>
+		<ViewProgressProvider>
+			<div ref={trackRef} className="relative shrink-0 overflow-hidden" style={{ height }}>
+				{audioData && source.visible && liveWindow && (
+					<div className="absolute inset-y-0" style={{ left: `${leftPct}%`, width: `${widthPct}%` }}>
+						{computeWindow && (
+							<SourceRender
+								onDisplayedResultChange={onDisplayedResultChange}
+								source={source}
+								audioData={audioData}
+								startMs={computeWindow.startMs}
+								endMs={computeWindow.endMs}
+								liveStartMs={liveWindow.startMs}
+								liveEndMs={liveWindow.endMs}
+								readoutTimeOffsetMs={offsetMs}
+								freezeCompute={freezeCompute}
+								frequencyScale={frequencyScale}
+								spectrogramSampling={spectrogramSampling}
+								spectrogramColormap={spectrogramColormap}
+								fftSize={fftSize}
+								hopOverlap={hopOverlap}
+								channelInput={channelInput}
+								waveformOpacity={waveformOpacity}
+								spectrogramOpacity={spectrogramOpacity}
+								onCursorMove={onCursorMove}
+							/>
+						)}
+						{liveWindow.startMs === 0 && (
+							<div
+								aria-hidden
+								className={`pointer-events-none absolute inset-y-0 left-0 w-0.5 ${
+									dragging ? "bg-primary" : "bg-chrome-text/60"
+								}`}
+							/>
+						)}
+					</div>
+				)}
+				{status === "error" && (
+					<div
+						role="alert"
+						className="absolute inset-x-0 top-6 flex flex-col items-start gap-1 px-1 text-xs text-state-error"
+					>
+						<span className="break-words">{error ?? "Audio preparation failed."}</span>
+						{onRelink && (
+							<button type="button" className="text-primary" onClick={onRelink}>
+								Locate audio…
+							</button>
+						)}
+						{onRetry && source.audioFilePath.length > 0 && (
+							<button type="button" className="underline focus-visible:outline" onClick={onRetry}>
+								Retry source
+							</button>
+						)}
+					</div>
+				)}
+				<div
+					aria-hidden
+					className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-px bg-chrome-border-subtle"
+				/>
+				<div className="pointer-events-none absolute right-0" style={{ top: handleTop }}>
+					{status === "preparing" ? (
+						<ViewLoadingToast label="Preparing audio" color={source.layerColor.primary} />
+					) : (
+						<ViewProgressToast color={source.layerColor.primary} />
 					)}
 				</div>
-			)}
-		</div>
+				<TimelineTrackHeader
+					source={source}
+					top={handleTop}
+					offsetMs={offsetMs}
+					offsetHandle={offsetHandle}
+					onSourceChange={onSourceChange}
+					onRelink={onRelink}
+					onRemove={onRemove}
+				/>
+			</div>
+		</ViewProgressProvider>
 	);
 }
 
@@ -279,10 +341,16 @@ export function TimelineView({
 	settings,
 	onSourceOffsetChange,
 	onTransportControlChange,
+	sourceStatus,
+	sourceErrors,
+	onRetrySource,
+	onRelinkSource,
+	onSourcesChange,
+	onAddSources,
+	onAddSourceFiles,
 }: TimelineViewProps) {
 	const readouts = useWaveformReadouts();
 	const [drag, setDrag] = useState<TimelineDrag | null>(null);
-	const [yRange, setYRange] = useState<AxisRange>(FULL_AXIS_RANGE);
 
 	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
@@ -359,12 +427,75 @@ export function TimelineView({
 		}
 	}, [onTransportControlChange, transportControl]);
 
-	const trackCount = renderableSources.length;
+	const trackCount = sources.length;
+	const defaultRange = useMemo(() => defaultTrackRangeOf(trackCount), [trackCount]);
+	const minSpan = Math.min(TRACK_MIN_SPAN, defaultRange.end);
+	const [trackRange, setTrackRange] = useState<{ readonly count: number; readonly range: AxisRange }>({
+		count: trackCount,
+		range: defaultRange,
+	});
+	const yRange = trackRange.count === trackCount ? trackRange.range : defaultRange;
+	const setYRange = useCallback((range: AxisRange) => setTrackRange({ count: trackCount, range }), [trackCount]);
 	const visibleTracks = visibleTracksOf(yRange, trackCount);
+	const trackHeight = `${trackStackShareOf(trackCount) * 100}%`;
+
+	const stripViewportRef = useRef<HTMLDivElement>(null);
+	const wheelStateRef = useRef({ trackCount, defaultRange, minSpan, yRange });
+
+	wheelStateRef.current = { trackCount, defaultRange, minSpan, yRange };
+
+	useEffect(() => {
+		const element = stripViewportRef.current;
+
+		if (!element) return;
+
+		const onWheel = (event: WheelEvent) => {
+			const state = wheelStateRef.current;
+			const rect = element.getBoundingClientRect();
+
+			if (event.ctrlKey || event.metaKey || state.yRange.end - state.yRange.start >= 1 || rect.height <= 0) return;
+
+			event.preventDefault();
+			event.stopPropagation();
+			setTrackRange((previous) => {
+				const current = previous.count === state.trackCount ? previous.range : state.defaultRange;
+				const delta = (event.deltaY / rect.height) * (current.end - current.start);
+
+				return { count: state.trackCount, range: panAxisRange(current, delta, state.minSpan) };
+			});
+		};
+
+		element.addEventListener("wheel", onWheel, { passive: false });
+
+		return () => {
+			element.removeEventListener("wheel", onWheel);
+		};
+	}, []);
+
+	const replaceSource = useCallback(
+		(next: Source) => onSourcesChange?.(sources.map((source) => (source.id === next.id ? next : source))),
+		[onSourcesChange, sources],
+	);
 
 	return (
 		<ViewProgressProvider>
-			<div className="flex h-full min-h-0 w-full overflow-hidden bg-void">
+			<div
+				className="flex h-full min-h-0 w-full overflow-hidden bg-void"
+				onDragOver={(event) => {
+					if (event.dataTransfer.types.includes("Files")) event.preventDefault();
+				}}
+				onDrop={(event) => {
+					if (event.dataTransfer.files.length === 0) return;
+
+					event.preventDefault();
+
+					const filePaths = droppedAudioFilePathsOf([...event.dataTransfer.files], (file) =>
+						window.main.pathForFile(file),
+					);
+
+					if (filePaths.length > 0) onAddSourceFiles?.(filePaths);
+				}}
+			>
 				<div
 					className="min-h-0 min-w-0 flex-1 overflow-hidden"
 					style={{
@@ -375,68 +506,86 @@ export function TimelineView({
 				>
 					<TimeRuler startMs={windowStartMs} endMs={windowEndMs} />
 
-					<SelectionSurface
-						ref={viewport.wheelHandlers.ref}
-						startMs={windowStartMs}
-						endMs={windowEndMs}
-						seekOnClick
-						className="relative flex flex-col overflow-hidden bg-void"
-					>
-						{renderableSources.length === 0 ? (
-							<div className="flex h-full items-center justify-center">
-								<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
+					<div className="relative flex min-h-0 flex-col bg-void">
+						<SelectionSurface
+							ref={viewport.wheelHandlers.ref}
+							startMs={windowStartMs}
+							endMs={windowEndMs}
+							seekOnClick
+							className="relative min-h-0 flex-1 overflow-hidden bg-void"
+						>
+							<div ref={stripViewportRef} className="absolute inset-0 overflow-hidden">
+								{trackCount > 0 && (
+									<div className="absolute inset-x-0 flex flex-col" style={trackStackStyleOf(yRange)}>
+										{sources.map((source, index) => (
+											<TimelineTrack
+												key={source.id}
+												source={source}
+												audioData={sourceAudio.get(source.id)}
+												status={sourceStatus?.get(source.id)}
+												error={sourceErrors?.get(source.id)}
+												height={trackHeight}
+												offsetMs={
+													drag?.id === source.id
+														? Math.max(0, drag.offsetMs)
+														: Math.max(0, source.timelineOffsetMs)
+												}
+												windowStartMs={windowStartMs}
+												windowEndMs={windowEndMs}
+												committedStartMs={viewport.committedStartMs}
+												committedEndMs={viewport.committedEndMs}
+												freezeCompute={
+													drag !== null ||
+													viewport.startMs !== viewport.committedStartMs ||
+													viewport.endMs !== viewport.committedEndMs
+												}
+												extentEndMs={extent.endMs}
+												frequencyScale={settings.frequencyScale}
+												spectrogramSampling={settings.spectrogramSampling}
+												spectrogramColormap={settings.spectrogramColormap}
+												fftSize={settings.fftSize}
+												hopOverlap={settings.hopOverlap}
+												channelInput={channelInput}
+												waveformOpacity={settings.waveformOpacity}
+												spectrogramOpacity={settings.spectrogramOpacity}
+												draggable={onSourceOffsetChange !== undefined}
+												dragging={drag?.id === source.id}
+												handleTop={trackHandleTopOf(yRange, index, trackCount)}
+												onCursorMove={readouts.setCursorReadout}
+												onDisplayedResultChange={readouts.onDisplayedResultChange}
+												onDragMove={(offsetMs) => {
+													setDrag({ id: source.id, offsetMs });
+												}}
+												onCommit={(offsetMs) => {
+													setDrag(null);
+													onSourceOffsetChange?.(source.id, offsetMs);
+												}}
+												onSourceChange={onSourcesChange ? replaceSource : undefined}
+												onRetry={onRetrySource ? () => onRetrySource(source.id) : undefined}
+												onRelink={onRelinkSource ? () => onRelinkSource(source.id) : undefined}
+												onRemove={
+													onSourcesChange
+														? () => onSourcesChange(sources.filter((entry) => entry.id !== source.id))
+														: undefined
+												}
+											/>
+										))}
+									</div>
+								)}
 							</div>
-						) : (
-							<>
-								<div className="absolute inset-x-0 flex flex-col" style={trackStackStyleOf(yRange)}>
-									{renderableSources.map(({ source, audioData }, index) => (
-										<TimelineTrack
-											key={source.id}
-											source={source}
-											audioData={audioData}
-											offsetMs={
-												drag?.id === source.id
-													? Math.max(0, drag.offsetMs)
-													: Math.max(0, source.timelineOffsetMs)
-											}
-											windowStartMs={windowStartMs}
-											windowEndMs={windowEndMs}
-											committedStartMs={viewport.committedStartMs}
-											committedEndMs={viewport.committedEndMs}
-											freezeCompute={
-												drag !== null ||
-												viewport.startMs !== viewport.committedStartMs ||
-												viewport.endMs !== viewport.committedEndMs
-											}
-											extentEndMs={extent.endMs}
-											frequencyScale={settings.frequencyScale}
-											spectrogramSampling={settings.spectrogramSampling}
-											spectrogramColormap={settings.spectrogramColormap}
-											fftSize={settings.fftSize}
-											hopOverlap={settings.hopOverlap}
-											channelInput={channelInput}
-											waveformOpacity={settings.waveformOpacity}
-											spectrogramOpacity={settings.spectrogramOpacity}
-											draggable={onSourceOffsetChange !== undefined}
-											dragging={drag?.id === source.id}
-											handleTop={trackHandleTopOf(yRange, index, trackCount)}
-											onCursorMove={readouts.setCursorReadout}
-											onDisplayedResultChange={readouts.onDisplayedResultChange}
-											onDragMove={(offsetMs) => {
-												setDrag({ id: source.id, offsetMs });
-											}}
-											onCommit={(offsetMs) => {
-												setDrag(null);
-												onSourceOffsetChange?.(source.id, offsetMs);
-											}}
-										/>
-									))}
-								</div>
+							{renderableSources.length > 0 && (
 								<GridOverlay startMs={windowStartMs} endMs={windowEndMs} opacity={settings.gridOpacity} />
-							</>
-						)}
+							)}
+						</SelectionSurface>
+						<div className="flex h-14 shrink-0 items-center justify-center border border-dashed border-chrome-border bg-void">
+							<Button variant="primary" onClick={onAddSources}>
+								<Icon icon="lucide:plus" width={16} height={16} aria-hidden="true" />
+								Add Source
+							</Button>
+							<span className="ml-3 font-body text-sm text-chrome-text-dim">or drop audio files here</span>
+						</div>
 						<ViewProgressToast />
-					</SelectionSurface>
+					</div>
 
 					<MinimapDisplay
 						layers={minimapLayers}
@@ -455,7 +604,7 @@ export function TimelineView({
 							axis="y"
 							className="min-h-0 flex-1"
 							range={yRange}
-							minSpan={TRACK_MIN_SPAN}
+							minSpan={minSpan}
 							onRangeChange={setYRange}
 							label="Track range"
 							valueText={`tracks ${visibleTracks.first} to ${visibleTracks.last} of ${trackCount}`}
