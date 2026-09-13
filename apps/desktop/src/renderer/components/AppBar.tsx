@@ -15,10 +15,6 @@ import type { HistoryControl } from "../state/useComparisonHistory";
 
 interface Props {
 	readonly context: AppContext;
-	/**
-	 * The active comparison's undo/redo control, published up from `ComparisonTab`.
-	 * `null` on Home (no active comparison) — both buttons render disabled.
-	 */
 	readonly historyControl: HistoryControl | null;
 	readonly canExport: boolean;
 	readonly exportBusy: boolean;

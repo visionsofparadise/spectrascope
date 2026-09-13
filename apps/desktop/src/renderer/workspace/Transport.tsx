@@ -52,12 +52,6 @@ interface TransportProps {
 	 */
 	readonly volume: number;
 	readonly onVolumeChange: (volume: number) => void;
-	/**
-	 * The active view's display-control cluster, rendered into the transport's
-	 * left region. Built by the comparison host (`TransportViewControls`) so the
-	 * transport stays layout-only — it owns no view-control state. Absent for
-	 * views with no display controls (Correlation), collapsing the left region.
-	 */
 	readonly viewControls?: ReactNode;
 }
 

@@ -13,11 +13,6 @@ interface SelectProps {
 	readonly value: string;
 	readonly options: ReadonlyArray<SelectOption>;
 	readonly onChange: (value: string) => void;
-	/**
-	 * `"field"` — a bordered full-width trigger on `void` (the sidebar / Loudness
-	 * metric selectors). `"chip"` — a compact `chrome-raised` chip (the
-	 * transport's FFT / hop / Mel controls).
-	 */
 	readonly variant?: "field" | "chip";
 	readonly direction?: "down" | "up";
 	readonly size?: "sm" | "xs";
