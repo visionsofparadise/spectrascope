@@ -166,7 +166,7 @@ export function VectorscopeView({ sources, sourceAudio, onTransportControlChange
 						<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
 					</div>
 				) : (
-					<div className="flex min-h-0 min-w-0 flex-1 p-4">
+					<div className="flex min-h-0 min-w-0 flex-1">
 						<div
 							className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center"
 							style={{ containerType: "size" }}
