@@ -1,5 +1,4 @@
 import type { SourceStreamStatus } from "../../audio/useSourceStreams";
-import type { ThemeId } from "../../utils/themePalettes";
 import type { Source } from "../source";
 import type { AudioData } from "../spectral/types";
 import type { TransportControl } from "../Transport";
@@ -18,10 +17,8 @@ export interface SpectralViewControls {
 	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 export interface PerSourceSpectralViewProps extends SourceViewProps, SpectralViewControls {}
-export interface DerivedSpectralViewProps extends SpectralViewControls {
-	readonly sources: ReadonlyArray<Source>;
+export interface DerivedSpectralViewProps extends SourceViewProps, SpectralViewControls {
 	readonly derivedAudio: AudioData;
-	readonly theme: ThemeId;
 }
 export interface DifferenceSelectionProps {
 	readonly differenceA: string | null;

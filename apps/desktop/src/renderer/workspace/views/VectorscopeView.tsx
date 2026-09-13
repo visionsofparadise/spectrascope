@@ -195,7 +195,7 @@ export function VectorscopeView({ sources, sourceAudio, onTransportControlChange
 
 	return (
 		<ViewProgressProvider>
-			<div className="flex h-full min-h-0 w-full flex-col bg-void">
+			<div className="flex h-full min-h-0 w-full flex-col bg-void pt-4">
 				<div className="flex min-h-0 flex-1">
 					{renderableSources.length === 0 ? (
 						<div className="flex min-w-0 flex-1 items-center justify-center bg-void">

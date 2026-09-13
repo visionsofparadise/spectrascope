@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { getBandFrequencies } from "spectral-display";
-import { LinearDbAxis } from "../spectral/Axes";
+import { AxisSpacer, LinearDbAxis, useLabelFit } from "../spectral/Axes";
 import { ChartSvg, HorizontalGridlines, TracePolylines, VerticalGridlines } from "../spectral/chartMarks";
 import { ComputeProgress } from "../spectral/ComputeProgress";
 import { useFirstComputeProgress, useReportComputeState } from "../spectral/firstComputeProgress";
@@ -40,6 +40,7 @@ const DB_MAX = 0;
 const FREQ_TICKS = FREQUENCY_TICK_LABELS;
 
 const DB_TICK_COUNT = 10;
+const DB_WIDEST_LABEL = "-90";
 const FREQUENCY_MIN_SPAN = 1 / 6;
 const LEVEL_MIN_SPAN = 1 / 32;
 
@@ -199,8 +200,11 @@ function ChartCanvas({
 }
 
 function HorizontalFrequencyAxis({ range }: { readonly range: AxisRange }) {
+	const labelFit = useLabelFit(22);
+
 	return (
 		<div
+			ref={labelFit.ref}
 			className="relative h-6 bg-void font-technical text-chrome-text-secondary"
 			style={{
 				fontSize: "var(--text-xs)",
@@ -208,21 +212,19 @@ function HorizontalFrequencyAxis({ range }: { readonly range: AxisRange }) {
 				fontVariantNumeric: "tabular-nums",
 			}}
 		>
-			<div className="absolute top-0 left-0 right-0 h-px bg-chrome-border-subtle" />
 			{FREQ_TICKS.map((tick) => {
 				const position = axisFractionOf(freqToX(tick.hz), range);
 
-				if (position < 0 || position > 1) return null;
+				if (position < 0 || position > 1 || !labelFit.fits(position)) return null;
 
 				return (
-					<div
+					<span
 						key={tick.hz}
-						className="absolute top-0"
+						className="absolute bottom-0.5 whitespace-nowrap"
 						style={{ left: `${position * 100}%`, transform: "translateX(-50%)" }}
 					>
-						<span className="absolute top-0 left-1/2 h-1.5 w-px -translate-x-1/2 bg-chrome-border" />
-						<span className="absolute top-2 left-1/2 -translate-x-1/2 whitespace-nowrap">{tick.label}</span>
-					</div>
+						{tick.label}
+					</span>
 				);
 			})}
 		</div>
@@ -249,9 +251,22 @@ export function FrequencyDistributionView({
 	return (
 		<ViewProgressProvider>
 			<div className="flex h-full min-h-0 w-full flex-col bg-void">
-				<div className="flex min-h-0 flex-1 flex-col py-4 pr-4">
+				<div className="flex min-h-0 flex-1 flex-col">
+					<div className="flex shrink-0">
+						<AxisSpacer sample={DB_WIDEST_LABEL} />
+						<div className="min-w-0 flex-1">
+							<HorizontalFrequencyAxis range={xRange} />
+						</div>
+						<div className="w-2 shrink-0" />
+					</div>
 					<div className="flex min-h-0 flex-1">
-						<LinearDbAxis min={DB_MIN} max={DB_MAX} tickCount={DB_TICK_COUNT} range={yRange} />
+						<LinearDbAxis
+							min={DB_MIN}
+							max={DB_MAX}
+							tickCount={DB_TICK_COUNT}
+							range={yRange}
+							sample={DB_WIDEST_LABEL}
+						/>
 						<div className="relative min-w-0 flex-1" onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
 							{renderableSources.length === 0 ? (
 								<div className="flex h-full items-center justify-center bg-void">
@@ -288,8 +303,8 @@ export function FrequencyDistributionView({
 							)}
 						/>
 					</div>
-					<div className="flex shrink-0 pt-1">
-						<div className="w-10 shrink-0" />
+					<div className="flex shrink-0">
+						<AxisSpacer sample={DB_WIDEST_LABEL} />
 						<ScrollTrack
 							axis="x"
 							className="min-w-0 flex-1"
@@ -304,13 +319,6 @@ export function FrequencyDistributionView({
 								"Hz",
 							)}
 						/>
-						<div className="w-2 shrink-0" />
-					</div>
-					<div className="flex shrink-0">
-						<div className="w-10 shrink-0 bg-void" />
-						<div className="min-w-0 flex-1">
-							<HorizontalFrequencyAxis range={xRange} />
-						</div>
 						<div className="w-2 shrink-0" />
 					</div>
 				</div>

@@ -10,7 +10,6 @@ import { VectorscopeView } from "./views/VectorscopeView";
 import type { Source } from "./source";
 import type { AudioData } from "./spectral/types";
 import type { SpectralViewControls, DifferenceSelectionProps, SourceManagementProps } from "./views/viewProps";
-import type { ThemeId } from "../utils/themePalettes";
 
 export type ViewId =
 	| "timeline"
@@ -39,7 +38,6 @@ interface WorkspaceProps extends SpectralViewControls, DifferenceSelectionProps,
 	 */
 	readonly derivedAudio: AudioData;
 	readonly sources: ReadonlyArray<Source>;
-	readonly theme: ThemeId;
 	readonly activeView: ViewId;
 	/**
 	 * Emitted when a source is dragged on the Timeline view — `(sourceId,
@@ -57,7 +55,6 @@ export function Workspace({
 	activeView,
 	channelInput,
 	settings,
-	theme,
 	onFrequencyRangeChange,
 	differenceA,
 	differenceB,
@@ -114,10 +111,10 @@ export function Workspace({
 				<DifferenceView
 					onFrequencyRangeChange={onFrequencyRangeChange}
 					sources={sources}
+					sourceAudio={sourceAudio}
 					derivedAudio={derivedAudio}
 					channelInput={channelInput}
 					settings={settings}
-					theme={theme}
 					differenceA={differenceA}
 					differenceB={differenceB}
 					onTransportControlChange={onTransportControlChange}
@@ -129,10 +126,10 @@ export function Workspace({
 					differenceB={differenceB}
 					onFrequencyRangeChange={onFrequencyRangeChange}
 					sources={sources}
+					sourceAudio={sourceAudio}
 					derivedAudio={derivedAudio}
 					channelInput={channelInput}
 					settings={settings}
-					theme={theme}
 					onTransportControlChange={onTransportControlChange}
 				/>
 			)}

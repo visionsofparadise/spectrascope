@@ -37,12 +37,34 @@ beforeEach(() => {
 function render(change: ReturnType<typeof vi.fn>) {
 	runtime.index = 0;
 	return MinimapDisplay({
-		audioData: EMPTY_AUDIO_DATA,
+		layers: [{ audioData: EMPTY_AUDIO_DATA, color: [255, 255, 255] }],
 		viewStartFrac: 0.2,
 		viewEndFrac: 0.4,
-		waveformColor: [255, 255, 255],
 		onScrubToFraction: change,
 	}) as ReactElement<ComponentProps<"div">>;
+}
+function layerElementsOf(view: ReactElement<ComponentProps<"div">>) {
+	const children = view.props.children as Array<unknown>;
+	return children
+		.flat()
+		.filter(
+			(child): child is ReactElement<Record<string, unknown>> =>
+				isValidElement(child) && "blend" in (child.props as object),
+		);
+}
+function renderLayer(layer: ReactElement<Record<string, unknown>>) {
+	const component = layer.type as (props: Record<string, unknown>) => ReactElement<ComponentProps<"div">>;
+	return component(layer.props);
+}
+function waveformOf(view: ReactElement<ComponentProps<"div">>) {
+	const layer = layerElementsOf(view)[0];
+	const tiles = layer ? (renderLayer(layer).props.children as Array<unknown>) : [];
+	return tiles
+		.flat()
+		.find(
+			(child): child is ReactElement<ComponentProps<"div">> =>
+				isValidElement<ComponentProps<"div">>(child) && child.props.style?.transform !== undefined,
+		);
 }
 function surface() {
 	const captured = new Set<number>();
@@ -111,13 +133,11 @@ it.each(["onPointerCancel", "onLostPointerCapture"] as const)(
 it("crops source-aligned output to the full source extent", () => {
 	runtime.result = { status: "ready", query: { startMs: 0, endMs: 1200 } };
 	const view = MinimapDisplay({
-		audioData: { ...EMPTY_AUDIO_DATA, durationMs: 1000 },
+		layers: [{ audioData: { ...EMPTY_AUDIO_DATA, durationMs: 1000 }, color: [255, 255, 255] }],
 		viewStartFrac: 0.2,
 		viewEndFrac: 0.4,
-		waveformColor: [255, 255, 255],
 	}) as ReactElement<ComponentProps<"div">>;
-	const children = view.props.children as Array<ReactElement<ComponentProps<"div">>>;
-	const waveform = children.flat().find((child) => isValidElement(child) && child.props.style?.transform);
+	const waveform = waveformOf(view);
 	expect(waveform?.props.style).toEqual({ transform: "translateX(0%) scaleX(1.2)", transformOrigin: "left" });
 	expect(view.props.className).toContain("overflow-hidden");
 });
@@ -138,15 +158,41 @@ it("reads placed minimap audio from native source and positions it in timeline c
 		timelinePlacement: { source, offsetSamples: 12000 },
 	};
 	const view = MinimapDisplay({
-		audioData,
+		layers: [{ audioData, color: [255, 255, 255] }],
 		viewStartFrac: 0.2,
 		viewEndFrac: 0.4,
-		waveformColor: [255, 255, 255],
 	}) as ReactElement<ComponentProps<"div">>;
+	const waveform = waveformOf(view);
 	expect(runtime.options?.readSamples).toBe(source.readSamples);
 	expect(runtime.options?.metadata.sampleCount).toBe(48000);
 	expect(runtime.options?.query).toMatchObject({ startMs: -250, endMs: 1750 });
-	const children = view.props.children as Array<ReactElement<ComponentProps<"div">>>;
-	const waveform = children.flat().find((child) => isValidElement(child) && child.props.style?.transform);
 	expect(waveform?.props.style).toEqual({ transform: "translateX(12.5%) scaleX(0.5)", transformOrigin: "left" });
+});
+
+it("overlays every layer with lighten blending only when more than one layer is present", () => {
+	const single = MinimapDisplay({
+		layers: [{ audioData: EMPTY_AUDIO_DATA, color: [255, 0, 0] }],
+		viewStartFrac: 0,
+		viewEndFrac: 1,
+	}) as ReactElement<ComponentProps<"div">>;
+	const singleLayers = layerElementsOf(single);
+	expect(singleLayers).toHaveLength(1);
+	expect(singleLayers[0] && renderLayer(singleLayers[0]).props.style).toBeUndefined();
+	const overlaid = MinimapDisplay({
+		layers: [
+			{ audioData: EMPTY_AUDIO_DATA, color: [255, 0, 0] },
+			{ audioData: EMPTY_AUDIO_DATA, color: [0, 255, 0] },
+		],
+		viewStartFrac: 0,
+		viewEndFrac: 1,
+	}) as ReactElement<ComponentProps<"div">>;
+	const overlaidLayers = layerElementsOf(overlaid);
+	expect(overlaidLayers.map((layer) => layer.props.color)).toEqual([
+		[255, 0, 0],
+		[0, 255, 0],
+	]);
+	expect(overlaidLayers.map((layer) => renderLayer(layer).props.style)).toEqual([
+		{ mixBlendMode: "lighten" },
+		{ mixBlendMode: "lighten" },
+	]);
 });

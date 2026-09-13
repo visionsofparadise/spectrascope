@@ -1,15 +1,53 @@
+import { useRef } from "react";
 import { axisFractionOf, FULL_AXIS_RANGE } from "../utils/axisRange";
 import { formatInspectionTime } from "../utils/formatInspectionTime";
 import { frequencyToFraction } from "../utils/frequencyScale";
 import { verticalFractionOf } from "../utils/verticalRange";
 import { SelectionSurface } from "./SelectionSurface";
 import { FREQUENCY_TICK_LABELS, majorTickIntervalMs } from "./timeTicks";
+import { useContainerSize } from "./useContainerSize";
 import { visibleValueTicksOf } from "./valueTicks";
 import type { AxisRange } from "../utils/axisRange";
 import type { FrequencyScale } from "spectral-display";
 import type { TextureVerticalRange } from "spectral-display";
 
 const FREQ_LABELS = FREQUENCY_TICK_LABELS.filter((tick) => tick.hz >= 100);
+
+const AXIS_TEXT_STYLE = {
+	fontSize: "var(--text-xs)",
+	letterSpacing: "0.02em",
+	fontVariantNumeric: "tabular-nums",
+} as const;
+
+interface AxisSizerProps {
+	readonly sample: string;
+	readonly side: "left" | "right";
+}
+
+function AxisSizer({ sample, side }: AxisSizerProps) {
+	return (
+		<span aria-hidden className={`invisible block h-0 overflow-hidden ${side === "left" ? "pl-1" : "pr-1"}`}>
+			{sample}
+		</span>
+	);
+}
+
+export function AxisSpacer({ sample }: { readonly sample: string }) {
+	return (
+		<div className="shrink-0 bg-void font-technical" style={AXIS_TEXT_STYLE}>
+			<AxisSizer sample={sample} side="right" />
+		</div>
+	);
+}
+
+export function useLabelFit(reservePx: number) {
+	const ref = useRef<HTMLDivElement>(null);
+	const physicalWidth = useContainerSize(ref, { width: 800, height: 0 }).width;
+	const ratio = typeof window === "undefined" || !(window.devicePixelRatio > 0) ? 1 : window.devicePixelRatio;
+	const width = physicalWidth / ratio;
+
+	return { ref, fits: (fraction: number) => fraction * width + reservePx <= width };
+}
 
 interface FrequencyAxisProps {
 	readonly sampleRate: number;
@@ -19,14 +57,8 @@ interface FrequencyAxisProps {
 
 export function FrequencyAxis({ sampleRate, frequencyRange, frequencyScale = "mel" }: FrequencyAxisProps) {
 	return (
-		<div
-			className="relative bg-void font-technical text-chrome-text-secondary"
-			style={{
-				fontSize: "var(--text-xs)",
-				letterSpacing: "0.02em",
-				fontVariantNumeric: "tabular-nums",
-			}}
-		>
+		<div className="relative bg-void font-technical text-chrome-text-secondary" style={AXIS_TEXT_STYLE}>
+			<AxisSizer sample="20k" side="right" />
 			{FREQ_LABELS.filter(({ hz }) => hz <= sampleRate / 2).map(({ hz, label }) => {
 				const yPct = frequencyToFraction(hz, sampleRate, frequencyRange, frequencyScale) * 100;
 
@@ -63,14 +95,8 @@ export function DbAxis({ verticalRange }: { readonly verticalRange?: TextureVert
 	}).concat({ key: "zero", label: "−∞", fraction: 0.5 });
 
 	return (
-		<div
-			className="relative w-8 bg-void font-technical text-chrome-text-secondary"
-			style={{
-				fontSize: "var(--text-xs)",
-				letterSpacing: "0.02em",
-				fontVariantNumeric: "tabular-nums",
-			}}
-		>
+		<div className="relative bg-void font-technical text-chrome-text-secondary" style={AXIS_TEXT_STYLE}>
+			<AxisSizer sample="-24" side="left" />
 			{ticks.map((tick) => {
 				const position = verticalFractionOf(tick.fraction, verticalRange);
 
@@ -109,8 +135,6 @@ export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
 
 	const majorMs = majorTickIntervalMs(spanMs);
 
-	const minorMs = majorMs <= 200 ? majorMs / 4 : majorMs / 5;
-
 	const majorTicks: Array<{ timeMs: number; label: string }> = [];
 	const firstMajor = Math.ceil(startMs / majorMs) * majorMs;
 
@@ -118,48 +142,27 @@ export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
 		majorTicks.push({ timeMs: tick, label: formatRulerTime(tick, majorMs) });
 	}
 
-	const minorTicks: Array<number> = [];
-	const firstMinor = Math.ceil(startMs / minorMs) * minorMs;
-
-	for (let tick = firstMinor; spanMs > 0 && tick <= endMs; tick += minorMs) {
-		if (Math.abs(tick / majorMs - Math.round(tick / majorMs)) > 0.000001) {
-			minorTicks.push(tick);
-		}
-	}
+	const labelFit = useLabelFit(56);
 
 	return (
 		<SelectionSurface
+			ref={labelFit.ref}
 			startMs={startMs}
 			endMs={endMs}
 			seekOnClick
 			aria-label="Timeline ruler: click to seek, Shift-drag to select"
 			className="relative h-8 cursor-crosshair bg-void font-technical text-chrome-text-secondary"
-			style={{
-				fontSize: "var(--text-xs)",
-				letterSpacing: "0.02em",
-				fontVariantNumeric: "tabular-nums",
-			}}
+			style={AXIS_TEXT_STYLE}
 		>
-			{minorTicks.map((timeMs) => {
-				const fraction = (timeMs - startMs) / spanMs;
-
-				return (
-					<div
-						key={`m${timeMs}`}
-						className="absolute bottom-0 h-1.5 w-px bg-chrome-text-dim"
-						style={{ left: `${fraction * 100}%` }}
-					/>
-				);
-			})}
-
 			{majorTicks.map(({ timeMs, label }) => {
 				const fraction = (timeMs - startMs) / spanMs;
 
+				if (!labelFit.fits(fraction)) return null;
+
 				return (
-					<div key={timeMs} className="absolute bottom-0" style={{ left: `${fraction * 100}%` }}>
-						<span className="absolute bottom-0 left-0 h-2.5 w-px bg-chrome-text-secondary" />
-						<span className="absolute bottom-0.5 left-1.5">{label}</span>
-					</div>
+					<span key={timeMs} className="absolute bottom-0.5" style={{ left: `${fraction * 100}%` }}>
+						{label}
+					</span>
 				);
 			})}
 		</SelectionSurface>
@@ -171,22 +174,18 @@ interface LinearDbAxisProps {
 	readonly max: number;
 	readonly tickCount: number;
 	readonly range?: AxisRange;
-	readonly width?: string;
+	readonly sample: string;
 }
 
-export function LinearDbAxis({ min, max, tickCount, range = FULL_AXIS_RANGE, width = "2.5rem" }: LinearDbAxisProps) {
+export function LinearDbAxis({ min, max, tickCount, range = FULL_AXIS_RANGE, sample }: LinearDbAxisProps) {
 	const span = max - min;
 
 	return (
 		<div
-			className="relative h-full bg-void font-technical text-chrome-text-secondary"
-			style={{
-				width,
-				fontSize: "var(--text-xs)",
-				letterSpacing: "0.02em",
-				fontVariantNumeric: "tabular-nums",
-			}}
+			className="relative h-full shrink-0 bg-void font-technical text-chrome-text-secondary"
+			style={AXIS_TEXT_STYLE}
 		>
+			<AxisSizer sample={sample} side="right" />
 			{visibleValueTicksOf(min, max, range, tickCount).map((value) => {
 				const position = span > 0 ? axisFractionOf((max - value) / span, range) : 0;
 

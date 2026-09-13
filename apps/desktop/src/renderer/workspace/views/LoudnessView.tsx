@@ -338,7 +338,7 @@ function ChartCanvas({ chart, renderableSources, metric }: ChartCanvasProps) {
 }
 
 export function LoudnessView({ sources, sourceAudio, settings, onTransportControlChange }: LoudnessViewProps) {
-	const { renderableSources, chromeAudio, layerColor } = useTimelineChromeSources(sources, sourceAudio);
+	const { renderableSources, chromeAudio } = useTimelineChromeSources(sources, sourceAudio);
 
 	const metricSpec = useMemo(
 		() => METRICS.find((entry) => entry.id === settings.loudnessMetric) ?? DEFAULT_METRIC,
@@ -354,14 +354,15 @@ export function LoudnessView({ sources, sourceAudio, settings, onTransportContro
 			readoutLabel: metricSpec.label,
 			unit: "dB",
 			emptyValue: "— dB",
+			widestLabel: "-40",
 		}),
 		[metricSpec.axisMin, metricSpec.label],
 	);
 
-	const chart = useChartView(chromeAudio, layerColor, axis, onTransportControlChange);
+	const chart = useChartView(chromeAudio, axis, onTransportControlChange);
 
 	return (
-		<ChartLayout chart={chart} tickCount={DB_TICK_COUNT} isEmpty={renderableSources.length === 0}>
+		<ChartLayout chart={chart} tickCount={DB_TICK_COUNT} renderableSources={renderableSources}>
 			<ChartCanvas chart={chart} renderableSources={renderableSources} metric={metricSpec} />
 		</ChartLayout>
 	);

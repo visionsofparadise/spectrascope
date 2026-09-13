@@ -11,7 +11,6 @@ import type { ComponentProps, ReactElement } from "react";
 const source = createDefaultSource(0);
 const view = {
 	chromeAudio: EMPTY_AUDIO_DATA,
-	layerColor: source.layerColor,
 	viewport: { startMs: 0, endMs: 1000, wheelHandlers: { ref: vi.fn() } },
 	viewSync: { cursor: null, setCursor: vi.fn() },
 	frequencyRange: { top: 0.25, bottom: 0.75 },
@@ -30,7 +29,9 @@ function elements(node: unknown): Array<ReactElement<Record<string, unknown>>> {
 
 describe("strip display modes", () => {
 	it("retains amplitude navigation and dB scale without frequency chrome", () => {
-		const tree = elements(StripLayout({ view, channelInput: "mono", children: null, spectrogram: false }));
+		const tree = elements(
+			StripLayout({ view, channelInput: "mono", minimapSources: [], children: null, spectrogram: false }),
+		);
 		expect(tree.some((element) => element.type === FrequencyAxis)).toBe(false);
 		expect(tree.find((element) => element.type === DbAxis)?.props.verticalRange).toEqual(view.frequencyRange);
 		const minimap = tree.find((element) => element.type === FrequencyMinimap);
@@ -40,7 +41,7 @@ describe("strip display modes", () => {
 		expect(grid.find((element) => element.type === GridOverlay)?.props.mode).toBe("amp");
 	});
 	it("retains frequency chrome and configured grids by default", () => {
-		const tree = elements(StripLayout({ view, channelInput: "mono", children: null }));
+		const tree = elements(StripLayout({ view, channelInput: "mono", minimapSources: [], children: null }));
 		expect(tree.some((element) => element.type === FrequencyAxis)).toBe(true);
 		expect(tree.find((element) => element.type === FrequencyMinimap)?.props.amplitude).toBe(false);
 		const grid = elements(StripOverlays({ view, settings: INITIAL_VIEW_CONTROL_SETTINGS }));

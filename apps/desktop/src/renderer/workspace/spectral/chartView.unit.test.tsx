@@ -28,7 +28,7 @@ vi.mock("./useChartReadouts", () => ({
 
 describe("chart view cursor", () => {
 	it("maps the cursor to the full-range value fraction through the visible range", () => {
-		const chart = useChartView({} as AudioData, { primary: "#ffffff", secondary: "#000000" }, {} as ChartAxis);
+		const chart = useChartView({} as AudioData, {} as ChartAxis);
 		const rect = { left: 0, top: 100, width: 400, height: 200 };
 
 		chart.handleChartMouseMove({

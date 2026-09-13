@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SourceRender } from "../SourceRender";
 import { TimeRuler } from "../spectral/Axes";
-import { hexToRgb255 } from "../spectral/colorUtil";
 import { GridOverlay } from "../spectral/GridOverlay";
-import { MinimapDisplay } from "../spectral/MinimapDisplay";
+import { MinimapDisplay, minimapLayersOf } from "../spectral/MinimapDisplay";
 import { trackPointerDrag } from "../spectral/pointerDrag";
 import { ScrollTrack } from "../spectral/ScrollTrack";
 import { SelectionSurface } from "../spectral/SelectionSurface";
@@ -14,7 +13,7 @@ import { useTimeViewport } from "../useTimeViewport";
 import { FULL_AXIS_RANGE } from "../utils/axisRange";
 import { placeAudioOnTimeline } from "../utils/placeAudioOnTimeline";
 import { clipWindowIntersection, computeTimelineExtent } from "./timelineExtent";
-import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
+import { resolveVisibleSourceAudio } from "./viewAudio";
 import type { Source } from "../source";
 import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { TimelineDrag } from "./timelineExtent";
@@ -333,16 +332,16 @@ export function TimelineView({
 	const viewStartFrac = minimapDurationMs > 0 ? Math.max(0, Math.min(1, windowStartMs / minimapDurationMs)) : 0;
 	const viewEndFrac = minimapDurationMs > 0 ? Math.max(0, Math.min(1, windowEndMs / minimapDurationMs)) : 1;
 
-	const firstAudio = renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA;
-	const firstOffsetMs = renderableSources[0]?.source.timelineOffsetMs ?? 0;
-	const minimapAudio = useMemo(
-		() => placeAudioOnTimeline(firstAudio, firstOffsetMs, minimapDurationMs),
-		[firstAudio, firstOffsetMs, minimapDurationMs],
+	const minimapLayers = useMemo(
+		() =>
+			minimapLayersOf(
+				renderableSources.map(({ source, audioData }) => ({
+					source,
+					audioData: placeAudioOnTimeline(audioData, source.timelineOffsetMs, minimapDurationMs),
+				})),
+			),
+		[renderableSources, minimapDurationMs],
 	);
-	const minimapColor = renderableSources[0]?.source.layerColor ?? {
-		primary: "#B8B8C0",
-		secondary: "#44444C",
-	};
 
 	const playback = useTransportPlayback(durationSec);
 
@@ -440,10 +439,9 @@ export function TimelineView({
 					</SelectionSurface>
 
 					<MinimapDisplay
-						audioData={minimapAudio}
+						layers={minimapLayers}
 						viewStartFrac={viewStartFrac}
 						viewEndFrac={viewEndFrac}
-						waveformColor={hexToRgb255(minimapColor.primary)}
 						channelInput={channelInput}
 						onScrubToFraction={setViewportToFraction}
 					/>

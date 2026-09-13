@@ -30,6 +30,7 @@ const CORR_AXIS: ChartAxis = {
 	readoutLabel: "Corr",
 	unit: "r",
 	emptyValue: "— r",
+	widestLabel: "-0.5",
 };
 
 function corrToY(corr: number): number {
@@ -126,12 +127,12 @@ function ChartCanvas({ chart, renderableSources }: ChartCanvasBaseProps) {
 }
 
 export function CorrelationView({ sources, sourceAudio, onTransportControlChange }: SourceViewProps) {
-	const { renderableSources, chromeAudio, layerColor } = useTimelineChromeSources(sources, sourceAudio);
+	const { renderableSources, chromeAudio } = useTimelineChromeSources(sources, sourceAudio);
 
-	const chart = useChartView(chromeAudio, layerColor, CORR_AXIS, onTransportControlChange);
+	const chart = useChartView(chromeAudio, CORR_AXIS, onTransportControlChange);
 
 	return (
-		<ChartLayout chart={chart} tickCount={CORR_TICK_COUNT} isEmpty={renderableSources.length === 0}>
+		<ChartLayout chart={chart} tickCount={CORR_TICK_COUNT} renderableSources={renderableSources}>
 			<ChartCanvas chart={chart} renderableSources={renderableSources} />
 		</ChartLayout>
 	);

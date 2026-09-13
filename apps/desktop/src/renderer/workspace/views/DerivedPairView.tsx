@@ -1,21 +1,22 @@
 import { useMemo } from "react";
+import { NEUTRAL_LAYER_COLOR } from "../layers";
 import { StripLayout, StripOverlays, StripSourceRender, useStripView } from "../spectral/stripView";
+import { placeAudioOnTimeline } from "../utils/placeAudioOnTimeline";
 import { sourcePairOf } from "./sourcePair";
-import type { LayerColor } from "../layers";
+import { resolveVisibleSourceAudio } from "./viewAudio";
 import type { Source } from "../source";
 import type { DerivedSpectralViewProps, DifferenceSelectionProps } from "./viewProps";
 
-interface DerivedPairViewProps extends Omit<DerivedSpectralViewProps, "theme">, DifferenceSelectionProps {
+interface DerivedPairViewProps extends DerivedSpectralViewProps, DifferenceSelectionProps {
 	readonly viewId: "sum" | "difference";
 	readonly operator: "+" | "−";
-	readonly layerColorOf: (pairA: Source | undefined) => LayerColor;
 }
 
 export function DerivedPairView({
 	viewId,
 	operator,
-	layerColorOf,
 	sources,
+	sourceAudio,
 	derivedAudio,
 	channelInput,
 	settings,
@@ -25,12 +26,19 @@ export function DerivedPairView({
 	onTransportControlChange,
 }: DerivedPairViewProps) {
 	const pair = useMemo(() => sourcePairOf(sources, differenceA, differenceB), [sources, differenceA, differenceB]);
-	const layerColor = layerColorOf(sources.find((source) => source.id === pair.a));
+	const layerColor = sources.find((source) => source.id === pair.a)?.layerColor ?? NEUTRAL_LAYER_COLOR;
+	const minimapSources = useMemo(
+		() =>
+			resolveVisibleSourceAudio(sources, sourceAudio).map(({ source, audioData }) => ({
+				source,
+				audioData: placeAudioOnTimeline(audioData, source.timelineOffsetMs, derivedAudio.durationMs),
+			})),
+		[sources, sourceAudio, derivedAudio.durationMs],
+	);
 
 	const view = useStripView(
 		viewId,
 		derivedAudio,
-		layerColor,
 		settings.frequencyRange,
 		settings.frequencyScale,
 		onFrequencyRangeChange,
@@ -52,7 +60,7 @@ export function DerivedPairView({
 	);
 
 	return (
-		<StripLayout channelInput={channelInput} view={view}>
+		<StripLayout channelInput={channelInput} view={view} minimapSources={minimapSources}>
 			{pair.a !== null && (
 				<>
 					<div className="absolute inset-0">

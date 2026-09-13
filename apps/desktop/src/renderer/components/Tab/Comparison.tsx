@@ -461,7 +461,6 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 											sources={sources}
 											sourceAudio={sourceAudio}
 											derivedAudio={derivedAudio}
-											theme={app.theme}
 											activeView={activeView}
 											channelInput={comparison.channelInput}
 											settings={viewSettings}

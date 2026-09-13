@@ -3,17 +3,16 @@ import { SourceRender } from "../SourceRender";
 import { useViewSync } from "../sync";
 import { timeToFraction } from "../views/viewCursor";
 import { FrequencyAxis, DbAxis, TimeRuler } from "./Axes";
-import { hexToRgb255 } from "./colorUtil";
 import { CursorSurface } from "./CursorSurface";
 import { FrequencyMinimap } from "./FrequencyMinimap";
 import { GridOverlay } from "./GridOverlay";
-import { MinimapDisplay } from "./MinimapDisplay";
+import { MinimapDisplay, minimapLayersOf } from "./MinimapDisplay";
 import { useWaveformReadouts } from "./useWaveformReadouts";
 import { ViewProgressProvider, ViewProgressToast } from "./viewProgress";
 import { usePublishedTransportControl, useTransportPlayback, useViewportScrub } from "./viewScaffold";
-import type { LayerColor } from "../layers";
 import type { Source } from "../source";
 import type { TransportControl } from "../Transport";
+import type { SourceWithAudio } from "../views/viewAudio";
 import type { ViewControlSettings } from "../viewSettings";
 import type { AudioData } from "./types";
 import type { FrequencyScale } from "spectral-display";
@@ -30,7 +29,6 @@ type StripView = ReturnType<typeof useStripView>;
 export function useStripView(
 	viewId: string,
 	chromeAudio: AudioData,
-	layerColor: LayerColor,
 	frequencyRange: TextureVerticalRange,
 	frequencyScale: FrequencyScale,
 	onFrequencyRangeChange: (range: TextureVerticalRange) => void,
@@ -58,7 +56,6 @@ export function useStripView(
 
 	return {
 		chromeAudio,
-		layerColor,
 		viewSync,
 		...scrub,
 		startMs,
@@ -103,10 +100,11 @@ interface StripLayoutProps {
 	readonly view: StripView;
 	readonly children: React.ReactNode;
 	readonly channelInput: ChannelInput;
+	readonly minimapSources: ReadonlyArray<SourceWithAudio>;
 	readonly spectrogram?: boolean;
 }
 
-export function StripLayout({ view, children, channelInput, spectrogram = true }: StripLayoutProps) {
+export function StripLayout({ view, children, channelInput, minimapSources, spectrogram = true }: StripLayoutProps) {
 	return (
 		<ViewProgressProvider>
 			<div className="flex h-full min-h-0 w-full overflow-hidden bg-void">
@@ -114,7 +112,7 @@ export function StripLayout({ view, children, channelInput, spectrogram = true }
 					className="min-h-0 min-w-0 flex-1 overflow-hidden"
 					style={{
 						display: "grid",
-						gridTemplateColumns: `${spectrogram ? "2.5rem" : "0px"} minmax(0, 1fr) auto auto`,
+						gridTemplateColumns: `${spectrogram ? "auto" : "0"} minmax(0, 1fr) auto auto`,
 						gridTemplateRows: "2rem minmax(0, 1fr) 2rem",
 					}}
 				>
@@ -156,10 +154,9 @@ export function StripLayout({ view, children, channelInput, spectrogram = true }
 
 					<div className="bg-void" />
 					<MinimapDisplay
-						audioData={view.chromeAudio}
+						layers={minimapLayersOf(minimapSources)}
 						viewStartFrac={view.viewStartFrac}
 						viewEndFrac={view.viewEndFrac}
-						waveformColor={hexToRgb255(view.layerColor.primary)}
 						channelInput={channelInput}
 						onScrubToFraction={view.setViewportToFraction}
 					/>

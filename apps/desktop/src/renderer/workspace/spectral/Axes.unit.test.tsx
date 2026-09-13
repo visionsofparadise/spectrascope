@@ -9,13 +9,19 @@ function labelsOf(html: string): Array<string> {
 
 describe("linear value axis", () => {
 	it("renders the full-range ticks top-down", () => {
-		const html = renderToStaticMarkup(createElement(LinearDbAxis, { min: -60, max: 0, tickCount: 8 }));
+		const html = renderToStaticMarkup(createElement(LinearDbAxis, { min: -60, max: 0, tickCount: 8, sample: "-60" }));
 		expect(labelsOf(html)).toEqual(["0", "-10", "-20", "-30", "-40", "-50", "-60"]);
 		expect(html).toContain("top:50%");
 	});
 	it("regenerates ticks for the visible range and positions them inside it", () => {
 		const html = renderToStaticMarkup(
-			createElement(LinearDbAxis, { min: -60, max: 0, tickCount: 8, range: { start: 0.1, end: 0.4 } }),
+			createElement(LinearDbAxis, {
+				min: -60,
+				max: 0,
+				tickCount: 8,
+				range: { start: 0.1, end: 0.4 },
+				sample: "-60",
+			}),
 		);
 		expect(labelsOf(html)).toEqual(["-10", "-15", "-20"]);
 		expect(html).not.toContain(">0<");

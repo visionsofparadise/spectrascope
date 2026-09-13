@@ -1,19 +1,29 @@
 import { useCallback, useMemo, useRef, memo } from "react";
 import { WaveformCanvas, useDisplayCompute } from "spectral-display";
 import { computeWindowTransform } from "../useTimeViewport";
+import { hexToRgb255 } from "./colorUtil";
 import { ComputeProgress } from "./ComputeProgress";
 import { displayResultKey } from "./displayResultKey";
 import { tileCoverageMask } from "./tileCoverageMask";
 import { useComputeSize } from "./useComputeSize";
 import { useContainerSize } from "./useContainerSize";
 import type { AudioData } from "./types";
+import type { SourceWithAudio } from "../views/viewAudio";
 import type { ChannelInput, ComputeResultReady, SpectralOptions } from "spectral-display";
 
-interface MinimapDisplayProps {
+interface MinimapLayer {
 	readonly audioData: AudioData;
+	readonly color: readonly [number, number, number];
+}
+
+export function minimapLayersOf(sources: ReadonlyArray<SourceWithAudio>): ReadonlyArray<MinimapLayer> {
+	return sources.map(({ source, audioData }) => ({ audioData, color: hexToRgb255(source.layerColor.primary) }));
+}
+
+interface MinimapDisplayProps {
+	readonly layers: ReadonlyArray<MinimapLayer>;
 	readonly viewStartFrac: number;
 	readonly viewEndFrac: number;
-	readonly waveformColor: readonly [number, number, number];
 	readonly channelInput?: ChannelInput;
 	/**
 	 * Click / drag on the strip reports the pointer's `[0, 1]` fraction of the
@@ -24,10 +34,9 @@ interface MinimapDisplayProps {
 }
 
 export function MinimapDisplay({
-	audioData,
+	layers,
 	viewStartFrac,
 	viewEndFrac,
-	waveformColor,
 	channelInput = "mono",
 	onScrubToFraction,
 }: MinimapDisplayProps) {
@@ -95,37 +104,6 @@ export function MinimapDisplay({
 			event.currentTarget.releasePointerCapture(event.pointerId);
 	}, []);
 
-	const color = useMemo<[number, number, number]>(
-		() => [waveformColor[0], waveformColor[1], waveformColor[2]],
-		[waveformColor],
-	);
-
-	const spectralOptions = useMemo<SpectralOptions>(() => {
-		const analysisAudio = audioData.timelinePlacement?.source ?? audioData;
-		const offsetMs = ((audioData.timelinePlacement?.offsetSamples ?? 0) * 1000) / audioData.sampleRate;
-
-		return {
-			metadata: {
-				sampleRate: analysisAudio.sampleRate,
-				sampleCount: analysisAudio.totalSamples,
-				channelCount: analysisAudio.channels,
-			},
-			query: { startMs: -offsetMs, endMs: audioData.durationMs - offsetMs, width, height },
-			readSamples: analysisAudio.readSamples,
-			config: {
-				displayTiles: true,
-				spectrogram: false,
-				loudness: false,
-				truePeak: false,
-				channelInput,
-			},
-		};
-	}, [audioData, width, height, channelInput]);
-
-	const computeResult = useDisplayCompute(spectralOptions);
-
-	const hasCoverage = computeResult.tiles.some((tile) => tile.waveform);
-
 	const vpStartPct = viewStartFrac * 100;
 	const vpWidthPct = (viewEndFrac - viewStartFrac) * 100;
 
@@ -173,6 +151,80 @@ export function MinimapDisplay({
 				}
 			}}
 		>
+			{layers.map((layer, index) => (
+				<MinimapLayerTiles
+					key={index}
+					audioData={layer.audioData}
+					color={layer.color}
+					channelInput={channelInput}
+					width={width}
+					height={height}
+					blend={layers.length > 1}
+				/>
+			))}
+			<div
+				className="pointer-events-none absolute inset-y-0 left-0 bg-black/60"
+				style={{ width: `${vpStartPct}%` }}
+			/>
+			<div
+				className="pointer-events-none absolute inset-y-0 right-0 bg-black/60"
+				style={{ width: `${(1 - viewEndFrac) * 100}%` }}
+			/>
+			<div
+				className="pointer-events-none absolute inset-y-0 bg-[rgba(224,224,232,0.17)]"
+				style={{ left: `${vpStartPct}%`, width: `${vpWidthPct}%` }}
+			/>
+		</div>
+	);
+}
+
+const MinimapWaveform = memo(
+	({ result, color }: { readonly result: ComputeResultReady; readonly color: [number, number, number] }) => (
+		<WaveformCanvas computeResult={result} color={color} />
+	),
+);
+
+interface MinimapLayerTilesProps {
+	readonly audioData: AudioData;
+	readonly color: readonly [number, number, number];
+	readonly channelInput: ChannelInput;
+	readonly width: number;
+	readonly height: number;
+	readonly blend: boolean;
+}
+
+function MinimapLayerTiles({ audioData, color, channelInput, width, height, blend }: MinimapLayerTilesProps) {
+	const [red, green, blue] = color;
+	const waveformColor = useMemo<[number, number, number]>(() => [red, green, blue], [red, green, blue]);
+
+	const spectralOptions = useMemo<SpectralOptions>(() => {
+		const analysisAudio = audioData.timelinePlacement?.source ?? audioData;
+		const offsetMs = ((audioData.timelinePlacement?.offsetSamples ?? 0) * 1000) / audioData.sampleRate;
+
+		return {
+			metadata: {
+				sampleRate: analysisAudio.sampleRate,
+				sampleCount: analysisAudio.totalSamples,
+				channelCount: analysisAudio.channels,
+			},
+			query: { startMs: -offsetMs, endMs: audioData.durationMs - offsetMs, width, height },
+			readSamples: analysisAudio.readSamples,
+			config: {
+				displayTiles: true,
+				spectrogram: false,
+				loudness: false,
+				truePeak: false,
+				channelInput,
+			},
+		};
+	}, [audioData, width, height, channelInput]);
+
+	const computeResult = useDisplayCompute(spectralOptions);
+
+	const hasCoverage = computeResult.tiles.some((tile) => tile.waveform);
+
+	return (
+		<div className="pointer-events-none absolute inset-0" style={blend ? { mixBlendMode: "lighten" } : undefined}>
 			{computeResult.tiles.map(
 				({ waveform: renderable }, index) =>
 					renderable && (
@@ -202,29 +254,11 @@ export function MinimapDisplay({
 								transformOrigin: "left",
 							}}
 						>
-							<MinimapWaveform result={renderable} color={color} />
+							<MinimapWaveform result={renderable} color={waveformColor} />
 						</div>
 					),
 			)}
 			{computeResult.status === "computing" && !hasCoverage && <ComputeProgress fraction={computeResult.fraction} />}
-			<div
-				className="pointer-events-none absolute inset-y-0 left-0 bg-black/60"
-				style={{ width: `${vpStartPct}%` }}
-			/>
-			<div
-				className="pointer-events-none absolute inset-y-0 right-0 bg-black/60"
-				style={{ width: `${(1 - viewEndFrac) * 100}%` }}
-			/>
-			<div
-				className="pointer-events-none absolute inset-y-0 bg-[rgba(224,224,232,0.17)]"
-				style={{ left: `${vpStartPct}%`, width: `${vpWidthPct}%` }}
-			/>
 		</div>
 	);
 }
-
-const MinimapWaveform = memo(
-	({ result, color }: { readonly result: ComputeResultReady; readonly color: [number, number, number] }) => (
-		<WaveformCanvas computeResult={result} color={color} />
-	),
-);

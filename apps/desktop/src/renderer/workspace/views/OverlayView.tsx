@@ -10,12 +10,11 @@ export function OverlayView({
 	onFrequencyRangeChange,
 	onTransportControlChange,
 }: PerSourceSpectralViewProps) {
-	const { renderableSources, chromeAudio, layerColor } = useTimelineChromeSources(sources, sourceAudio);
+	const { renderableSources, chromeAudio } = useTimelineChromeSources(sources, sourceAudio);
 
 	const view = useStripView(
 		"overlay",
 		chromeAudio,
-		layerColor,
 		settings.frequencyRange,
 		settings.frequencyScale,
 		onFrequencyRangeChange,
@@ -23,7 +22,7 @@ export function OverlayView({
 	);
 
 	return (
-		<StripLayout channelInput={channelInput} view={view} spectrogram={false}>
+		<StripLayout channelInput={channelInput} view={view} minimapSources={renderableSources} spectrogram={false}>
 			{renderableSources.length === 0 ? (
 				<div className="flex h-full items-center justify-center">
 					<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>

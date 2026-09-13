@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { NEUTRAL_LAYER_COLOR } from "../layers";
 import { placeAudioOnTimeline } from "../utils/placeAudioOnTimeline";
 import type { Source } from "../source";
 import type { AudioData } from "../spectral/types";
@@ -36,16 +35,6 @@ export function resolveVisibleSourceAudio(
 	return resolved;
 }
 
-function useChromeSources(sources: ReadonlyArray<Source>, sourceAudio: ReadonlyMap<string, AudioData>) {
-	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
-
-	return {
-		renderableSources,
-		chromeAudio: renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA,
-		layerColor: renderableSources[0]?.source.layerColor ?? NEUTRAL_LAYER_COLOR,
-	};
-}
-
 export function comparisonDurationOf(sources: ReadonlyArray<SourceWithAudio>): number {
 	return sources.reduce(
 		(duration, { source, audioData }) =>
@@ -55,7 +44,7 @@ export function comparisonDurationOf(sources: ReadonlyArray<SourceWithAudio>): n
 }
 
 export function useTimelineChromeSources(sources: ReadonlyArray<Source>, sourceAudio: ReadonlyMap<string, AudioData>) {
-	const { renderableSources: rawSources, layerColor } = useChromeSources(sources, sourceAudio);
+	const rawSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 	const durationMs = comparisonDurationOf(rawSources);
 	const renderableSources = useMemo(
 		() =>
@@ -66,5 +55,5 @@ export function useTimelineChromeSources(sources: ReadonlyArray<Source>, sourceA
 		[rawSources, durationMs],
 	);
 
-	return { renderableSources, chromeAudio: renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA, layerColor };
+	return { renderableSources, chromeAudio: renderableSources[0]?.audioData ?? EMPTY_AUDIO_DATA };
 }

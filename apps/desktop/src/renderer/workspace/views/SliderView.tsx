@@ -18,7 +18,7 @@ export function SliderView({
 	onFrequencyRangeChange,
 	onTransportControlChange,
 }: SliderViewProps) {
-	const { renderableSources, chromeAudio, layerColor } = useTimelineChromeSources(sources, sourceAudio);
+	const { renderableSources, chromeAudio } = useTimelineChromeSources(sources, sourceAudio);
 	const pair = useMemo(() => sourcePairOf(sources, differenceA, differenceB), [sources, differenceA, differenceB]);
 	const pairEntries = useMemo(
 		() =>
@@ -39,7 +39,6 @@ export function SliderView({
 	const view = useStripView(
 		"slider",
 		highestRateEntry?.audioData ?? chromeAudio,
-		highestRateEntry?.source.layerColor ?? layerColor,
 		settings.frequencyRange,
 		settings.frequencyScale,
 		onFrequencyRangeChange,
@@ -49,7 +48,7 @@ export function SliderView({
 	const count = pairEntries.length;
 
 	return (
-		<StripLayout channelInput={channelInput} view={view}>
+		<StripLayout channelInput={channelInput} view={view} minimapSources={renderableSources}>
 			{count > 0 && (
 				<>
 					<div className="absolute inset-0">

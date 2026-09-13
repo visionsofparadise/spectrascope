@@ -1,17 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
 import { FULL_AXIS_RANGE } from "../utils/axisRange";
-import { LinearDbAxis, TimeRuler } from "./Axes";
-import { hexToRgb255 } from "./colorUtil";
+import { AxisSpacer, LinearDbAxis, TimeRuler } from "./Axes";
 import { ComputeProgress } from "./ComputeProgress";
 import { useFirstComputeProgress } from "./firstComputeProgress";
-import { MinimapDisplay } from "./MinimapDisplay";
+import { MinimapDisplay, minimapLayersOf } from "./MinimapDisplay";
 import { ScrollTrack } from "./ScrollTrack";
 import { scrollTrackTextsOf, trackValueTextOf } from "./scrollTrackTexts";
 import { SelectionSurface } from "./SelectionSurface";
 import { useChartReadouts } from "./useChartReadouts";
 import { ViewProgressProvider, ViewProgressToast } from "./viewProgress";
 import { usePublishedTransportControl, useTransportPlayback, useViewportScrub } from "./viewScaffold";
-import type { LayerColor } from "../layers";
 import type { TransportControl } from "../Transport";
 import type { AudioData } from "./types";
 import type { AxisRange } from "../utils/axisRange";
@@ -25,6 +23,7 @@ export interface ChartAxis {
 	readonly rangeLabel: string;
 	readonly readoutLabel: string;
 	readonly unit: string;
+	readonly widestLabel: string;
 }
 
 const CHART_MIN_VALUE_SPAN = 1 / 32;
@@ -33,7 +32,6 @@ type ChartView = ReturnType<typeof useChartView>;
 
 export function useChartView(
 	chromeAudio: AudioData,
-	layerColor: LayerColor,
 	axis: ChartAxis,
 	onTransportControlChange?: (control: TransportControl) => void,
 	controlExtras?: Partial<TransportControl>,
@@ -76,7 +74,6 @@ export function useChartView(
 
 	return {
 		chromeAudio,
-		layerColor,
 		axis,
 		yRange,
 		setYRange,
@@ -95,26 +92,26 @@ export interface ChartCanvasBaseProps {
 interface ChartLayoutProps {
 	readonly chart: ChartView;
 	readonly tickCount: number;
-	readonly isEmpty: boolean;
+	readonly renderableSources: ReadonlyArray<SourceWithAudio>;
 	readonly children: React.ReactNode;
 }
 
-export function ChartLayout({ chart, tickCount, isEmpty, children }: ChartLayoutProps) {
-	const { max, min, rangeLabel, unit } = chart.axis;
+export function ChartLayout({ chart, tickCount, renderableSources, children }: ChartLayoutProps) {
+	const { max, min, rangeLabel, unit, widestLabel } = chart.axis;
 
 	return (
 		<ViewProgressProvider>
 			<div className="flex h-full min-h-0 w-full flex-col bg-void">
-				<div className="flex min-h-0 flex-1 flex-col pr-4">
+				<div className="flex min-h-0 flex-1 flex-col">
 					<div className="flex shrink-0">
-						<div className="w-10 shrink-0 bg-void" />
+						<AxisSpacer sample={widestLabel} />
 						<div className="min-w-0 flex-1">
 							<TimeRuler startMs={chart.viewport.startMs} endMs={chart.viewport.endMs} />
 						</div>
 						<div className="w-2 shrink-0" />
 					</div>
 					<div className="flex min-h-0 flex-1">
-						<LinearDbAxis min={min} max={max} tickCount={tickCount} range={chart.yRange} />
+						<LinearDbAxis min={min} max={max} tickCount={tickCount} range={chart.yRange} sample={widestLabel} />
 						<SelectionSurface
 							ref={chart.viewport.wheelHandlers.ref}
 							startMs={chart.viewport.startMs}
@@ -123,7 +120,7 @@ export function ChartLayout({ chart, tickCount, isEmpty, children }: ChartLayout
 							className="relative min-w-0 flex-1"
 							onMouseMove={chart.handleChartMouseMove}
 						>
-							{isEmpty ? (
+							{renderableSources.length === 0 ? (
 								<div className="flex h-full items-center justify-center bg-void">
 									<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
 								</div>
@@ -151,13 +148,12 @@ export function ChartLayout({ chart, tickCount, isEmpty, children }: ChartLayout
 						/>
 					</div>
 					<div className="flex shrink-0">
-						<div className="w-10 shrink-0 bg-void" />
+						<AxisSpacer sample={widestLabel} />
 						<div className="min-w-0 flex-1">
 							<MinimapDisplay
-								audioData={chart.chromeAudio}
+								layers={minimapLayersOf(renderableSources)}
 								viewStartFrac={chart.viewStartFrac}
 								viewEndFrac={chart.viewEndFrac}
-								waveformColor={hexToRgb255(chart.layerColor.primary)}
 								onScrubToFraction={chart.setViewportToFraction}
 							/>
 						</div>
