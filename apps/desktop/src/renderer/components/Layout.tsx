@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAutosave } from "../hooks/useAutosave";
 import { useSessionActions } from "../hooks/useSessionActions";
 import { useWindowState } from "../hooks/useWindowState";
@@ -135,7 +135,7 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 		}
 	}, [app.activeTabId]);
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		if (app.theme === "viridis") {
 			document.documentElement.setAttribute("data-theme", "viridis");
 		} else {

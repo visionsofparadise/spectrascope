@@ -247,11 +247,22 @@ export function TerrainShader({ theme, className }: { readonly theme: ThemeId; r
 		const vert = createShader(gl, gl.VERTEX_SHADER, VERT);
 		const frag = createShader(gl, gl.FRAGMENT_SHADER, FRAG);
 
-		if (!vert || !frag) return;
+		if (!vert || !frag) {
+			if (vert) gl.deleteShader(vert);
+
+			if (frag) gl.deleteShader(frag);
+
+			return;
+		}
 
 		const program = createProgram(gl, vert, frag);
 
-		if (!program) return;
+		if (!program) {
+			gl.deleteShader(vert);
+			gl.deleteShader(frag);
+
+			return;
+		}
 
 		const posAttr = gl.getAttribLocation(program, "a_position");
 		const uResolution = gl.getUniformLocation(program, "u_resolution");
@@ -346,6 +357,7 @@ export function TerrainShader({ theme, className }: { readonly theme: ThemeId; r
 			gl.deleteShader(vert);
 			gl.deleteShader(frag);
 			gl.deleteBuffer(buffer);
+			gl.getExtension("WEBGL_lose_context")?.loseContext();
 		};
 	}, []);
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { THEME_IDS } from "../../utils/themePalettes";
 import { ViewControlSettingsSchema } from "../../workspace/viewSettings";
 import { useCreateState } from "../ProxyStore/hooks/useCreateState";
 import type { State } from ".";
@@ -98,7 +99,7 @@ const AppStateSchema = z.object({
 		.default([]),
 	tabs: z.array(TabEntrySchema).default([]),
 	activeTabId: z.string().nullable().default(null),
-	theme: z.enum(["lava", "viridis"]).default("lava"),
+	theme: z.enum(THEME_IDS).default("lava"),
 	windowBounds: WindowBoundsSchema.optional(),
 	comparisons: z.array(ComparisonSchema).default([]),
 });

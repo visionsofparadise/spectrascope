@@ -1,4 +1,6 @@
-export type ThemeId = "lava" | "viridis";
+export const THEME_IDS = ["lava", "viridis"] as const;
+
+export type ThemeId = (typeof THEME_IDS)[number];
 
 export interface ThemePalette {
 	readonly accent: string;

@@ -2,12 +2,13 @@ import { INITIAL_PREFERENCES, type Preferences } from "../models/State/App";
 import { FFT_OPTIONS, HOP_OPTIONS } from "../workspace/viewSettings";
 import { Button } from "./Button";
 import { Dialog } from "./Dialog";
+import type { ThemeId } from "../utils/themePalettes";
 
 interface Props {
 	readonly preferences: Preferences;
-	readonly theme: "lava" | "viridis";
+	readonly theme: ThemeId;
 	readonly onPreferencesChange: (value: Preferences) => void;
-	readonly onThemeChange: (value: "lava" | "viridis") => void;
+	readonly onThemeChange: (value: ThemeId) => void;
 	readonly onClose: () => void;
 }
 
