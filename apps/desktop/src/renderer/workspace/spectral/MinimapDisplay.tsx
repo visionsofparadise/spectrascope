@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useRef } from "react";
 import { WaveformCanvas, useSpectralCompute } from "spectral-display";
+import { computeWindowTransform } from "../useTimeViewport";
 import { ComputeProgress } from "./ComputeProgress";
 import { heldComputeResult } from "./computeResult";
+import { useComputeSize } from "./useComputeSize";
 import { useContainerSize } from "./useContainerSize";
 import type { AudioData } from "./types";
 import type { ChannelInput, SpectralOptions } from "spectral-display";
@@ -32,7 +34,7 @@ export function MinimapDisplay({
 	const dragRef = useRef<{ pointerId: number; left: number; width: number; grabOffset: number; span: number } | null>(
 		null,
 	);
-	const { width, height } = useContainerSize(minimapRef, { width: 800, height: 48 });
+	const { width, height } = useComputeSize(useContainerSize(minimapRef, { width: 800, height: 48 }));
 	const scrubRef = useRef(onScrubToFraction);
 
 	scrubRef.current = onScrubToFraction;
@@ -97,24 +99,27 @@ export function MinimapDisplay({
 		[waveformColor],
 	);
 
-	const spectralOptions = useMemo<SpectralOptions>(
-		() => ({
+	const spectralOptions = useMemo<SpectralOptions>(() => {
+		const analysisAudio = audioData.timelinePlacement?.source ?? audioData;
+		const offsetMs = ((audioData.timelinePlacement?.offsetSamples ?? 0) * 1000) / audioData.sampleRate;
+
+		return {
 			metadata: {
-				sampleRate: audioData.sampleRate,
-				sampleCount: audioData.totalSamples,
-				channelCount: audioData.channels,
+				sampleRate: analysisAudio.sampleRate,
+				sampleCount: analysisAudio.totalSamples,
+				channelCount: analysisAudio.channels,
 			},
-			query: { startMs: 0, endMs: audioData.durationMs, width, height },
-			readSamples: audioData.readSamples,
+			query: { startMs: -offsetMs, endMs: audioData.durationMs - offsetMs, width, height },
+			readSamples: analysisAudio.readSamples,
 			config: {
+				displayTiles: true,
 				spectrogram: false,
 				loudness: false,
 				truePeak: false,
 				channelInput,
 			},
-		}),
-		[audioData, width, height, channelInput],
-	);
+		};
+	}, [audioData, width, height, channelInput]);
 
 	const computeResult = useSpectralCompute(spectralOptions);
 
@@ -126,7 +131,7 @@ export function MinimapDisplay({
 	return (
 		<div
 			ref={minimapRef}
-			className={`relative h-8 touch-none select-none bg-void outline-none focus-visible:ring-1 focus-visible:ring-primary${onScrubToFraction ? " cursor-ew-resize" : ""}`}
+			className={`relative h-8 touch-none select-none overflow-hidden bg-void outline-none focus-visible:ring-1 focus-visible:ring-primary${onScrubToFraction ? " cursor-ew-resize" : ""}`}
 			role="slider"
 			tabIndex={onScrubToFraction ? 0 : -1}
 			aria-label="Time viewport"
@@ -168,7 +173,23 @@ export function MinimapDisplay({
 			}}
 		>
 			{renderable !== null && (
-				<div className="pointer-events-none absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full">
+				<div
+					className="pointer-events-none absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full"
+					style={{
+						transform: computeWindowTransform(
+							{
+								startMs:
+									renderable.query.startMs +
+									((audioData.timelinePlacement?.offsetSamples ?? 0) * 1000) / audioData.sampleRate,
+								endMs:
+									renderable.query.endMs +
+									((audioData.timelinePlacement?.offsetSamples ?? 0) * 1000) / audioData.sampleRate,
+							},
+							{ startMs: 0, endMs: audioData.durationMs },
+						),
+						transformOrigin: "left",
+					}}
+				>
 					<WaveformCanvas computeResult={renderable} color={color} />
 				</div>
 			)}

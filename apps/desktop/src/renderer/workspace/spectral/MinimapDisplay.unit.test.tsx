@@ -1,12 +1,15 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { isValidElement } from "react";
 import { MinimapDisplay } from "./MinimapDisplay";
 import { EMPTY_AUDIO_DATA } from "../views/viewAudio";
 import type { ComponentProps, ReactElement } from "react";
+import type { SpectralOptions } from "spectral-display";
 
 const runtime = vi.hoisted(() => ({
 	index: 0,
 	refs: [] as Array<{ current: unknown }>,
-	result: { status: "ready" } as unknown,
+	result: { status: "ready", query: { startMs: 0, endMs: 1000 } } as unknown,
+	options: null as SpectralOptions | null,
 }));
 vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
@@ -15,11 +18,19 @@ vi.mock("react", async (importOriginal) => ({
 	useCallback: (callback: unknown) => callback,
 }));
 vi.mock("./useContainerSize", () => ({ useContainerSize: () => ({ width: 800, height: 32 }) }));
-vi.mock("spectral-display", () => ({ useSpectralCompute: () => runtime.result, WaveformCanvas: () => null }));
+vi.mock("./useComputeSize", () => ({ useComputeSize: (size: unknown) => size }));
+vi.mock("spectral-display", () => ({
+	useSpectralCompute: (options: SpectralOptions) => {
+		runtime.options = options;
+		return runtime.result;
+	},
+	WaveformCanvas: () => null,
+}));
 beforeEach(() => {
 	runtime.index = 0;
 	runtime.refs = [];
-	runtime.result = { status: "ready" };
+	runtime.options = null;
+	runtime.result = { status: "ready", query: { startMs: 0, endMs: 1000 } };
 });
 function render(change: ReturnType<typeof vi.fn>) {
 	runtime.index = 0;
@@ -58,7 +69,7 @@ it("preserves the grab offset and drag geometry while ready pixels become held l
 	view.props.onPointerDown?.(event(target, 150));
 	expect(change.mock.calls[0]?.[0]).toBeCloseTo(0.3);
 	expect(target.focus).toHaveBeenCalled();
-	runtime.result = { status: "computing", previous: { status: "ready" } };
+	runtime.result = { status: "computing", previous: { status: "ready", query: { startMs: 0, endMs: 1000 } } };
 	target.getBoundingClientRect = () => ({ left: 0, width: 100 });
 	view = render(change);
 	view.props.onPointerMove?.(event(target, 190));
@@ -94,3 +105,46 @@ it.each(["onPointerCancel", "onLostPointerCapture"] as const)(
 		expect(change).toHaveBeenCalledTimes(1);
 	},
 );
+
+it("crops source-aligned output to the full source extent", () => {
+	runtime.result = { status: "ready", query: { startMs: 0, endMs: 1200 } };
+	const view = MinimapDisplay({
+		audioData: { ...EMPTY_AUDIO_DATA, durationMs: 1000 },
+		viewStartFrac: 0.2,
+		viewEndFrac: 0.4,
+		waveformColor: [255, 255, 255],
+	}) as ReactElement<ComponentProps<"div">>;
+	const children = view.props.children as Array<ReactElement<ComponentProps<"div">>>;
+	const waveform = children.find((child) => isValidElement(child) && child.props.style?.transform);
+	expect(waveform?.props.style).toEqual({ transform: "translateX(0%) scaleX(1.2)", transformOrigin: "left" });
+	expect(view.props.className).toContain("overflow-hidden");
+});
+
+it("reads placed minimap audio from native source and positions it in timeline coordinates", () => {
+	const source = {
+		...EMPTY_AUDIO_DATA,
+		sampleRate: 48000,
+		durationMs: 1000,
+		totalSamples: 48000,
+		readSamples: vi.fn(),
+	};
+	const audioData = {
+		...source,
+		durationMs: 2000,
+		totalSamples: 96000,
+		readSamples: vi.fn(),
+		timelinePlacement: { source, offsetSamples: 12000 },
+	};
+	const view = MinimapDisplay({
+		audioData,
+		viewStartFrac: 0.2,
+		viewEndFrac: 0.4,
+		waveformColor: [255, 255, 255],
+	}) as ReactElement<ComponentProps<"div">>;
+	expect(runtime.options?.readSamples).toBe(source.readSamples);
+	expect(runtime.options?.metadata.sampleCount).toBe(48000);
+	expect(runtime.options?.query).toMatchObject({ startMs: -250, endMs: 1750 });
+	const children = view.props.children as Array<ReactElement<ComponentProps<"div">>>;
+	const waveform = children.find((child) => isValidElement(child) && child.props.style?.transform);
+	expect(waveform?.props.style).toEqual({ transform: "translateX(12.5%) scaleX(0.5)", transformOrigin: "left" });
+});

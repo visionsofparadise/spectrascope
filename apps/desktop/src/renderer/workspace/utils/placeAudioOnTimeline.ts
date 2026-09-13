@@ -28,6 +28,7 @@ export function placeAudioOnTimeline(audioData: AudioData, offsetMs: number, dur
 
 	const placed: AudioData = {
 		...audioData,
+		timelinePlacement: { source: audioData, offsetSamples },
 		totalSamples,
 		durationMs: (totalSamples * 1000) / audioData.sampleRate,
 		readSamples: async (channel, sampleOffset, sampleCount, signal) => {

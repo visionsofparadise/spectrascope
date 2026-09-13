@@ -15,6 +15,7 @@ const runtime = vi.hoisted(() => ({
 	held: null as ComputeResultReady | null,
 	result: { status: "idle" } as ComputeResult,
 	options: null as SpectralOptions | null,
+	effects: [] as Array<() => unknown>,
 }));
 
 vi.mock("react", async (original) => ({
@@ -28,9 +29,10 @@ vi.mock("react", async (original) => ({
 	],
 	useMemo: (compute: () => unknown) => compute(),
 	useCallback: (callback: unknown) => callback,
-	useEffect: () => undefined,
+	useEffect: (effect: () => unknown) => runtime.effects.push(effect),
 }));
 vi.mock("./spectral/useContainerSize", () => ({ useContainerSize: () => ({ width: 800, height: 400 }) }));
+vi.mock("./spectral/useComputeSize", () => ({ useComputeSize: (size: unknown) => size }));
 vi.mock("spectral-display", async (original) => ({
 	...(await original<typeof import("spectral-display")>()),
 	useSpectralCompute: (options: SpectralOptions) => {
@@ -87,9 +89,58 @@ beforeEach(() => {
 	runtime.held = null;
 	runtime.result = { status: "idle" };
 	runtime.options = null;
+	runtime.effects = [];
 });
 
 describe("replacement analysis progress", () => {
+	it("adds placement once to waveform readouts while pointer time stays in timeline coordinates", () => {
+		const placed = {
+			...props.audioData,
+			totalSamples: 96000,
+			durationMs: 2000,
+			timelinePlacement: { source: props.audioData, offsetSamples: 12000 },
+		};
+		const onDisplayedResultChange = vi.fn();
+		const onCursorMove = vi.fn();
+		runtime.held = ready();
+		runtime.result = runtime.held;
+		const tree = render({
+			audioData: placed,
+			startMs: 0,
+			endMs: 2000,
+			readoutTimeOffsetMs: 100,
+			onDisplayedResultChange,
+			onCursorMove,
+		});
+		for (const effect of runtime.effects) effect();
+		expect(onDisplayedResultChange).toHaveBeenCalledWith(
+			props.source.id,
+			expect.objectContaining({ result: runtime.held, timeOffsetMs: 350 }),
+		);
+		runtime.refs[0]!.current = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }) };
+		const move = tree[0]!.props.onMouseMove as (event: { clientX: number; clientY: number }) => void;
+		move({ clientX: 50, clientY: 50 });
+		expect(onCursorMove).toHaveBeenCalledWith(expect.objectContaining({ timeMs: 1100 }));
+	});
+	it("anchors placed audio analysis to the native reader and translates its held image", () => {
+		const sourceAudio = props.audioData;
+		const placed = {
+			...sourceAudio,
+			totalSamples: 96000,
+			durationMs: 2000,
+			readSamples: vi.fn(),
+			timelinePlacement: { source: sourceAudio, offsetSamples: 12000 },
+		};
+		runtime.held = ready();
+		runtime.result = runtime.held;
+		const tree = render({ audioData: placed, startMs: 0, endMs: 2000 });
+		expect(runtime.options?.readSamples).toBe(sourceAudio.readSamples);
+		expect(runtime.options?.metadata.sampleCount).toBe(48000);
+		expect(runtime.options?.query).toMatchObject({ startMs: -250, endMs: 1750 });
+		expect(
+			tree.some((element) => (JSON.stringify(element.props.style) ?? "").includes("translateX(12.5%) scaleX(0.5)")),
+		).toBe(true);
+	});
 	it("finishes drawing a source even when the selected frequency crop is above its native Nyquist", () => {
 		const incoming = ready("linear");
 		runtime.result = incoming;

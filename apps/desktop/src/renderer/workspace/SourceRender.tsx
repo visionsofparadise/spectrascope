@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SpectrogramCanvas, WaveformCanvas, useSpectralCompute } from "spectral-display";
 import { hexToRgb255 } from "./spectral/colorUtil";
 import { ComputeProgress } from "./spectral/ComputeProgress";
+import { useComputeSize } from "./spectral/useComputeSize";
 import { useContainerSize } from "./spectral/useContainerSize";
 import { computeWindowTransform } from "./useTimeViewport";
 import { formatInspectionTime } from "./utils/formatInspectionTime";
@@ -84,7 +85,9 @@ export function SourceRender({
 	onCursorMove,
 }: SourceRenderProps) {
 	const displayRef = useRef<HTMLDivElement>(null);
-	const { width, height } = useContainerSize(displayRef, { width: 800, height: 400 });
+	const analysisAudio = audioData.timelinePlacement?.source ?? audioData;
+	const placementMs = ((audioData.timelinePlacement?.offsetSamples ?? 0) * 1000) / audioData.sampleRate;
+	const { width, height } = useComputeSize(useContainerSize(displayRef, { width: 800, height: 400 }));
 
 	const waveformColor = useMemo<[number, number, number]>(
 		() => hexToRgb255(source.layerColor.primary, [255, 255, 255]),
@@ -138,13 +141,14 @@ export function SourceRender({
 	const spectralOptions = useMemo<SpectralOptions>(
 		() => ({
 			metadata: {
-				sampleRate: audioData.sampleRate,
-				sampleCount: audioData.totalSamples,
-				channelCount: audioData.channels,
+				sampleRate: analysisAudio.sampleRate,
+				sampleCount: analysisAudio.totalSamples,
+				channelCount: analysisAudio.channels,
 			},
-			query: { startMs, endMs, width, height },
-			readSamples: audioData.readSamples,
+			query: { startMs: startMs - placementMs, endMs: endMs - placementMs, width, height },
+			readSamples: analysisAudio.readSamples,
 			config: {
+				displayTiles: true,
 				fftSize,
 				hopOverlap,
 				frequencyScale,
@@ -157,10 +161,11 @@ export function SourceRender({
 			},
 		}),
 		[
-			audioData.sampleRate,
-			audioData.totalSamples,
-			audioData.channels,
-			audioData.readSamples,
+			analysisAudio.sampleRate,
+			analysisAudio.totalSamples,
+			analysisAudio.channels,
+			analysisAudio.readSamples,
+			placementMs,
 			startMs,
 			endMs,
 			width,
@@ -190,9 +195,9 @@ export function SourceRender({
 	useEffect(() => {
 		onDisplayedResultChange?.(
 			source.id,
-			front ? { result: front, sourceName: source.name, timeOffsetMs: readoutTimeOffsetMs } : null,
+			front ? { result: front, sourceName: source.name, timeOffsetMs: readoutTimeOffsetMs + placementMs } : null,
 		);
-	}, [source.id, source.name, front, readoutTimeOffsetMs, onDisplayedResultChange]);
+	}, [source.id, source.name, front, readoutTimeOffsetMs, placementMs, onDisplayedResultChange]);
 	useEffect(() => () => onDisplayedResultChange?.(source.id, null), [source.id, onDisplayedResultChange]);
 
 	useEffect(() => {
@@ -266,7 +271,13 @@ export function SourceRender({
 						style={
 							isFront
 								? {
-										transform: computeWindowTransform(result.query, live),
+										transform: computeWindowTransform(
+											{
+												startMs: result.query.startMs + placementMs,
+												endMs: result.query.endMs + placementMs,
+											},
+											live,
+										),
 										transformOrigin: "left",
 									}
 								: { visibility: "hidden" }

@@ -1,4 +1,5 @@
 export interface AudioData {
+	timelinePlacement?: { readonly source: AudioData; readonly offsetSamples: number };
 	sampleRate: number;
 	channels: number;
 	totalSamples: number;
