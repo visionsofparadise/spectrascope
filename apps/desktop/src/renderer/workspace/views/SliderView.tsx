@@ -56,7 +56,7 @@ export function SliderView({
 			view={view}
 			header={<SourcePairSelector sources={sources} pair={pair} onPairChange={onDifferenceChange} />}
 		>
-			{count > 0 ? (
+			{count > 0 && (
 				<>
 					<div className="absolute inset-0">
 						{pairEntries.map((entry, index) => (
@@ -78,10 +78,6 @@ export function SliderView({
 					)}
 					<StripOverlays view={view} settings={settings} />
 				</>
-			) : (
-				<div className="flex h-full items-center justify-center">
-					<p className="font-technical text-sm text-chrome-text-dim">No visible sources</p>
-				</div>
 			)}
 		</StripLayout>
 	);
