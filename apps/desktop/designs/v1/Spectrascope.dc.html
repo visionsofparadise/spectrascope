@@ -17,6 +17,7 @@
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: #28282E; }
   ::-webkit-scrollbar-track { background: #020204; }
+  [data-hide-scrollbar]::-webkit-scrollbar { width: 0; height: 0; }
   button { font-family: inherit; }
   iconify-icon { display: inline-block; line-height: 0; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -48,7 +49,7 @@
     <div style="display:flex;height:100%;flex-direction:column">
 
       <!-- App menu / open-document tabs bar -->
-      <div style="height:48px;flex-shrink:0;display:flex;align-items:center;gap:8px;background:#020204;padding:0 12px">
+      <div style="height:48px;flex-shrink:0;display:flex;align-items:center;gap:8px;background:#020204;padding:0 12px 0 12px">
         <!-- App menu dropdown -->
         <div style="position:relative;flex-shrink:0">
           <button type="button" aria-label="Menu" onClick="{{ onAppMenu }}" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;cursor:pointer;color:#6E6E78" style-hover="color:#B8B8C0">
@@ -81,7 +82,7 @@
         <div style="display:flex;flex-shrink:0;align-items:center;gap:6px">
           <div style="height:24px;width:1px;flex-shrink:0;background:#1F1F24"></div>
           <button type="button" aria-label="Undo" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;color:#44444C;cursor:not-allowed"><iconify-icon icon="lucide:undo-2" style="font-size:16px"></iconify-icon></button>
-          <button type="button" aria-label="Redo" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;color:#44444C;cursor:not-allowed"><iconify-icon icon="lucide:redo-2" style="font-size:16px"></iconify-icon></button>
+          <button type="button" aria-label="Redo" style="display:flex;align-items:center;justify-content:center;padding:6px 4px 6px 4px;background:none;border:none;color:#44444C;cursor:not-allowed"><iconify-icon icon="lucide:redo-2" style="font-size:16px"></iconify-icon></button>
         </div>
         </sc-if>
       </div>
@@ -89,122 +90,113 @@
       <!-- ===== WORKSPACE body ===== -->
       <sc-if value="{{ isWorkspace }}" hint-placeholder-val="{{ true }}">
       <!-- AppShell -->
-      <div style="flex:1;min-height:0;display:grid;grid-template-columns:190px 1fr;grid-template-rows:{{ shellRows }};background:#020204;color:#B8B8C0">
-
-        <!-- Sidebar : Sources panel -->
-        <aside style="grid-column:1;grid-row:{{ sidebarRow }};min-height:0;overflow:visible;background:#020204">
-          <div style="display:flex;height:100%;flex-direction:column;background:#020204">
-
-            <!-- VIEW selector -->
-            <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;padding:12px 16px">
-              <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#6E6E78">View</span>
-              <div style="position:relative;display:flex;align-items:center">
-                <button type="button" onClick="{{ onViewMenu }}" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0">
-                  <span style="display:flex;align-items:center;gap:4px;white-space:nowrap;background:#28282E"><span>{{ currentViewLabel }}</span><iconify-icon icon="lucide:chevron-down" style="font-size:12px"></iconify-icon></span>
-                </button>
-                <sc-if value="{{ viewMenuOpen }}">
-                  <div style="position:absolute;left:0;top:100%;margin-top:4px;z-index:50;display:flex;min-width:160px;flex-direction:column;padding:4px 0;background:#28282E;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
-                    <sc-for list="{{ viewOptions }}" as="vo" hint-placeholder-count="9">
-                      <button type="button" onClick="{{ vo.onClick }}" style="{{ vo.rowStyle }}" style-hover="background:#1F1F24">{{ vo.label }}</button>
-                    </sc-for>
-                  </div>
-                </sc-if>
-              </div>
-            </div>
-
-            <!-- CHANNELS selector -->
-            <div style="flex-shrink:0;display:flex;flex-direction:column;gap:6px;padding:12px 16px">
-              <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#6E6E78">Channels</span>
-              <div style="position:relative;display:flex;align-items:center">
-                <button type="button" onClick="{{ onChannelMenu }}" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0">
-                  <span style="display:flex;align-items:center;gap:4px;white-space:nowrap;background:#28282E"><span>{{ currentChannelLabel }}</span><iconify-icon icon="lucide:chevron-down" style="font-size:12px"></iconify-icon></span>
-                </button>
-                <sc-if value="{{ channelMenuOpen }}">
-                  <div style="position:absolute;left:0;top:100%;margin-top:4px;z-index:50;display:flex;min-width:160px;flex-direction:column;padding:4px 0;background:#28282E;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
-                    <sc-for list="{{ channelOptions }}" as="co" hint-placeholder-count="3">
-                      <button type="button" onClick="{{ co.onClick }}" style="{{ co.rowStyle }}" style-hover="background:#1F1F24">{{ co.label }}</button>
-                    </sc-for>
-                  </div>
-                </sc-if>
-              </div>
-            </div>
-
-            <!-- SOURCES -->
-            <div style="height:40px;flex-shrink:0;display:flex;align-items:center;padding:0 16px">
-              <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#6E6E78">Sources</span>
-            </div>
-            <div style="min-height:0;flex:1;overflow-y:auto">
-              <div style="display:flex;flex-direction:column">
-                <sc-for list="{{ sourceRows }}" as="src" hint-placeholder-count="3">
-                  <div style="position:relative;display:flex;flex-direction:row;align-items:flex-start;gap:12px;padding:12px 16px" style-hover="background:#1F1F24">
-                    <button type="button" aria-label="Edit layer color" style="position:relative;display:block;height:28px;width:28px;flex-shrink:0;border:none;padding:0;cursor:pointer;background:{{ src.primary }}">
-                      <span style="position:absolute;right:0;top:0;bottom:0;width:5px;background:{{ src.secondary }}"></span>
-                    </button>
-                    <div style="display:flex;min-width:0;flex:1;flex-direction:column;gap:4px">
-                      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-sans);font-size:0.875rem;font-weight:500;line-height:1.15;color:#B8B8C0">{{ src.name }}</span>
-                      <span style="display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-sans);font-size:0.75rem;color:#44444C;direction:rtl;text-align:left">{{ src.path }}</span>
-                      <div style="display:flex;align-items:center;gap:4px;padding-top:4px">
-                        <button type="button" aria-label="Toggle visibility" onClick="{{ src.onEye }}" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;cursor:pointer">
-                          <span style="{{ src.visChip }}"><iconify-icon icon="{{ src.eyeIcon }}" style="font-size:16px"></iconify-icon></span>
-                        </button>
-                        <button type="button" aria-label="Toggle mute" onClick="{{ src.onMute }}" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;cursor:pointer">
-                          <span style="{{ src.muteChip }}"><iconify-icon icon="{{ src.muteIcon }}" style="font-size:16px"></iconify-icon></span>
-                        </button>
-                        <button type="button" aria-label="Toggle solo" onClick="{{ src.onSolo }}" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;cursor:pointer">
-                          <span style="{{ src.soloChip }}"><iconify-icon icon="lucide:headphones" style="font-size:16px"></iconify-icon></span>
-                        </button>
-                        <button type="button" aria-label="Source actions" style="display:flex;align-items:center;justify-content:center;padding:6px 4px;background:none;border:none;cursor:pointer;color:#6E6E78" style-hover="color:#B8B8C0">
-                          <span style="display:flex;align-items:center;justify-content:center;background:#28282E"><iconify-icon icon="lucide:more-horizontal" style="font-size:18px"></iconify-icon></span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </sc-for>
-              </div>
-              <div style="padding:12px">
-                <button type="button" style="display:flex;align-items:center;padding:4px 8px;background:none;border:none;cursor:pointer;color:#020204;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em">
-                  <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;background:var(--accent)"><iconify-icon icon="lucide:plus" style="font-size:16px"></iconify-icon>Add Source</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </aside>
+      <div style="flex:1;min-height:0;display:flex;flex-direction:column;background:#020204;color:#B8B8C0">
 
         <!-- Workspace pane : ViewTabs + active view -->
-        <div style="grid-column:2;grid-row:1;min-height:0;min-width:0;overflow:hidden;background:#020204">
+        <div style="min-height:0;min-width:0;flex:1;overflow:hidden;background:#020204">
           <div style="display:flex;height:100%;min-height:0;flex-direction:column;background:#020204;position:relative">
 
-            <!-- Loading toast -->
-            <sc-if value="{{ isLoading }}">
-              <div role="status" style="position:absolute;top:8px;right:8px;z-index:40;display:flex;align-items:center;gap:8px;padding:6px 10px;background:#28282E;box-shadow:0 8px 24px rgba(0,0,0,0.5);font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#B8B8C0;pointer-events:none">
-                <iconify-icon icon="lucide:loader-circle" style="font-size:14px;color:var(--accent);animation:spin 0.9s linear infinite"></iconify-icon>
-                <span>{{ loadingLabel }}</span>
+            <!-- View top bar -->
+            <div style="flex-shrink:0;display:flex;align-items:center;gap:20px;background:#020204;padding:0 16px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#6E6E78">View</span>
+                <div style="position:relative;display:flex;align-items:center">
+                  <button type="button" onClick="{{ onViewMenu }}" style="display:flex;margin-left:-4px;max-width:160px;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0">
+                    <span style="display:flex;min-width:0;align-items:center;gap:4px;background:#28282E"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ currentViewLabel }}</span><iconify-icon icon="lucide:chevron-down" style="font-size:12px"></iconify-icon></span>
+                  </button>
+                  <sc-if value="{{ viewMenuOpen }}">
+                    <div style="position:absolute;left:0;top:100%;margin-top:4px;z-index:50;display:flex;min-width:160px;flex-direction:column;padding:4px 0;background:#28282E;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
+                      <sc-for list="{{ viewOptions }}" as="vo" hint-placeholder-count="9"><button type="button" onClick="{{ vo.onClick }}" style="{{ vo.rowStyle }}" style-hover="background:#1F1F24">{{ vo.label }}</button></sc-for>
+                    </div>
+                  </sc-if>
+                </div>
               </div>
-            </sc-if>
-
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#6E6E78">Channels</span>
+                <div style="position:relative;display:flex;align-items:center">
+                  <button type="button" onClick="{{ onChannelMenu }}" style="display:flex;margin-left:-4px;max-width:160px;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0">
+                    <span style="display:flex;min-width:0;align-items:center;gap:4px;background:#28282E"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ currentChannelLabel }}</span><iconify-icon icon="lucide:chevron-down" style="font-size:12px"></iconify-icon></span>
+                  </button>
+                  <sc-if value="{{ channelMenuOpen }}">
+                    <div style="position:absolute;left:0;top:100%;margin-top:4px;z-index:50;display:flex;min-width:160px;flex-direction:column;padding:4px 0;background:#28282E;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
+                      <sc-for list="{{ channelOptions }}" as="co" hint-placeholder-count="3"><button type="button" onClick="{{ co.onClick }}" style="{{ co.rowStyle }}" style-hover="background:#1F1F24">{{ co.label }}</button></sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+              </div>
+              <div style="flex:1;min-width:0"></div>
+              <sc-if value="{{ isLoudness }}">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#6E6E78">Metric</span>
+              <div style="position:relative;display:flex;align-items:center">
+                <button type="button" onClick="{{ onMetricMenu }}" style="display:flex;margin-right:-4px;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>{{ currentMetricLabel }}</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
+                <sc-if value="{{ metricMenuOpen }}">
+                  <div style="position:absolute;right:0;top:100%;margin-top:4px;z-index:50;display:flex;width:160px;flex-direction:column;padding:4px 0;background:#28282E;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
+                    <sc-for list="{{ metricOptions }}" as="mo" hint-placeholder-count="3">
+                      <button type="button" onClick="{{ mo.onClick }}" style="{{ mo.rowStyle }}" style-hover="background:#1F1F24">{{ mo.label }}</button>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+              </div>
+              </sc-if>
+              <sc-if value="{{ isVectorscope }}">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#6E6E78">Scale</span>
+                <div style="position:relative;display:flex;align-items:center">
+                  <button type="button" onClick="{{ onScaleMenu }}" style="display:flex;margin-right:-4px;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:4px;background:#28282E"><span>{{ vsScaleLabel }}</span><iconify-icon icon="lucide:chevron-down" style="font-size:12px"></iconify-icon></span></button>
+                  <sc-if value="{{ scaleMenuOpen }}">
+                    <div style="position:absolute;right:0;top:100%;margin-top:4px;z-index:50;display:flex;min-width:160px;flex-direction:column;padding:4px 0;background:#28282E;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
+                      <sc-for list="{{ vsScaleOptions }}" as="so" hint-placeholder-count="3"><button type="button" onClick="{{ so.onClick }}" style="{{ so.rowStyle }}" style-hover="background:#1F1F24">{{ so.label }}</button></sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+              </div>
+              </sc-if>
+              <sc-if value="{{ showAB }}">
+              <div style="display:flex;flex-shrink:0;align-items:center;gap:16px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#6E6E78">A</span>
+                <div style="position:relative;display:flex;align-items:center">
+                  <button type="button" style="display:flex;margin-right:-4px;max-width:160px;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0">
+                    <span style="display:flex;min-width:0;align-items:center;gap:4px;background:#28282E"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ abAName }}</span><iconify-icon icon="lucide:chevron-down" style="font-size:12px"></iconify-icon></span>
+                  </button>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#6E6E78">B</span>
+                <div style="position:relative;display:flex;align-items:center">
+                  <button type="button" style="display:flex;margin-right:-4px;max-width:160px;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0">
+                    <span style="display:flex;min-width:0;align-items:center;gap:4px;background:#28282E"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ abBName }}</span><iconify-icon icon="lucide:chevron-down" style="font-size:12px"></iconify-icon></span>
+                  </button>
+                </div>
+              </div>
+              </div>
+              </sc-if>
+            </div>
             <!-- View body -->
-            <div style="min-height:0;flex:1;overflow:hidden">
+            <div style="position:relative;min-height:0;flex:1;overflow:hidden;padding:0 16px">
 
               <!-- ===== SPECTRAL GROUP (overlay / slider / sum / difference) ===== -->
               <sc-if value="{{ isSpectralGroup }}" hint-placeholder-val="{{ true }}">
               <div style="display:flex;height:100%;min-height:0;width:100%;overflow:hidden;background:#020204">
-                <div style="min-height:0;min-width:0;flex:1;overflow:hidden;display:grid;grid-template-columns:2.5rem minmax(0,1fr) auto auto;grid-template-rows:2rem minmax(0,1fr) 2rem">
+                <div style="min-height:0;min-width:0;flex:1;overflow:hidden;display:grid;grid-template-columns:{{ specCols }};grid-template-rows:2rem minmax(0,1fr) 2rem">
                   <!-- Row 1 -->
                   <div style="background:#020204"></div>
                   <div style="position:relative;height:2rem;background:#020204;font-family:var(--font-mono);font-size:0.75rem;letter-spacing:0.02em;font-variant-numeric:tabular-nums;color:#6E6E78">
                     <sc-for list="{{ timeMajors }}" as="tk" hint-placeholder-count="7">
-                      <div style="position:absolute;bottom:0;left:{{ tk.left }}"><span style="position:absolute;bottom:0;left:0;height:10px;width:1px;background:#6E6E78"></span><span style="position:absolute;bottom:2px;left:6px">{{ tk.label }}</span></div>
+                      <sc-if value="{{ tk.show }}"><span style="position:absolute;bottom:2px;left:{{ tk.left }}">{{ tk.label }}</span></sc-if>
                     </sc-for>
-                    <div style="position:absolute;bottom:0;left:0;right:0;height:1px;background:#2A2A30"></div>
                   </div>
                   <div style="background:#020204"></div>
                   <div style="background:#020204"></div>
 
                   <!-- Row 2 : freq axis | content | freq minimap | db axis -->
                   <div style="position:relative;background:#020204;font-family:var(--font-mono);font-size:0.75rem;letter-spacing:0.02em;font-variant-numeric:tabular-nums;color:#6E6E78">
-                    <sc-for list="{{ freqLabels }}" as="fl" hint-placeholder-count="8">
+                    <span style="visibility:hidden;display:block;height:0;overflow:hidden;padding-right:4px;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums">20k</span>
+                    <sc-if value="{{ showSpectrogram }}"><sc-for list="{{ freqLabels }}" as="fl" hint-placeholder-count="8">
                       <div style="position:absolute;right:0;display:flex;align-items:center;top:{{ fl.top }};transform:translateY(-50%)"><span style="padding-right:4px">{{ fl.label }}</span></div>
-                    </sc-for>
+                    </sc-for></sc-if>
                   </div>
 
                   <div data-curtain-track="1" onMouseMove="{{ onCellMove }}" style="position:relative;cursor:crosshair;overflow:hidden;background:#020204">
@@ -218,11 +210,11 @@
                     </sc-if>
                     <!-- sum -->
                     <sc-if value="{{ isSum }}">
-                      <spectro-strip primary="{{ themeAccent }}" secondary="{{ themeTint }}" seed="sum" channel="{{ channel }}" startfrac="0.3" endfrac="0.5" style="position:absolute;inset:0"></spectro-strip>
+                      <spectro-strip primary="{{ abAPrimary }}" secondary="{{ abASecondary }}" seed="sum" channel="{{ channel }}" startfrac="0.3" endfrac="0.5" style="position:absolute;inset:0"></spectro-strip>
                     </sc-if>
                     <!-- difference -->
                     <sc-if value="{{ isDifference }}">
-                      <spectro-strip primary="{{ diffColor.primary }}" secondary="{{ diffColor.secondary }}" seed="difference" channel="{{ channel }}" startfrac="0.3" endfrac="0.5" style="position:absolute;inset:0"></spectro-strip>
+                      <spectro-strip primary="{{ abAPrimary }}" secondary="{{ abASecondary }}" seed="difference" channel="{{ channel }}" startfrac="0.3" endfrac="0.5" style="position:absolute;inset:0"></spectro-strip>
                     </sc-if>
                     <!-- slider -->
                     <sc-if value="{{ isSlider }}">
@@ -239,6 +231,7 @@
                       </sc-if>
                     </sc-if>
 
+                    <sc-if value="{{ isLoading }}"><div role="status" style="position:absolute;top:0;right:0;z-index:40;display:flex;flex-direction:column;align-items:stretch;pointer-events:none"><span style="background:#28282E;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;line-height:1.6;color:#B8B8C0">{{ loadingLabel }}</span><span style="height:2px;background:var(--accent)"></span></div></sc-if>
                     <!-- grid overlay -->
                     <div style="pointer-events:none;position:absolute;inset:0;opacity:0.3">
                       <sc-for list="{{ gridV }}" as="gv" hint-placeholder-count="7"><div style="position:absolute;top:0;bottom:0;width:1px;background:#B8B8C0;left:{{ gv.left }}"></div></sc-for>
@@ -248,7 +241,8 @@
 
                   <freq-mini vstart="0.18" vend="0.78" style="width:8px;background:#020204"></freq-mini>
 
-                  <div style="position:relative;width:2rem;background:#020204;font-family:var(--font-mono);font-size:0.75rem;letter-spacing:0.02em;font-variant-numeric:tabular-nums;color:#6E6E78">
+                  <div style="position:relative;background:#020204;font-family:var(--font-mono);font-size:0.75rem;letter-spacing:0.02em;font-variant-numeric:tabular-nums;color:#6E6E78">
+                    <span style="visibility:hidden;display:block;height:0;overflow:hidden;padding-left:4px;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums">-24</span>
                     <sc-for list="{{ dbLabels }}" as="dl" hint-placeholder-count="11">
                       <div style="position:absolute;left:0;display:flex;align-items:center;top:{{ dl.top }};transform:translateY(-50%)"><span style="padding-left:4px">{{ dl.label }}</span></div>
                     </sc-for>
@@ -256,7 +250,7 @@
 
                   <!-- Row 3 : wave minimap -->
                   <div style="background:#020204"></div>
-                  <wave-mini primary="{{ diffColor.primary }}" seed="{{ diffColor.id }}" vstart="0.3" vend="0.5" style="height: 2rem; background: #020204"></wave-mini>
+                  <wave-mini sources="{{ chartSources }}" vstart="0.3" vend="0.5" style="height: 2rem; background: #020204"></wave-mini>
                   <div style="background:#020204"></div>
                   <div style="background:#020204"></div>
                 </div>
@@ -268,44 +262,71 @@
               <div style="display:flex;height:100%;min-height:0;width:100%;overflow:hidden;background:#020204">
                 <div style="min-height:0;min-width:0;flex:1;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto">
                   <div style="position:relative;height:2rem;background:#020204;font-family:var(--font-mono);font-size:0.75rem;letter-spacing:0.02em;font-variant-numeric:tabular-nums;color:#6E6E78">
-                    <sc-for list="{{ timeMajors }}" as="tk" hint-placeholder-count="7"><div style="position:absolute;bottom:0;left:{{ tk.left }}"><span style="position:absolute;bottom:0;left:0;height:10px;width:1px;background:#6E6E78"></span><span style="position:absolute;bottom:2px;left:6px">{{ tk.label }}</span></div></sc-for>
-                    <div style="position:absolute;bottom:0;left:0;right:0;height:1px;background:#2A2A30"></div>
+                    <sc-for list="{{ timeMajors }}" as="tk" hint-placeholder-count="7"><sc-if value="{{ tk.show }}"><span style="position:absolute;bottom:2px;left:{{ tk.left }}">{{ tk.label }}</span></sc-if></sc-for>
                   </div>
-                  <div style="position:relative;display:flex;flex-direction:column;overflow:hidden;background:#020204">
-                    <sc-for list="{{ overlaySources }}" as="os" hint-placeholder-count="3">
-                      <div style="position:relative;min-height:0;flex:1;overflow:hidden">
-                        <spectro-strip primary="{{ os.primary }}" secondary="{{ os.secondary }}" seed="{{ os.id }}" channel="{{ channel }}" startfrac="0" endfrac="1" style="position:absolute;inset:0"></spectro-strip>
-                        <div style="pointer-events:none;position:absolute;inset-y:0;top:0;bottom:0;left:0;width:2px;background:rgba(184,184,192,0.6)"></div>
-                        <div style="position:absolute;top:0;left:0;right:0;display:flex;height:16px;align-items:center;gap:4px;padding:0 6px;background:rgba(40,40,46,0.7)">
-                          <span style="display:flex;align-items:center;gap:2px"><span style="display:block;height:8px;width:1px;background:rgba(184,184,192,0.7)"></span><span style="display:block;height:8px;width:1px;background:rgba(184,184,192,0.7)"></span><span style="display:block;height:8px;width:1px;background:rgba(184,184,192,0.7)"></span></span>
-                          <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78">{{ os.name }}</span>
+                  <div style="position:relative;display:flex;min-height:0;flex-direction:column;background:#020204">
+                    <div data-hide-scrollbar="1" style="position:relative;display:flex;min-height:0;flex:1;flex-direction:column;overflow-y:auto;scrollbar-width:none">
+                    <sc-for list="{{ timelineSources }}" as="ts" hint-placeholder-count="3">
+                      <div style="position:relative;flex:1 1 0;min-height:10%;max-height:80%;overflow:hidden">
+                        <spectro-strip primary="{{ ts.primary }}" secondary="{{ ts.secondary }}" seed="{{ ts.id }}" channel="{{ channel }}" startfrac="0" endfrac="1" style="position:absolute;inset:0"></spectro-strip>
+                        <div style="position:absolute;top:0;left:0;display:flex;align-items:center;gap:4px">
+                          <span style="background:#28282E;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;line-height:1.6;color:#B8B8C0">{{ ts.name }}</span>
+                          <button type="button" aria-label="Toggle visibility" onClick="{{ ts.onEye }}" style="display:flex;align-items:center;justify-content:center;padding:2px;background:none;border:none;cursor:pointer"><span style="{{ ts.visChip }}"><iconify-icon icon="{{ ts.eyeIcon }}" style="font-size:14px"></iconify-icon></span></button>
+                          <button type="button" aria-label="Toggle mute" onClick="{{ ts.onMute }}" style="display:flex;align-items:center;justify-content:center;padding:2px;background:none;border:none;cursor:pointer"><span style="{{ ts.muteChip }}"><iconify-icon icon="{{ ts.muteIcon }}" style="font-size:14px"></iconify-icon></span></button>
+                          <button type="button" aria-label="Toggle solo" onClick="{{ ts.onSolo }}" style="display:flex;align-items:center;justify-content:center;padding:2px;background:none;border:none;cursor:pointer"><span style="{{ ts.soloChip }}"><iconify-icon icon="lucide:headphones" style="font-size:14px"></iconify-icon></span></button>
+                          <button type="button" aria-label="Source actions" style="display:flex;align-items:center;justify-content:center;padding:2px;background:none;border:none;cursor:pointer;color:#6E6E78" style-hover="color:#B8B8C0"><span style="display:flex;align-items:center;justify-content:center;background:#28282E"><iconify-icon icon="lucide:more-horizontal" style="font-size:16px"></iconify-icon></span></button>
                         </div>
+                        <div style="pointer-events:none;position:absolute;bottom:0;left:0;right:0;height:1px;background:#1F1F24;z-index:2"></div>
+                        <sc-if value="{{ ts.loading }}">
+                          <div role="status" style="position:absolute;top:0;right:0;display:flex;flex-direction:column;align-items:stretch;pointer-events:none">
+                            <span style="background:#28282E;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;line-height:1.6;color:#B8B8C0">{{ ts.loadingLabel }}</span>
+                            <span style="height:2px;background:{{ ts.primary }}"></span>
+                          </div>
+                        </sc-if>
                       </div>
                     </sc-for>
+                    </div>
+                    <div style="flex-shrink:0;display:flex;align-items:center;justify-content:center;height:56px;border:1px dashed #2A2A30;background:#020204">
+                      <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;color:#020204;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em">
+                        <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;background:var(--accent)"><iconify-icon icon="lucide:plus" style="font-size:16px"></iconify-icon>Add Source</span>
+                      </button>
+                      <span style="margin-left:12px;font-family:var(--font-sans);font-size:0.8125rem;color:#44444C">or drop audio files here</span>
+                    </div>
+                    <sc-if value="{{ isLoading }}"><div role="status" style="position:absolute;top:0;right:0;z-index:40;display:flex;flex-direction:column;align-items:stretch;pointer-events:none"><span style="background:#28282E;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;line-height:1.6;color:#B8B8C0">{{ loadingLabel }}</span><span style="height:2px;background:var(--accent)"></span></div></sc-if>
                     <div style="pointer-events:none;position:absolute;top:0;bottom:0;left:0;width:1px;background:#E0E0E8"></div>
                   </div>
-                  <wave-mini primary="{{ diffColor.primary }}" seed="{{ diffColor.id }}" vstart="0" vend="1" style="height: 2rem; background: #020204"></wave-mini>
+                  <wave-mini sources="{{ chartSources }}" vstart="0" vend="1" style="height: 2rem; background: #020204"></wave-mini>
                 </div>
-                <div style="display:flex;flex-direction:column;flex-shrink:0"><div style="height:2rem"></div><scroll-track axis="y" vstart="0" vend="1" style="width:8px;flex-shrink:0;background:#020204"></scroll-track><div style="height:2rem"></div></div>
+                <div style="display:flex;flex-direction:column;flex-shrink:0"><div style="height:2rem;flex-shrink:0"></div><scroll-track axis="y" vstart="0" vend="1" style="width:8px;flex:1;background:#020204"></scroll-track><div style="height:2rem"></div></div>
               </div>
               </sc-if>
 
               <!-- ===== LOUDNESS ===== -->
               <sc-if value="{{ isLoudness }}">
               <div style="display:flex;height:100%;min-height:0;width:100%;flex-direction:column;background:#020204">
-                <div style="display:flex;min-height:0;flex:1;flex-direction:column;padding-right:16px">
-                  <div style="display:flex;flex-shrink:0"><div style="width:40px;flex-shrink:0;background:#020204"></div><div style="position:relative;min-width:0;flex:1;height:2rem;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78"><sc-for list="{{ timeMajors }}" as="tk" hint-placeholder-count="7"><div style="position:absolute;bottom:0;left:{{ tk.left }}"><span style="position:absolute;bottom:0;left:0;height:10px;width:1px;background:#6E6E78"></span><span style="position:absolute;bottom:2px;left:6px">{{ tk.label }}</span></div></sc-for><div style="position:absolute;bottom:0;left:0;right:0;height:1px;background:#2A2A30"></div></div></div>
+                <div style="display:flex;min-height:0;flex:1;flex-direction:column">
+                  <div style="display:flex;flex-shrink:0"><div style="flex-shrink:0;background:#020204"><span style="visibility:hidden;display:block;height:0;overflow:hidden;padding-right:4px;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums">-40</span></div><div style="width:198px;flex-shrink:0;background:#020204"></div><div style="position:relative;min-width:0;flex:1;height:2rem;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78"><sc-for list="{{ timeMajors }}" as="tk" hint-placeholder-count="7"><sc-if value="{{ tk.show }}"><span style="position:absolute;bottom:2px;left:{{ tk.left }}">{{ tk.label }}</span></sc-if></sc-for></div></div>
                   <div style="display:flex;min-height:0;flex:1">
-                    <div style="position:relative;width:2.5rem;flex-shrink:0;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78">
+                    <div style="position:relative;flex-shrink:0;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78">
+                      <span style="visibility:hidden;display:block;height:0;overflow:hidden;padding-right:4px;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums">-40</span>
                       <sc-for list="{{ loudTicks }}" as="lt" hint-placeholder-count="7"><div style="position:absolute;right:0;display:flex;align-items:center;top:{{ lt.top }};transform:translateY(-50%)"><span style="padding-right:4px">{{ lt.label }}</span></div></sc-for>
+                    </div>
+                    <div style="display:flex;flex-shrink:0;gap:16px;margin-right:16px">
+                      <sc-for list="{{ loudStrips }}" as="ls" hint-placeholder-count="3">
+                        <div style="position:relative;width:50px;flex-shrink:0;overflow:hidden;background:#020204">
+                          <sc-for list="{{ loudTicks }}" as="lt" hint-placeholder-count="7"><div style="pointer-events:none;position:absolute;left:0;right:0;height:1px;background:#1F1F24;top:{{ lt.top }}"></div></sc-for>
+                          <sc-for list="{{ ls.lines }}" as="lb" hint-placeholder-count="3"><div style="position:absolute;left:0;right:0;height:2px;background:{{ lb.color }};top:{{ lb.top }}"></div></sc-for>
+                          <span style="position:absolute;top:0;left:0;background:#28282E;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;line-height:1.6;color:#B8B8C0">{{ ls.label }}</span>
+                        </div>
+                      </sc-for>
                     </div>
                     <div style="position:relative;min-width:0;flex:1;overflow:hidden;background:#020204">
                       <sc-for list="{{ loudTicks }}" as="lt" hint-placeholder-count="7"><div style="pointer-events:none;position:absolute;left:0;right:0;height:1px;background:#1F1F24;top:{{ lt.top }}"></div></sc-for>
-                      <loudness-chart sources="{{ chartSources }}" metric="{{ metric }}" axismin="{{ loudAxisMin }}" style="position:absolute;inset:0"></loudness-chart>
+                      <loudness-chart sources="{{ chartSources }}" metric="{{ metric }}" axismin="{{ loudAxisMin }}" style="position:absolute;inset:0"></loudness-chart><sc-if value="{{ isLoading }}"><div role="status" style="position:absolute;top:0;right:0;z-index:40;display:flex;flex-direction:column;align-items:stretch;pointer-events:none"><span style="background:#28282E;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;line-height:1.6;color:#B8B8C0">{{ loadingLabel }}</span><span style="height:2px;background:var(--accent)"></span></div></sc-if>
                     </div>
                     <scroll-track axis="y" vstart="0" vend="1" style="width:8px;flex-shrink:0;background:#020204"></scroll-track>
                   </div>
-                  <div style="display:flex;flex-shrink:0"><div style="width:40px;flex-shrink:0;background:#020204"></div><wave-mini primary="{{ diffColor.primary }}" seed="{{ diffColor.id }}" vstart="0" vend="1" style="min-width:0;flex:1;height:2rem;background:#020204"></wave-mini><div style="width:8px;flex-shrink:0"></div></div>
+                  <div style="display:flex;flex-shrink:0"><div style="flex-shrink:0;background:#020204"><span style="visibility:hidden;display:block;height:0;overflow:hidden;padding-right:4px;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums">-40</span></div><div style="width:198px;flex-shrink:0;background:#020204"></div><wave-mini sources="{{ chartSources }}" vstart="0.3" vend="0.5" style="min-width:0;flex:1;height:2rem;background:#020204"></wave-mini><div style="width:8px;flex-shrink:0"></div></div>
                 </div>
               </div>
               </sc-if>
@@ -313,20 +334,21 @@
               <!-- ===== FREQUENCY DISTRIBUTION ===== -->
               <sc-if value="{{ isFreqDist }}">
               <div style="display:flex;height:100%;min-height:0;width:100%;flex-direction:column;background:#020204">
-                <div style="display:flex;min-height:0;flex:1;flex-direction:column;padding:16px 16px 16px 0">
+                <div style="display:flex;min-height:0;flex:1;flex-direction:column">
+                  <div style="display:flex;flex-shrink:0"><div style="flex-shrink:0;background:#020204"><span style="visibility:hidden;display:block;height:0;overflow:hidden;padding-right:4px;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums">-90</span></div><div style="position:relative;min-width:0;flex:1;height:1.5rem;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78"><sc-for list="{{ fdFreqTicks }}" as="ft" hint-placeholder-count="10"><sc-if value="{{ ft.show }}"><span style="position:absolute;bottom:2px;left:{{ ft.left }};transform:translateX(-50%);white-space:nowrap">{{ ft.label }}</span></sc-if></sc-for></div><div style="width:8px;flex-shrink:0"></div></div>
                   <div style="display:flex;min-height:0;flex:1">
-                    <div style="position:relative;width:2.5rem;flex-shrink:0;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78">
+                    <div style="position:relative;flex-shrink:0;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78">
+                      <span style="visibility:hidden;display:block;height:0;overflow:hidden;padding-right:4px;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums">-90</span>
                       <sc-for list="{{ fdDbTicks }}" as="dt" hint-placeholder-count="10"><div style="position:absolute;right:0;display:flex;align-items:center;top:{{ dt.top }};transform:translateY(-50%)"><span style="padding-right:4px">{{ dt.label }}</span></div></sc-for>
                     </div>
                     <div style="position:relative;min-width:0;flex:1;overflow:hidden;background:#020204">
                       <sc-for list="{{ fdGridV }}" as="gv" hint-placeholder-count="10"><div style="pointer-events:none;position:absolute;top:0;bottom:0;width:1px;background:#1F1F24;left:{{ gv.left }}"></div></sc-for>
                       <sc-for list="{{ fdGridH }}" as="gh" hint-placeholder-count="10"><div style="pointer-events:none;position:absolute;left:0;right:0;height:1px;background:#1F1F24;top:{{ gh.top }}"></div></sc-for>
-                      <ltas-chart sources="{{ chartSources }}" style="position:absolute;inset:0"></ltas-chart>
+                      <ltas-chart sources="{{ chartSources }}" style="position:absolute;inset:0"></ltas-chart><sc-if value="{{ isLoading }}"><div role="status" style="position:absolute;top:0;right:0;z-index:40;display:flex;flex-direction:column;align-items:stretch;pointer-events:none"><span style="background:#28282E;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;line-height:1.6;color:#B8B8C0">{{ loadingLabel }}</span><span style="height:2px;background:var(--accent)"></span></div></sc-if>
                     </div>
                     <scroll-track axis="y" vstart="0" vend="1" style="width:8px;flex-shrink:0;background:#020204"></scroll-track>
                   </div>
-                  <div style="display:flex;flex-shrink:0;padding-top:4px"><div style="width:40px;flex-shrink:0"></div><scroll-track axis="x" vstart="0" vend="1" style="height:8px;min-width:0;flex:1;background:#020204"></scroll-track><div style="width:8px;flex-shrink:0"></div></div>
-                  <div style="display:flex;flex-shrink:0"><div style="width:40px;flex-shrink:0;background:#020204"></div><div style="position:relative;min-width:0;flex:1;height:1.5rem;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78"><div style="position:absolute;top:0;left:0;right:0;height:1px;background:#1F1F24"></div><sc-for list="{{ fdFreqTicks }}" as="ft" hint-placeholder-count="10"><div style="position:absolute;top:0;left:{{ ft.left }};transform:translateX(-50%)"><span style="position:absolute;top:0;left:50%;height:6px;width:1px;transform:translateX(-50%);background:#2A2A30"></span><span style="position:absolute;top:8px;left:50%;transform:translateX(-50%);white-space:nowrap">{{ ft.label }}</span></div></sc-for></div><div style="width:8px;flex-shrink:0"></div></div>
+                  <div style="display:flex;flex-shrink:0"><div style="flex-shrink:0"><span style="visibility:hidden;display:block;height:0;overflow:hidden;padding-right:4px;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums">-90</span></div><scroll-track axis="x" vstart="0" vend="1" style="height:8px;min-width:0;flex:1;background:#020204"></scroll-track><div style="width:8px;flex-shrink:0"></div></div>
                 </div>
               </div>
               </sc-if>
@@ -334,35 +356,45 @@
               <!-- ===== CORRELATION ===== -->
               <sc-if value="{{ isCorrelation }}">
               <div style="display:flex;height:100%;min-height:0;width:100%;flex-direction:column;background:#020204">
-                <div style="display:flex;min-height:0;flex:1;flex-direction:column;padding-right:16px">
-                  <div style="display:flex;flex-shrink:0"><div style="width:40px;flex-shrink:0;background:#020204"></div><div style="position:relative;min-width:0;flex:1;height:2rem;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78"><sc-for list="{{ timeMajors }}" as="tk" hint-placeholder-count="7"><div style="position:absolute;bottom:0;left:{{ tk.left }}"><span style="position:absolute;bottom:0;left:0;height:10px;width:1px;background:#6E6E78"></span><span style="position:absolute;bottom:2px;left:6px">{{ tk.label }}</span></div></sc-for><div style="position:absolute;bottom:0;left:0;right:0;height:1px;background:#2A2A30"></div></div></div>
+                <div style="display:flex;min-height:0;flex:1;flex-direction:column">
+                  <div style="display:flex;flex-shrink:0"><div style="flex-shrink:0;background:#020204"><span style="visibility:hidden;display:block;height:0;overflow:hidden;padding-right:4px;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums">-0.5</span></div><div style="position:relative;min-width:0;flex:1;height:2rem;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78"><sc-for list="{{ timeMajors }}" as="tk" hint-placeholder-count="7"><sc-if value="{{ tk.show }}"><span style="position:absolute;bottom:2px;left:{{ tk.left }}">{{ tk.label }}</span></sc-if></sc-for></div></div>
                   <div style="display:flex;min-height:0;flex:1">
-                    <div style="position:relative;width:2.5rem;flex-shrink:0;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78">
+                    <div style="position:relative;flex-shrink:0;background:#020204;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums;color:#6E6E78">
+                      <span style="visibility:hidden;display:block;height:0;overflow:hidden;padding-right:4px;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums">-0.5</span>
                       <sc-for list="{{ corrTicks }}" as="ct" hint-placeholder-count="5"><div style="position:absolute;right:0;display:flex;align-items:center;top:{{ ct.top }};transform:translateY(-50%)"><span style="padding-right:4px">{{ ct.label }}</span></div></sc-for>
                     </div>
                     <div style="position:relative;min-width:0;flex:1;overflow:hidden;background:#020204">
                       <sc-for list="{{ corrTicks }}" as="ct" hint-placeholder-count="5"><div style="pointer-events:none;position:absolute;left:0;right:0;height:1px;top:{{ ct.top }};background:#1F1F24"></div></sc-for>
-                      <correlation-chart sources="{{ chartSources }}" style="position:absolute;inset:0"></correlation-chart>
+                      <correlation-chart sources="{{ chartSources }}" style="position:absolute;inset:0"></correlation-chart><sc-if value="{{ isLoading }}"><div role="status" style="position:absolute;top:0;right:0;z-index:40;display:flex;flex-direction:column;align-items:stretch;pointer-events:none"><span style="background:#28282E;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;line-height:1.6;color:#B8B8C0">{{ loadingLabel }}</span><span style="height:2px;background:var(--accent)"></span></div></sc-if>
                     </div>
                     <scroll-track axis="y" vstart="0" vend="1" style="width:8px;flex-shrink:0;background:#020204"></scroll-track>
                   </div>
-                  <div style="display:flex;flex-shrink:0"><div style="width:40px;flex-shrink:0;background:#020204"></div><wave-mini primary="{{ diffColor.primary }}" seed="{{ diffColor.id }}" vstart="0" vend="1" style="min-width:0;flex:1;height:2rem;background:#020204"></wave-mini><div style="width:8px;flex-shrink:0"></div></div>
+                  <div style="display:flex;flex-shrink:0"><div style="flex-shrink:0;background:#020204"><span style="visibility:hidden;display:block;height:0;overflow:hidden;padding-right:4px;font-family:var(--font-mono);font-size:0.75rem;font-variant-numeric:tabular-nums">-0.5</span></div><wave-mini sources="{{ chartSources }}" vstart="0.3" vend="0.5" style="min-width:0;flex:1;height:2rem;background:#020204"></wave-mini><div style="width:8px;flex-shrink:0"></div></div>
                 </div>
               </div>
               </sc-if>
 
               <!-- ===== VECTORSCOPE ===== -->
               <sc-if value="{{ isVectorscope }}">
-              <div style="display:flex;height:100%;min-height:0;width:100%;flex-direction:column;background:#020204;padding:16px">
-                <div style="display:flex;min-height:0;flex:1;gap:4px">
+              <div style="display:flex;height:100%;min-height:0;width:100%;flex-direction:column;background:#020204;padding-top:16px">
+                <div style="display:flex;min-height:0;flex:1">
                 <div style="position:relative;display:flex;min-height:0;min-width:0;flex:1;align-items:center;justify-content:center;container-type:size">
                   <svg style="pointer-events:none;position:absolute;inset:0;height:100%;width:100%" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
                     <line x1="0.5" y1="0" x2="0.5" y2="1" stroke="#2A2A30" stroke-width="1" vector-effect="non-scaling-stroke"></line>
                     <line x1="0" y1="0.5" x2="1" y2="0.5" stroke="#2A2A30" stroke-width="1" vector-effect="non-scaling-stroke"></line>
                   </svg>
-                  <div style="position:relative;aspect-ratio:1/1;overflow:hidden;width:100cqmin;height:100cqmin">
-                    <vectorscope-scope sources="{{ chartSources }}" style="position:absolute;inset:0"></vectorscope-scope>
+                  <sc-if value="{{ isLoading }}"><div role="status" style="position:absolute;top:0;right:0;z-index:40;display:flex;flex-direction:column;align-items:stretch;pointer-events:none"><span style="background:#28282E;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;line-height:1.6;color:#B8B8C0">{{ loadingLabel }}</span><span style="height:2px;background:var(--accent)"></span></div></sc-if>
+                  <div style="position:relative;aspect-ratio:1/1;width:100cqmin;height:100cqmin">
+                    <span style="position:absolute;top:0;left:50%;transform:translateX(-50%);font-family:var(--font-mono);font-size:0.75rem;letter-spacing:0.06em;color:#44444C">+M</span>
+                    <span style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);font-family:var(--font-mono);font-size:0.75rem;letter-spacing:0.06em;color:#44444C">−M</span>
+                    <span style="position:absolute;top:50%;left:0;transform:translateY(-50%);font-family:var(--font-mono);font-size:0.75rem;letter-spacing:0.06em;color:#44444C">−S</span>
+                    <span style="position:absolute;top:50%;right:0;transform:translateY(-50%);font-family:var(--font-mono);font-size:0.75rem;letter-spacing:0.06em;color:#44444C">+S</span>
+                    <span style="position:absolute;top:8%;left:8%;font-family:var(--font-mono);font-size:0.75rem;letter-spacing:0.06em;color:#44444C">L</span>
+                    <span style="position:absolute;top:8%;right:8%;font-family:var(--font-mono);font-size:0.75rem;letter-spacing:0.06em;color:#44444C">R</span>
+                    <vectorscope-scope sources="{{ chartSources }}" scale="{{ vsScale }}" style="position:absolute;inset:0"></vectorscope-scope>
                     <svg style="pointer-events:none;position:absolute;inset:0;height:100%;width:100%" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
+                      <circle cx="0.5" cy="0.5" r="0.46" fill="none" stroke="#2A2A30" stroke-width="1" vector-effect="non-scaling-stroke"></circle>
+                      <sc-for list="{{ vsRings }}" as="vr" hint-placeholder-count="3"><circle cx="0.5" cy="0.5" fill="none" stroke="#1F1F24" stroke-width="1" vector-effect="non-scaling-stroke" r="{{ vr.r }}"></circle></sc-for>
                       <line x1="0" y1="0" x2="1" y2="1" stroke="#44444C" stroke-width="1" vector-effect="non-scaling-stroke"></line>
                       <line x1="1" y1="0" x2="0" y2="1" stroke="#44444C" stroke-width="1" vector-effect="non-scaling-stroke"></line>
                     </svg>
@@ -370,7 +402,7 @@
                 </div>
                 <scroll-track axis="y" vstart="0" vend="1" style="width:8px;flex-shrink:0;background:#020204"></scroll-track>
                 </div>
-                <div style="display:flex;flex-shrink:0;padding-top:4px"><scroll-track axis="x" vstart="0" vend="1" style="height:8px;min-width:0;flex:1;background:#020204"></scroll-track><div style="width:12px;flex-shrink:0"></div></div>
+                <div style="display:flex;flex-shrink:0"><scroll-track axis="x" vstart="0" vend="1" style="height:8px;min-width:0;flex:1;background:#020204"></scroll-track><div style="width:8px;flex-shrink:0"></div></div>
               </div>
               </sc-if>
 
@@ -380,10 +412,10 @@
 
         <!-- Transport -->
         <sc-if value="{{ hasTransport }}" hint-placeholder-val="{{ true }}">
-        <div style="grid-column:2;grid-row:2;height:92px">
+        <div style="flex-shrink:0;height:92px">
           <div style="display:flex;height:100%;align-items:center;background:#020204;padding:0 16px">
             <!-- view controls (moved here from the per-view side column) -->
-            <div style="display:flex;flex:1;min-width:0;align-items:center">
+            <div style="display:flex;flex:1;min-width:0;align-items:center;overflow:hidden">
               <sc-if value="{{ isSpectralGroup }}" hint-placeholder-val="{{ true }}">
               <div style="display:flex;align-items:center;gap:10px">
                 <div style="display:flex;flex-direction:column;align-items:center;gap:2px"><knob-dial value="0.3" style="width:24px;height:24px"></knob-dial><iconify-icon icon="lucide:grid-3x3" style="font-size:12px;color:#44444C"></iconify-icon></div>
@@ -398,50 +430,36 @@
                 <sc-if value="{{ showSpectrogram }}">
                 <div style="height:40px;width:1px;background:#1F1F24"></div>
                 <div style="display:flex;flex-direction:column;align-items:center;gap:2px"><knob-dial value="1" style="width:24px;height:24px"></knob-dial><iconify-icon icon="lucide:flame" style="font-size:12px;color:#44444C"></iconify-icon></div>
-                <div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px 4px;max-width:150px">
+                <div style="display:flex;align-items:center;gap:4px">
                   <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>Lava</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
                   <span title="Approximate overview: 1×, 2×, 4× and 8× choose the highest-RMS FFT window in each time subdivision of a pixel. Full uses every FFT window." style="display:flex"><button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>4×</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button></span>
-                  <div style="{{ spectroInputsStyle }}">
+                  <div style="display:flex;flex-shrink:0;flex-wrap:nowrap;align-items:center;gap:4px;white-space:nowrap">
                     <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>Mel</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
                     <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>4096</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
                     <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>1/16</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
                   </div>
                 </div>
                 </sc-if>
-                <div style="height:40px;width:1px;background:#1F1F24"></div>
-                <div style="display:flex;flex-direction:column;align-items:center;gap:2px"><knob-dial value="1" style="width:24px;height:24px"></knob-dial><iconify-icon icon="lucide:activity" style="font-size:12px;color:#44444C"></iconify-icon></div>
               </div>
               </sc-if>
               <sc-if value="{{ isTimeline }}">
               <div style="display:flex;align-items:center;gap:10px">
-                <button type="button" onClick="{{ onSync }}" style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78" style-hover="color:#B8B8C0"><span style="{{ syncChip }}"><iconify-icon icon="lucide:link" style="font-size:14px"></iconify-icon><span>Sync</span></span></button>
+                <button type="button" onClick="{{ onSync }}" style="display:flex;margin-left:-8px;align-items:center;gap:6px;padding:4px 8px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.8125rem;text-transform:uppercase;letter-spacing:0.06em;color:#6E6E78" style-hover="color:#B8B8C0"><span style="{{ syncChip }}"><iconify-icon icon="lucide:link" style="font-size:14px"></iconify-icon><span>Sync</span></span></button>
                 <div style="height:40px;width:1px;background:#1F1F24"></div>
                 <div style="display:flex;flex-direction:column;align-items:center;gap:2px"><knob-dial value="0.3" style="width:24px;height:24px"></knob-dial><iconify-icon icon="lucide:grid-3x3" style="font-size:12px;color:#44444C"></iconify-icon></div>
                 <div style="height:40px;width:1px;background:#1F1F24"></div>
                 <div style="display:flex;flex-direction:column;align-items:center;gap:2px"><knob-dial value="1" style="width:24px;height:24px"></knob-dial><iconify-icon icon="lucide:audio-waveform" style="font-size:12px;color:#44444C"></iconify-icon></div>
                 <div style="height:40px;width:1px;background:#1F1F24"></div>
                 <div style="display:flex;flex-direction:column;align-items:center;gap:2px"><knob-dial value="1" style="width:24px;height:24px"></knob-dial><iconify-icon icon="lucide:flame" style="font-size:12px;color:#44444C"></iconify-icon></div>
-                <div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px 4px;max-width:150px">
+                <div style="display:flex;align-items:center;gap:4px">
                   <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>Lava</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
                   <span title="Approximate overview: 1×, 2×, 4× and 8× choose the highest-RMS FFT window in each time subdivision of a pixel. Full uses every FFT window." style="display:flex"><button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>4×</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button></span>
-                  <div style="{{ spectroInputsStyle }}">
+                  <div style="display:flex;flex-shrink:0;flex-wrap:nowrap;align-items:center;gap:4px;white-space:nowrap">
                     <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>Mel</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
                     <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>4096</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
                     <button type="button" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>1/16</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
                   </div>
                 </div>
-              </div>
-              </sc-if>
-              <sc-if value="{{ isLoudness }}">
-              <div style="position:relative;display:flex;align-items:center">
-                <button type="button" onClick="{{ onMetricMenu }}" style="display:flex;align-items:center;padding:2px 4px;background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#B8B8C0"><span style="display:flex;align-items:center;gap:2px;background:#28282E"><span>{{ currentMetricLabel }}</span><iconify-icon icon="lucide:chevron-down" style="font-size:10px"></iconify-icon></span></button>
-                <sc-if value="{{ metricMenuOpen }}">
-                  <div style="position:absolute;left:0;bottom:100%;margin-bottom:4px;z-index:50;display:flex;width:160px;flex-direction:column;padding:4px 0;background:#28282E;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
-                    <sc-for list="{{ metricOptions }}" as="mo" hint-placeholder-count="6">
-                      <button type="button" onClick="{{ mo.onClick }}" style="{{ mo.rowStyle }}" style-hover="background:#1F1F24">{{ mo.label }}</button>
-                    </sc-for>
-                  </div>
-                </sc-if>
               </div>
               </sc-if>
             </div>
@@ -469,25 +487,21 @@
               <div style="flex:1;min-width:16px"></div>
               <!-- stats readout -->
               <sc-if value="{{ showReadout }}" hint-placeholder-val="{{ true }}">
-              <div style="flex-shrink:0">
-                <div style="display:grid;align-items:baseline;column-gap:12px;row-gap:4px;line-height:1;grid-template-columns:auto repeat(3,minmax(0,1fr))">
-                  <span></span>
-                  <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;text-align:right;color:#44444C">Cursor</span>
-                  <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;text-align:right;color:#44444C">In</span>
-                  <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;text-align:right;color:#44444C">Out</span>
-                  <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#44444C">Time</span>
-                  <span style="font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">{{ cursor.time }}</span>
-                  <span style="font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">00:07.500</span>
-                  <span style="font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">00:13.500</span>
-                  <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#44444C">Freq</span>
-                  <span style="font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">{{ cursor.freq }}</span>
-                  <span></span>
-                  <span></span>
-                  <span style="font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#44444C">Amp</span>
-                  <span style="font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">{{ cursor.amp }}</span>
-                  <span style="font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">-19.7 dB</span>
-                  <span style="font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">-24.3 dB</span>
+              <div style="flex-shrink:0;display:flex;flex-direction:column;gap:4px">
+                <div style="display:flex;align-items:baseline;gap:12px;line-height:1">
+                  <span style="width:44px"></span>
+                  <span style="width:76px;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#44444C;text-align:right">Cursor</span>
+                  <span style="width:76px;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#44444C;text-align:right">In</span>
+                  <span style="width:76px;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#44444C;text-align:right">Out</span>
                 </div>
+                <sc-for list="{{ readoutRows }}" as="rr" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:baseline;gap:12px;line-height:1">
+                    <span style="width:44px;font-family:var(--font-mono);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;color:#44444C">{{ rr.label }}</span>
+                    <span style="width:76px;font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">{{ rr.cur }}</span>
+                    <span style="width:76px;font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">{{ rr.inv }}</span>
+                    <span style="width:76px;font-family:var(--font-mono);font-size:0.8125rem;font-variant-numeric:tabular-nums;text-align:right;color:#B8B8C0">{{ rr.outv }}</span>
+                  </div>
+                </sc-for>
               </div>
               </sc-if>
               <div style="flex:1;min-width:16px"></div>
@@ -870,7 +884,8 @@ class Component extends DCLogic {
     loading: "Loading session",
     volume: 0.8,
     playing: false,
-    metric: "integrated",
+    metric: "momentary",
+    vsScale: "sqrt",
     curtain: 0.5,
     cursor: { time: "00:00.000", freq: "— Hz", amp: "— dB" },
     sources: [
@@ -915,8 +930,8 @@ class Component extends DCLogic {
   // --- mutations ---
   setPage(p) { this.setState({ page: p }); }
   setAppTab(t) { this.setState({ appTab: t }); if (t !== "home") this.startLoading("Loading session"); }
-  setView(v) { this.setState({ view: v }); this.startLoading("Rendering " + v); }
-  setChannel(c) { this.setState({ channel: c }); this.startLoading("Rendering " + c); }
+  setView(v) { this.setState({ view: v }); this.startLoading("Rendering"); }
+  setChannel(c) { this.setState({ channel: c }); this.startLoading("Rendering"); }
   startLoading(label) {
     clearTimeout(this._loadT);
     this.setState({ loading: label });
@@ -926,6 +941,7 @@ class Component extends DCLogic {
   closeMenu() { this.setState({ openMenu: null }); }
   toggleSync() { this.setState((s) => ({ sync: !s.sync })); }
   setMetric(m) { this.setState({ metric: m }); }
+  setVsScale(v) { this.setState({ vsScale: v }); }
   togglePlay() { this.setState((s) => ({ playing: !s.playing })); }
   toggleVisible(id) { this.setState((s) => ({ sources: s.sources.map((x) => x.id === id ? { ...x, visible: !x.visible } : x) })); }
   toggleMute(id) { this.setState((s) => ({ sources: s.sources.map((x) => x.id === id ? { ...x, muted: !x.muted } : x) })); }
@@ -1067,15 +1083,15 @@ class Component extends DCLogic {
     }));
     const appMenuItems = [
       { label: "New Session", onClick: () => { self.closeMenu(); self.setAppTab("home"); } },
-      { label: "Open\u2026", onClick: () => self.closeMenu() },
+      { label: "Open Session\u2026", onClick: () => self.closeMenu() },
       { divider: true },
-      { label: "Save", onClick: () => self.closeMenu() },
-      { label: "Save As\u2026", onClick: () => self.closeMenu() },
-      { divider: true },
-      { label: "Export\u2026", onClick: () => self.closeMenu() },
-      { label: "Close Session", onClick: () => self.closeMenu() },
+      { label: "Save Session", onClick: () => self.closeMenu() },
+      { label: "Save Session As\u2026", onClick: () => self.closeMenu() },
       { divider: true },
       { label: "Preferences", onClick: () => self.closeMenu() },
+      { divider: true },
+      { label: "Close Session", onClick: () => self.closeMenu() },
+      { label: "Close", onClick: () => self.closeMenu() },
     ].map((mi) => ({ divider: !!mi.divider, isItem: !mi.divider, label: mi.label || "", onClick: mi.onClick || (() => {}) }));
 
     const docChip = (active) => active
@@ -1102,6 +1118,8 @@ class Component extends DCLogic {
       onSolo: () => self.toggleSolo(x.id),
     }));
 
+    const timelineSources = sourceRows.map((x) => ({ ...x, loading: !!s.loading, loadingLabel: s.loading || "" }));
+
     const visible = s.sources.filter((x) => x.visible);
     const overlaySources = visible.map((x) => ({ id: x.id, name: x.name, primary: x.primary, secondary: x.secondary }));
     const chartSources = visible.map((x) => x.id + ":" + x.primary).join(";");
@@ -1127,15 +1145,16 @@ class Component extends DCLogic {
       dbLabels.push({ label: String(db), top: (50 + amp * 50).toFixed(2) + "%" });
     });
 
+    const rulerW = Math.max(240, s.winW - 80);
     const timeMajors = [];
     for (let t = 9000; t <= 15000; t += 1000) {
-      timeMajors.push({ label: this.fmtRuler(t), left: (((t - 9000) / 6000) * 100).toFixed(2) + "%" });
+      const f = (t - 9000) / 6000;
+      timeMajors.push({ label: this.fmtRuler(t), left: (f * 100).toFixed(2) + "%", show: f * rulerW + 56 <= rulerW });
     }
     const gridV = timeMajors.map((t) => ({ left: t.left }));
 
     // loudness axis
     const metricDefs = [
-      ["truePeak", "True peak", -60], ["samplePeak", "Sample peak", -60], ["integrated", "Integrated", -40],
       ["momentary", "Momentary", -40], ["shortTerm", "Short term", -40], ["rms", "RMS", -60],
     ];
     const metricTabs = metricDefs.map(([id, label]) => ({
@@ -1144,7 +1163,7 @@ class Component extends DCLogic {
         ? "display:flex;align-items:center;white-space:nowrap;background:" + T + ";color:" + TX
         : "display:flex;align-items:center;white-space:nowrap",
     }));
-    const activeMetric = metricDefs.find((m) => m[0] === s.metric) || metricDefs[2];
+    const activeMetric = metricDefs.find((m) => m[0] === s.metric) || metricDefs[0];
     const currentMetricLabel = activeMetric[1];
     const metricOptions = metricDefs.map(([id, label]) => ({
       id, label,
@@ -1155,13 +1174,37 @@ class Component extends DCLogic {
     const loudTickVals = loudAxisMin === -60 ? [0, -10, -20, -30, -40, -50, -60] : [0, -5, -10, -15, -20, -25, -30, -35, -40];
     const loudTicks = loudTickVals.map((db) => ({ label: String(db), top: (((0 - db) / (0 - loudAxisMin)) * 100).toFixed(2) + "%" }));
 
+    const hashf = (str) => { let n = 0; for (let i = 0; i < str.length; i++) n = (n * 31 + str.charCodeAt(i)) % 9973; return n; };
+    const stripDefs = [["integrated", "Int"], ["truePeak", "TP"], ["samplePeak", "SP"]];
+    const loudStrips = stripDefs.map(([id, label]) => ({
+      id, label,
+      lines: visible.map((x) => {
+        const db = -2 - (hashf(x.id + id) % 220) / 10;
+        return { color: x.primary, top: (((0 - db) / (0 - loudAxisMin)) * 100).toFixed(2) + "%" };
+      }),
+    }));
+
+    // vectorscope scale + reference rings (fractions of the 0..1 viewBox, outer ring = 0 dBFS at 0.46)
+    const vsScaleDefs = [["linear", "Linear"], ["sqrt", "Square root"], ["log", "Logarithmic"]];
+    const vsScaleLabel = (vsScaleDefs.find((v) => v[0] === s.vsScale) || vsScaleDefs[1])[1];
+    const vsScaleOptions = vsScaleDefs.map(([id, label]) => ({
+      id, label,
+      onClick: () => { self.closeMenu(); self.setVsScale(id); },
+      rowStyle: menuRow(id === s.vsScale),
+    }));
+    const vsWarp = (a) => s.vsScale === "linear" ? a : s.vsScale === "log" ? Math.max(0, Math.min(1, 1 + (20 * Math.log10(Math.max(a, 1e-4))) / 60)) : Math.sqrt(a);
+    const vsRings = [-6, -12, -18].map((db) => ({ db, r: (0.46 * vsWarp(Math.pow(10, db / 20))).toFixed(4) }));
+
     // correlation axis
     const corrTicks = [1, 0.5, 0, -0.5, -1].map((c) => ({ label: String(c), top: (((1 - c) / 2) * 100).toFixed(2) + "%", heavy: c === 0 }));
 
     // freq distribution axes
     const fdDbTicks = [0, -10, -20, -30, -40, -50, -60, -70, -80, -90].map((db) => ({ label: String(db), top: (((0 - db) / 90) * 100).toFixed(2) + "%" }));
     const fdFreqDefs = [[20, "20"], [50, "50"], [100, "100"], [200, "200"], [500, "500"], [1000, "1k"], [2000, "2k"], [5000, "5k"], [10000, "10k"], [20000, "20k"]];
-    const fdFreqTicks = fdFreqDefs.map(([hz, label]) => ({ label, left: (this.freqToX(hz) * 100).toFixed(2) + "%" }));
+    const fdFreqTicks = fdFreqDefs.map(([hz, label]) => {
+      const f = this.freqToX(hz);
+      return { label, left: (f * 100).toFixed(2) + "%", show: f * rulerW + 22 <= rulerW };
+    });
     const fdGridV = fdFreqTicks.map((t) => ({ left: t.left }));
     const fdGridH = fdDbTicks.map((t) => ({ top: t.top }));
 
@@ -1210,12 +1253,37 @@ class Component extends DCLogic {
       { primary: "#ACC9F5", secondary: "#0B2545", i: 3 }, { primary: "#F4C8A8", secondary: "#7C2D12", i: 4 },
     ].map((l) => ({ ...l, ramp: "linear-gradient(to right, #000000,#05051E,#0F1446,#1E0F32,#500A05,#8C1400,#B93700,#D76405,#F09B19,#FCD246,#FFF08C,#FFFFFF)", pair: l.primary + " / " + l.secondary }));
 
-    const hasTransport = !(s.view === "frequency-distribution" || s.view === "vectorscope");
+    const hasTransport = true;
+    // readout rows mirror the axes of the active view
+    const readoutRows = (() => {
+      if (s.view === "vectorscope") return [
+        { label: "L", cur: "-12.4 dB", inv: "-9.8 dB", outv: "-14.1 dB" },
+        { label: "R", cur: "-11.9 dB", inv: "-10.2 dB", outv: "-13.6 dB" },
+        { label: "Width", cur: "0.42", inv: "0.38", outv: "0.51" },
+      ];
+      if (s.view === "frequency-distribution") return [
+        { label: "Freq", cur: s.cursor.freq, inv: "—", outv: "—" },
+        { label: "Amp", cur: s.cursor.amp, inv: "-19.7 dB", outv: "-24.3 dB" },
+      ];
+      if (s.view === "loudness") return [
+        { label: "Time", cur: s.cursor.time, inv: "00:07.500", outv: "00:13.500" },
+        { label: currentMetricLabel, cur: "-14.2", inv: "-15.1", outv: "-13.4" },
+      ];
+      if (s.view === "correlation") return [
+        { label: "Time", cur: s.cursor.time, inv: "00:07.500", outv: "00:13.500" },
+        { label: "Corr", cur: "+0.62", inv: "+0.48", outv: "+0.71" },
+      ];
+      return [
+        { label: "Time", cur: s.cursor.time, inv: "00:07.500", outv: "00:13.500" },
+        { label: "Freq", cur: s.cursor.freq, inv: "—", outv: "—" },
+        { label: "Amp", cur: s.cursor.amp, inv: "-19.7 dB", outv: "-24.3 dB" },
+      ];
+    })();
 
     return {
       page: s.page,
       fontSansVar, fontMonoVar, fontDisplayVar,
-      showReadout: !narrow,
+      showReadout: true,
       spectroInputsStyle,
       isApp: s.page === "App",
       isWorkspace: s.page === "App" && s.appTab !== "home",
@@ -1240,6 +1308,7 @@ class Component extends DCLogic {
       isSpectralGroup: s.view === "overlay" || s.view === "slider" || s.view === "sum" || s.view === "difference",
       isTimeline: s.view === "timeline",
       showSpectrogram: s.view !== "overlay",
+      specCols: (s.view === "overlay" ? "0" : "auto") + " minmax(0,1fr) auto auto",
       isLoudness: s.view === "loudness",
       isFreqDist: s.view === "frequency-distribution",
       isCorrelation: s.view === "correlation",
@@ -1256,7 +1325,12 @@ class Component extends DCLogic {
       syncIconChip: s.sync
         ? "display:flex;align-items:center;justify-content:center;background:" + T + ";color:" + TX
         : "display:flex;align-items:center;justify-content:center;color:#6E6E78",
-      overlaySources, chartSources, sliderTop, sliderBottom, hasPair, diffColor,
+      overlaySources, chartSources, sliderTop, sliderBottom, hasPair, diffColor, timelineSources,
+      showAB: s.view === "slider" || s.view === "sum" || s.view === "difference",
+      abAName: sliderTop ? sliderTop.name : "—",
+      abAPrimary: sliderTop ? sliderTop.primary : "#B8B8C0",
+      abASecondary: sliderTop ? sliderTop.secondary : "#44444C",
+      abBName: sliderBottom ? sliderBottom.name : "—",
       curtainClip: String(s.curtain),
       curtainLeft: (s.curtain * 100) + "%",
       syncChip: s.sync
@@ -1269,9 +1343,12 @@ class Component extends DCLogic {
       playChip: s.playing ? "display:flex;align-items:center;justify-content:center;background:var(--accent)" : "display:flex;align-items:center;justify-content:center",
       playColor: s.playing ? "#020204" : "#6E6E78",
       cursor: s.cursor,
-      freqLabels, gridH, dbLabels, timeMajors, gridV,
+      freqLabels, gridH, dbLabels, timeMajors, gridV, readoutRows,
       metricTabs, currentMetricLabel, metricOptions, metricMenuOpen: s.openMenu === "metric",
-      loudTicks, loudAxisMin: String(loudAxisMin), metric: s.metric,
+      vsRings, vsScale: s.vsScale, vsScaleLabel, vsScaleOptions,
+      scaleMenuOpen: s.openMenu === "vsscale",
+      onScaleMenu: () => this.toggleMenu("vsscale"),
+      loudTicks, loudAxisMin: String(loudAxisMin), metric: s.metric, loudStrips,
       corrTicks, fdDbTicks, fdFreqTicks, fdGridV, fdGridH,
       chromePalette, accents, states, dataOverlay, edges, typeScale, spacingScale, showcaseIcons, layerPalette,
       recentSessions: [

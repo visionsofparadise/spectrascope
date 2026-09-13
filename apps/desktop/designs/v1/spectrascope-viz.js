@@ -369,24 +369,32 @@
     });
 
   // --- <wave-mini> (MinimapDisplay) ------------------------------------------
-  defineCanvas("wave-mini", ["primary", "seed", "vstart", "vend"], function (ctx, w, h) {
-    var primary = this.getAttribute("primary") || "#B8B8C0";
-    var seed = hashSeed(this.getAttribute("seed") || "0");
+  defineCanvas("wave-mini", ["primary", "seed", "sources", "vstart", "vend"], function (ctx, w, h) {
     var vs = parseFloat(this.getAttribute("vstart") || "0");
     var ve = parseFloat(this.getAttribute("vend") || "1");
-    var pr = hexToRgb(primary);
+    // every visible source, overlaid — the minimap mirrors the zoomed-out view, not one layer
+    var raw = this.getAttribute("sources") || "";
+    var layers = raw.split(";").filter(Boolean).map(function (e) {
+      var p = e.split(":");
+      return { seed: hashSeed(p[0]), color: p[1] || "#B8B8C0" };
+    });
+    if (!layers.length) layers = [{ seed: hashSeed(this.getAttribute("seed") || "0"), color: this.getAttribute("primary") || "#B8B8C0" }];
     ctx.clearRect(0, 0, w, h);
-    // void bg
     ctx.fillStyle = "rgb(2,2,4)"; ctx.fillRect(0, 0, w, h);
     var cy = h / 2;
-    ctx.fillStyle = "rgb(" + pr[0] + "," + pr[1] + "," + pr[2] + ")";
-    var cols = waveColumns(seed, w, 0, 1, 1);
-    for (var x = 0; x < w; x++) {
-      if (cols.mx[x] < cols.mn[x]) continue;
-      var top = cy - cols.mx[x] * cy * 0.85;
-      var bot = cy - cols.mn[x] * cy * 0.85;
-      ctx.fillRect(x, top, 1, Math.max(1, bot - top));
-    }
+    ctx.globalCompositeOperation = layers.length > 1 ? "lighten" : "source-over";
+    layers.forEach(function (L) {
+      var pr = hexToRgb(L.color);
+      ctx.fillStyle = "rgb(" + pr[0] + "," + pr[1] + "," + pr[2] + ")";
+      var cols = waveColumns(L.seed, w, 0, 1, 1);
+      for (var x = 0; x < w; x++) {
+        if (cols.mx[x] < cols.mn[x]) continue;
+        var top = cy - cols.mx[x] * cy * 0.85;
+        var bot = cy - cols.mn[x] * cy * 0.85;
+        ctx.fillRect(x, top, 1, Math.max(1, bot - top));
+      }
+    });
+    ctx.globalCompositeOperation = "source-over";
     // dim outside viewport
     ctx.fillStyle = "rgba(0,0,0,0.6)";
     ctx.fillRect(0, 0, vs * w, h);
@@ -524,8 +532,12 @@
   });
 
   // --- <vectorscope-scope> ----------------------------------------------------
-  defineCanvas("vectorscope-scope", ["sources"], function (ctx, w, h) {
+  defineCanvas("vectorscope-scope", ["sources", "scale"], function (ctx, w, h) {
     var raw = this.getAttribute("sources") || "";
+    var mode = this.getAttribute("scale") || "sqrt";
+    var warp = mode === "linear" ? function (a) { return a; }
+      : mode === "log" ? function (a) { return clamp(1 + (20 * Math.log(Math.max(a, 1e-4)) / Math.LN10) / 60, 0, 1); }
+      : function (a) { return Math.sqrt(a); };
     ctx.clearRect(0, 0, w, h);
     var entries = raw.split(";").filter(Boolean);
     var cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2;
@@ -542,7 +554,7 @@
         if (energy < 0.03) continue;
         var mid = (rng() - 0.5) * 0.5 + energy * (rng() - 0.5) * 0.4;
         var side = (rng() - 0.5) * 0.28 * (0.4 + data.corr[fr] * 0.0 + 0.6 * (1 - Math.abs(data.corr[fr])));
-        var r = energy * R * 0.92;
+        var r = warp(energy) * R * 0.92;
         var x = cx + side * r * 2.0;
         var y = cy - mid * r * 2.0;
         var a = 0.08 + energy * 0.12;
