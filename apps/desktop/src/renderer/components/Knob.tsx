@@ -25,7 +25,8 @@ export const Knob = ({
 	const startValue = useRef(0);
 	const currentValue = useRef(value);
 
-	const radius = (size - 4) / 2;
+	const radius = (size * 3) / 8;
+	const strokeWidth = size / 12;
 	const cx = size / 2;
 	const cy = size / 2;
 	const startAngle = 135;
@@ -102,13 +103,13 @@ export const Knob = ({
 				<path
 					d={arcPath(startAngle, totalSweep)}
 					fill="none"
-					style={{ stroke: "var(--color-chrome-raised)", strokeWidth: 3, strokeLinecap: "round" }}
+					style={{ stroke: "var(--color-chrome-raised)", strokeWidth, strokeLinecap: "round" }}
 				/>
 				{valueSweep > 0 && (
 					<path
 						d={arcPath(startAngle, valueSweep)}
 						fill="none"
-						style={{ stroke: "var(--color-chrome-text)", strokeWidth: 3, strokeLinecap: "round" }}
+						style={{ stroke: "var(--color-chrome-text)", strokeWidth, strokeLinecap: "round" }}
 					/>
 				)}
 			</svg>

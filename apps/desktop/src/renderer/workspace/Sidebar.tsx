@@ -53,6 +53,10 @@ export function Sidebar({
 			<div className="flex flex-col gap-1.5 px-4 py-3">
 				<span className="font-technical text-xs uppercase tracking-[0.08em] text-chrome-text-secondary">View</span>
 				<Select
+					variant="chip"
+					size="sm"
+					ariaLabel="View"
+					menuClassName="min-w-40"
 					value={activeView}
 					options={VIEW_OPTIONS}
 					onChange={(value) => {
@@ -68,6 +72,10 @@ export function Sidebar({
 					Channels
 				</span>
 				<Select
+					variant="chip"
+					size="sm"
+					ariaLabel="Channels"
+					menuClassName="min-w-40"
 					value={channelInput}
 					options={CHANNEL_OPTIONS}
 					onChange={(value) => {

@@ -76,7 +76,7 @@ export function SourceRow({
 		<div
 			ref={rowRef}
 			className={cn(
-				"group relative flex flex-row items-start gap-3 p-3",
+				"group relative flex flex-row items-start gap-3 px-4 py-3",
 				"hover:bg-interactive-hover",
 				status === "preparing" && "opacity-60",
 				active === true && "bg-interactive-hover",
@@ -140,7 +140,7 @@ export function SourceRow({
 				<div className="flex min-w-0 items-center gap-1.5">
 					<span
 						className={cn(
-							"min-w-0 truncate font-body text-base font-medium leading-tight",
+							"min-w-0 truncate font-body text-base font-medium leading-[1.15]",
 							status === "error" ? "text-state-error" : "text-chrome-text",
 						)}
 						title={status === "error" ? (error ?? "Failed to prepare audio") : source.audioFilePath || label}

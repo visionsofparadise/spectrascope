@@ -18,7 +18,7 @@ export function AppShell({ sidebar, workspace, transport }: AppShellProps) {
 		<div
 			className="grid h-full w-full bg-void text-chrome-text"
 			style={{
-				gridTemplateColumns: "240px minmax(0, 1fr)",
+				gridTemplateColumns: "190px minmax(0, 1fr)",
 				gridTemplateRows: hasTransport ? "minmax(0, 1fr) 92px" : "minmax(0, 1fr)",
 			}}
 		>

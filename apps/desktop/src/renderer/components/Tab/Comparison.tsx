@@ -17,6 +17,7 @@ import { Transport } from "../../workspace/Transport";
 import { TransportViewControls } from "../../workspace/TransportViewControls";
 import { normalizeSelection } from "../../workspace/utils/selection";
 import { Workspace } from "../../workspace/Workspace";
+import { LoadingToast } from "../LoadingToast";
 import type { ExportControl } from "../../export/ExportControl";
 import type { AppContext } from "../../models/Context";
 import type { Comparison } from "../../models/State/App";
@@ -50,6 +51,15 @@ const INITIAL_SYNC_STATE: SyncState = {
 	cursor: null,
 	selection: null,
 };
+
+const VIEW_CONTROL_VIEWS: ReadonlySet<ViewId> = new Set([
+	"timeline",
+	"overlay",
+	"slider",
+	"difference",
+	"sum",
+	"loudness",
+]);
 
 const INITIAL_TRANSPORT_CONTROL: TransportControl = {
 	disabled: false,
@@ -490,24 +500,22 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 								volume={volume}
 								onVolumeChange={handleVolumeChange}
 								viewControls={
-									<TransportViewControls
-										activeView={activeView}
-										settings={viewSettings}
-										onSettingsChange={setViewSettings}
-										syncEnabled={syncEnabled}
-										onSyncEnabledChange={setSyncEnabled}
-									/>
+									VIEW_CONTROL_VIEWS.has(activeView) ? (
+										<TransportViewControls
+											activeView={activeView}
+											settings={viewSettings}
+											onSettingsChange={setViewSettings}
+											syncEnabled={syncEnabled}
+											onSyncEnabledChange={setSyncEnabled}
+										/>
+									) : undefined
 								}
 							/>
 						)
 					}
 				/>
 				{(preparing || derivedPreparing) && (
-					<div className="pointer-events-none absolute right-3 top-3 z-50 flex items-center gap-2 bg-chrome-raised px-2 py-1">
-						<span className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text-secondary">
-							Preparing audio…
-						</span>
-					</div>
+					<LoadingToast label="Preparing audio…" className="absolute right-2 top-2" />
 				)}
 				{relinkError && (
 					<div

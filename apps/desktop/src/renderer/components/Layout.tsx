@@ -8,6 +8,7 @@ import { useAppState, type AppState } from "../models/State/App";
 import { MeasurementSessionsProvider } from "../workspace/spectral/MeasurementSessionsProvider";
 import { AppBar } from "./AppBar";
 import { ExportDialog } from "./ExportDialog";
+import { LoadingToast } from "./LoadingToast";
 import { PreferencesDialog } from "./PreferencesDialog";
 import { TabContent } from "./Tab";
 import type { Logger } from "../../shared/models/Logger";
@@ -174,14 +175,7 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 					</button>
 				</div>
 			)}
-			{exportBusy && (
-				<div
-					role="status"
-					className="pointer-events-none fixed right-60 top-3 z-50 bg-void px-2 font-technical text-sm text-primary"
-				>
-					Exporting…
-				</div>
-			)}
+			{exportBusy && <LoadingToast label="Exporting…" className="fixed right-[146px] top-2" />}
 			<MeasurementSessionsProvider
 				comparisons={app.comparisons}
 				activeSessionId={app.tabs.find((tab) => tab.id === app.activeTabId)?.comparisonId ?? null}

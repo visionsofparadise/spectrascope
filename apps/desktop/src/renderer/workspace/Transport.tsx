@@ -1,6 +1,7 @@
 import { Icon } from "@iconify/react";
 import { useCallback, useId, useRef } from "react";
 import { IconButton } from "../components/IconButton";
+import { Select } from "../components/Select";
 import { formatInspectionTime } from "./utils/formatInspectionTime";
 import type { ReactNode } from "react";
 
@@ -60,6 +61,11 @@ interface TransportProps {
 	readonly viewControls?: ReactNode;
 }
 
+const PLAYBACK_RATE_OPTIONS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => ({
+	value: String(rate),
+	label: `${rate}x`,
+}));
+
 function formatTimecode(sec: number): string {
 	if (!Number.isFinite(sec) || sec < 0) return "00:00.000";
 
@@ -88,6 +94,7 @@ function MediaButton({
 	readonly onClick?: () => void;
 }) {
 	const interactive = !disabled && Boolean(onClick);
+	const iconSize = large ? 24 : 17;
 
 	return (
 		<button
@@ -96,7 +103,7 @@ function MediaButton({
 			onClick={() => {
 				if (interactive) onClick?.();
 			}}
-			className={`flex h-8 ${large ? "w-8" : "w-6"} shrink-0 items-center justify-center ${
+			className={`flex shrink-0 items-center justify-center p-1.5 ${
 				disabled
 					? "cursor-not-allowed text-chrome-text-dim"
 					: active
@@ -105,14 +112,12 @@ function MediaButton({
 			}`}
 			aria-label={label}
 		>
-			<span className={`flex h-6 w-6 items-center justify-center ${active && !disabled ? "bg-primary" : ""}`}>
-				{icon === "lucide:play" || icon === "lucide:pause" ? (
-					<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
-						{icon === "lucide:play" ? <path d="M8 4v16l12-8z" /> : <path d="M6 4h4v16H6zm8 0h4v16h-4z" />}
-					</svg>
-				) : (
-					<Icon icon={icon} width={17} height={17} />
-				)}
+			<span
+				className={`flex items-center justify-center ${large ? "size-6" : "size-[17px]"} ${
+					active && !disabled ? "bg-primary" : ""
+				}`}
+			>
+				<Icon icon={icon} width={iconSize} height={iconSize} />
 			</span>
 		</button>
 	);
@@ -346,12 +351,8 @@ export function Transport({
 	const selectionOutLabel = selectionOutSec !== undefined ? formatInspectionTime(selectionOutSec * 1000) : "—";
 
 	return (
-		<div
-			role="region"
-			aria-label="Transport"
-			className="@container h-[92px] w-full border-t border-chrome-border-subtle bg-void"
-		>
-			<div className="flex h-full min-w-0 items-center px-2">
+		<div role="region" aria-label="Transport" className="@container h-[92px] w-full bg-void">
+			<div className="flex h-full min-w-0 items-center px-4">
 				<div className="flex min-w-0 flex-1 basis-0 items-center">
 					{viewControls && (
 						<TransportCluster
@@ -425,21 +426,17 @@ export function Transport({
 					</div>
 
 					<div className="flex items-center gap-3">
-						<select
-							aria-label="Playback speed"
-							value={playbackRate}
-							onChange={(event) => onPlaybackRateChange(Number(event.target.value))}
+						<Select
+							variant="chip"
+							size="sm"
+							direction="up"
+							ariaLabel="Playback speed"
+							className="shrink-0 italic [&_button]:normal-case [&_button]:tracking-normal"
 							disabled={disabled}
-							className={`shrink-0 bg-chrome-raised px-1 py-0.5 font-technical text-[length:var(--text-sm)] italic ${
-								disabled ? "cursor-not-allowed text-chrome-text-dim" : "text-chrome-text"
-							}`}
-						>
-							{[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => (
-								<option key={rate} value={rate}>
-									{rate}x
-								</option>
-							))}
-						</select>
+							value={String(playbackRate)}
+							options={PLAYBACK_RATE_OPTIONS}
+							onChange={(value) => onPlaybackRateChange(Number(value))}
+						/>
 						<span
 							className={`shrink-0 font-technical text-[length:var(--text-sm)] tabular-nums ${timecodeMainClass}`}
 						>
@@ -450,11 +447,12 @@ export function Transport({
 					</div>
 				</div>
 
-				<div className="flex min-w-0 flex-1 basis-0 items-center justify-end gap-2">
+				<div className="flex min-w-0 flex-1 basis-0 items-center">
+					<div className="min-w-4 flex-1" />
 					<TransportCluster
 						label="Measurements"
 						icon="lucide:ruler"
-						inlineClassName="hidden min-w-0 @[1280px]:block"
+						inlineClassName="hidden shrink-0 @[1280px]:block"
 						compactClassName="shrink-0 @[1280px]:hidden"
 					>
 						<div className="max-w-[calc(100vw-48px)]">
@@ -477,6 +475,7 @@ export function Transport({
 							/>
 						</div>
 					</TransportCluster>
+					<div className="min-w-4 flex-1" />
 					<TransportCluster
 						label="Volume"
 						icon="lucide:volume-2"

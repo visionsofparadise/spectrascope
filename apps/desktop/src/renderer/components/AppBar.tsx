@@ -146,7 +146,7 @@ export function AppBar({ context, historyControl, canExport, onExport, onPrefere
 						<div
 							key={tab.id}
 							style={NO_DRAG}
-							className={`flex shrink-0 cursor-pointer items-center gap-1.5 pl-2 pr-1 ${
+							className={`flex shrink-0 cursor-pointer items-center gap-1.5 ${
 								isActive ? "bg-primary text-void" : "bg-chrome-raised text-chrome-text"
 							}`}
 							onClick={() => selectTab(tab.id)}
@@ -198,7 +198,7 @@ export function AppBar({ context, historyControl, canExport, onExport, onPrefere
 									event.stopPropagation();
 									closeTab(tab.id);
 								}}
-								className={`flex items-center px-0.5 py-1 ${isActive ? "text-void" : "text-chrome-text-dim"}`}
+								className={`flex items-center ${isActive ? "text-void" : "text-chrome-text-dim"}`}
 							>
 								<Icon icon="lucide:x" width={14} height={14} />
 							</button>
@@ -222,25 +222,27 @@ export function AppBar({ context, historyControl, canExport, onExport, onPrefere
 				</div>
 			</div>
 
-			<div className="flex shrink-0 items-center gap-1.5" style={NO_DRAG}>
-				<div className="h-6 w-px shrink-0 bg-chrome-border-subtle" />
-				<IconButton
-					icon="lucide:undo-2"
-					label="Undo"
-					size={16}
-					variant="ghost"
-					disabled={!historyControl?.canUndo}
-					onClick={() => historyControl?.undo()}
-				/>
-				<IconButton
-					icon="lucide:redo-2"
-					label="Redo"
-					size={16}
-					variant="ghost"
-					disabled={!historyControl?.canRedo}
-					onClick={() => historyControl?.redo()}
-				/>
-			</div>
+			{hasActiveTab && (
+				<div className="flex shrink-0 items-center gap-1.5" style={NO_DRAG}>
+					<div className="h-6 w-px shrink-0 bg-chrome-border-subtle" />
+					<IconButton
+						icon="lucide:undo-2"
+						label="Undo"
+						size={16}
+						variant="ghost"
+						disabled={!historyControl?.canUndo}
+						onClick={() => historyControl?.undo()}
+					/>
+					<IconButton
+						icon="lucide:redo-2"
+						label="Redo"
+						size={16}
+						variant="ghost"
+						disabled={!historyControl?.canRedo}
+						onClick={() => historyControl?.redo()}
+					/>
+				</div>
+			)}
 		</div>
 	);
 }

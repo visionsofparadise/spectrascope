@@ -1,5 +1,6 @@
 import { Icon } from "@iconify/react";
 import { TerrainShader } from "../TerrainShader";
+import { lastOpenedLabelOf } from "./utils/lastOpenedLabel";
 import type { AppContext } from "../../models/Context";
 
 interface Props {
@@ -16,68 +17,76 @@ export function HomeScreen({ context }: Props) {
 				</h1>
 
 				<div className="flex-1" />
-				{context.app.recentSessions.length > 0 && (
-					<section className="mb-6 max-h-64 max-w-2xl overflow-y-auto bg-void/80 p-3">
-						<h2 className="mb-2 font-technical text-sm uppercase text-chrome-text-dim">Recent sessions</h2>
-						{context.app.recentSessions.map((session) => (
-							<div
-								key={session.filePath}
-								className="flex items-center gap-3 border-b border-chrome-border-subtle py-2"
-							>
-								<button
-									type="button"
-									disabled={context.busy}
-									onClick={() => void context.openComparison(session.filePath)}
-									className="min-w-0 flex-1 text-left text-chrome-text"
-									title={session.filePath}
-								>
-									<span className="block truncate">{session.name}</span>
-									<span className="block truncate text-xs text-chrome-text-dim">{session.filePath}</span>
-								</button>
-								<span className="text-xs text-chrome-text-dim">
-									{new Date(session.lastOpenedAt).toLocaleDateString()}
-								</span>
-								<button
-									type="button"
-									aria-label={`Remove ${session.name} from recent sessions`}
-									onClick={() => context.removeRecentSession(session.filePath)}
-									className="text-chrome-text-dim"
-								>
-									×
-								</button>
+				<div className="flex flex-col gap-6">
+					{context.app.recentSessions.length > 0 && (
+						<section className="flex flex-col gap-4">
+							<h2 className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.1em] text-chrome-text-dim">
+								Recent Sessions
+							</h2>
+							<div className="flex max-h-64 flex-col gap-2 overflow-y-auto">
+								{context.app.recentSessions.map((session) => (
+									<div key={session.filePath} className="flex min-w-0 items-baseline gap-2">
+										<button
+											type="button"
+											disabled={context.busy}
+											onClick={() => void context.openComparison(session.filePath)}
+											className="flex w-fit min-w-0 items-baseline gap-5 text-left hover:bg-secondary"
+											title={session.filePath}
+										>
+											<span className="shrink-0 font-body text-base text-chrome-text">{session.name}</span>
+											<span className="min-w-0 truncate font-technical text-[length:var(--text-xs)] text-chrome-text-dim">
+												{session.filePath}
+											</span>
+											<span className="shrink-0 font-technical text-[length:var(--text-xs)] text-chrome-text-dim">
+												{lastOpenedLabelOf(session.lastOpenedAt, Date.now())}
+											</span>
+										</button>
+										<button
+											type="button"
+											aria-label={`Remove ${session.name} from recent sessions`}
+											onClick={() => context.removeRecentSession(session.filePath)}
+											className="shrink-0 text-chrome-text-dim"
+										>
+											×
+										</button>
+									</div>
+								))}
 							</div>
-						))}
-					</section>
-				)}
+						</section>
+					)}
 
-				<div className="flex flex-col gap-2">
-					<button
-						type="button"
-						onClick={() => void context.importAudio()}
-						className="w-fit font-technical text-sm uppercase text-chrome-text"
-					>
-						Import Audio…
-					</button>
-					<button
-						type="button"
-						onClick={() => void context.newComparison()}
-						className="flex w-fit items-center gap-2 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-void transition-colors hover:brightness-110"
-					>
-						<span className="flex items-center gap-2 bg-primary px-2 py-1">
-							<Icon icon="lucide:plus" width={16} />
-							New Session
-						</span>
-					</button>
-					<button
-						type="button"
-						onClick={() => void context.openComparison()}
-						className="flex w-fit items-center gap-2 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text transition-colors hover:brightness-125"
-					>
-						<span className="flex items-center gap-2 bg-secondary px-2 py-1">
-							<Icon icon="lucide:folder-open" width={16} />
-							Open Session
-						</span>
-					</button>
+					<div className="flex flex-col gap-2">
+						<button
+							type="button"
+							onClick={() => void context.newComparison()}
+							className="flex w-fit items-center gap-2 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-void"
+						>
+							<span className="flex items-center gap-2 bg-primary px-2 py-1">
+								<Icon icon="lucide:plus" width={16} />
+								New Session
+							</span>
+						</button>
+						<button
+							type="button"
+							onClick={() => void context.openComparison()}
+							className="flex w-fit items-center gap-2 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text"
+						>
+							<span className="flex items-center gap-2 bg-secondary px-2 py-1">
+								<Icon icon="lucide:folder-open" width={16} />
+								Open Session
+							</span>
+						</button>
+						<button
+							type="button"
+							onClick={() => void context.importAudio()}
+							className="flex w-fit items-center gap-2 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text"
+						>
+							<span className="flex items-center gap-2 bg-secondary px-2 py-1">
+								<Icon icon="lucide:import" width={16} />
+								Import Audio…
+							</span>
+						</button>
+					</div>
 				</div>
 			</div>
 		</div>

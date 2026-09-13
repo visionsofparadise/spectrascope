@@ -128,3 +128,45 @@ describe("spectrogram sampling control", () => {
 		expect(render("loudness").some((element) => element.props.ariaLabel === "Spectrogram sampling")).toBe(false);
 	});
 });
+
+describe("transport view control layout", () => {
+	it.each(["timeline", "slider"] as const)("wraps the spectrogram selectors into one block in %s", (view) => {
+		const nodes = render(view);
+		expect(nodes[0]?.props.className).toContain("gap-2.5");
+		const block = nodes.find((element) => String(element.props.className).includes("max-w-[150px]"))!;
+		expect(block.props.className).toBe("flex max-w-[150px] flex-wrap items-center gap-x-1 gap-y-0.5");
+		const blockNodes = elements(block.props.children);
+		expect(
+			blockNodes.filter((element) => element.type === "mock-select").map((element) => element.props.ariaLabel),
+		).toEqual(["Colour map", "Spectrogram sampling", "Frequency scale", "FFT size", "FFT hop"]);
+		const group = blockNodes.find((element) => element.props.className === "flex items-center gap-1")!;
+		expect(
+			elements(group.props.children)
+				.filter((element) => element.type === "mock-select")
+				.map((element) => element.props.ariaLabel),
+		).toEqual(["Frequency scale", "FFT size", "FFT hop"]);
+	});
+
+	it("selects the loudness metric through a label-less upward chip", () => {
+		const onSettingsChange = vi.fn();
+		const [metric] = render("loudness", onSettingsChange).filter((element) => element.type === "mock-select");
+		expect(metric?.props).toMatchObject({
+			ariaLabel: "Loudness metric",
+			variant: "chip",
+			direction: "up",
+			menuClassName: "w-40",
+		});
+		expect(metric?.props.label).toBeUndefined();
+		const options = metric?.props.options as ReadonlyArray<{ value: string }>;
+		const next = options[options.length - 1]!.value;
+		(metric?.props.onChange as (value: string) => void)(next);
+		expect(onSettingsChange).toHaveBeenCalledExactlyOnceWith({
+			...INITIAL_VIEW_CONTROL_SETTINGS,
+			loudnessMetric: next,
+		});
+	});
+
+	it("renders nothing for Correlation", () => {
+		expect(render("correlation")).toEqual([]);
+	});
+});

@@ -20,7 +20,10 @@ interface SelectProps {
 	 */
 	readonly variant?: "field" | "chip";
 	readonly direction?: "down" | "up";
+	readonly size?: "sm" | "xs";
+	readonly disabled?: boolean;
 	readonly className?: string;
+	readonly menuClassName?: string;
 }
 
 export function Select({
@@ -31,7 +34,10 @@ export function Select({
 	onChange,
 	variant = "field",
 	direction = "down",
+	size = "xs",
+	disabled,
 	className,
+	menuClassName,
 }: SelectProps) {
 	const [open, setOpen] = useState(false);
 	const rootRef = useRef<HTMLDivElement>(null);
@@ -76,6 +82,7 @@ export function Select({
 				"absolute left-0 z-50 flex flex-col bg-chrome-raised py-1 shadow-[0_8px_24px_rgba(0,0,0,0.5)]",
 				variant === "field" ? "right-0" : "min-w-full",
 				direction === "up" ? "bottom-full mb-1" : "top-full mt-1",
+				menuClassName,
 			)}
 		>
 			{options.map((option) => {
@@ -112,6 +119,7 @@ export function Select({
 				onClick={() => {
 					setOpen((previous) => !previous);
 				}}
+				disabled={disabled}
 				className="flex w-full items-center justify-between gap-2 border border-chrome-border bg-void px-2 py-1.5 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text hover:border-chrome-text-dim"
 			>
 				<span>{displayLabel}</span>
@@ -126,11 +134,21 @@ export function Select({
 				onClick={() => {
 					setOpen((previous) => !previous);
 				}}
-				className="flex items-center px-1 py-0.5 font-technical text-[length:var(--text-xs)] uppercase tracking-[0.06em] text-chrome-text"
+				disabled={disabled}
+				className={cn(
+					"flex items-center px-1 py-0.5 font-technical uppercase tracking-[0.06em]",
+					size === "sm" ? "text-[length:var(--text-sm)]" : "text-[length:var(--text-xs)]",
+					disabled ? "cursor-not-allowed text-chrome-text-dim" : "text-chrome-text",
+				)}
 			>
-				<span className="flex items-center gap-0.5 bg-chrome-raised">
+				<span
+					className={cn(
+						"flex items-center whitespace-nowrap bg-chrome-raised",
+						size === "sm" ? "gap-1" : "gap-0.5",
+					)}
+				>
 					<span>{displayLabel}</span>
-					<Icon icon="lucide:chevron-down" width={10} height={10} />
+					<Icon icon="lucide:chevron-down" width={size === "sm" ? 12 : 10} height={size === "sm" ? 12 : 10} />
 				</span>
 			</button>
 		);
