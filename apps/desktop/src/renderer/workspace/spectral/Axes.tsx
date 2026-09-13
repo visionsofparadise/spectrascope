@@ -1,8 +1,11 @@
+import { axisFractionOf, FULL_AXIS_RANGE } from "../utils/axisRange";
 import { formatInspectionTime } from "../utils/formatInspectionTime";
 import { frequencyToFraction } from "../utils/frequencyScale";
 import { verticalFractionOf } from "../utils/verticalRange";
 import { SelectionSurface } from "./SelectionSurface";
 import { FREQUENCY_TICK_LABELS, majorTickIntervalMs } from "./timeTicks";
+import { visibleValueTicksOf } from "./valueTicks";
+import type { AxisRange } from "../utils/axisRange";
 import type { FrequencyScale } from "spectral-display";
 import type { TextureVerticalRange } from "spectral-display";
 
@@ -166,14 +169,15 @@ export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
 }
 
 interface LinearDbAxisProps {
-	readonly ticks: ReadonlyArray<number>;
+	readonly min: number;
+	readonly max: number;
+	readonly tickCount: number;
+	readonly range?: AxisRange;
 	readonly width?: string;
 }
 
-export function LinearDbAxis({ ticks, width = "2.5rem" }: LinearDbAxisProps) {
-	const dbMax = ticks[0] ?? 0;
-	const dbMin = ticks[ticks.length - 1] ?? -90;
-	const dbRange = dbMax - dbMin;
+export function LinearDbAxis({ min, max, tickCount, range = FULL_AXIS_RANGE, width = "2.5rem" }: LinearDbAxisProps) {
+	const span = max - min;
 
 	return (
 		<div
@@ -185,16 +189,18 @@ export function LinearDbAxis({ ticks, width = "2.5rem" }: LinearDbAxisProps) {
 				fontVariantNumeric: "tabular-nums",
 			}}
 		>
-			{ticks.map((db) => {
-				const yPct = dbRange > 0 ? ((dbMax - db) / dbRange) * 100 : 0;
+			{visibleValueTicksOf(min, max, range, tickCount).map((value) => {
+				const position = span > 0 ? axisFractionOf((max - value) / span, range) : 0;
+
+				if (position < 0 || position > 1) return null;
 
 				return (
 					<div
-						key={db}
+						key={value}
 						className="absolute right-0 flex items-center"
-						style={{ top: `${yPct}%`, transform: "translateY(-50%)" }}
+						style={{ top: `${position * 100}%`, transform: "translateY(-50%)" }}
 					>
-						<span className="pr-1">{db}</span>
+						<span className="pr-1">{value}</span>
 					</div>
 				);
 			})}

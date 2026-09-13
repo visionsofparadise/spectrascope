@@ -3,7 +3,9 @@ import { ChartSvg, HorizontalGridlines, TracePolylines } from "../spectral/chart
 import { ChartLayout, useChartView, type ChartAxis, type ChartCanvasBaseProps } from "../spectral/chartView";
 import { useReportComputeState } from "../spectral/firstComputeProgress";
 import { useTraceCompute } from "../spectral/traceCompute";
+import { visibleValueTicksOf } from "../spectral/valueTicks";
 import { computeWindowTransform } from "../useTimeViewport";
+import { axisFractionOf } from "../utils/axisRange";
 import { METRICS } from "../viewSettings";
 import { buildPolylineSegments } from "./chartTrace";
 import { useTimelineChromeSources } from "./viewAudio";
@@ -11,6 +13,7 @@ import type { Source } from "../source";
 import type { SourceViewProps } from "./viewProps";
 import type { ChartTraceProps } from "../spectral/chartTraceProps";
 import type { ChartReadoutTrace } from "../spectral/useChartReadouts";
+import type { AxisRange } from "../utils/axisRange";
 import type { LoudnessMetric, MetricSpec, ViewControlSettings } from "../viewSettings";
 import type { LoudnessData, SpectralOptions, SpectralQuery } from "spectral-display";
 
@@ -31,8 +34,7 @@ const DEFAULT_METRIC: MetricSpec = METRICS[2] ?? {
 };
 
 const DB_MAX = 0;
-const DB_TICKS_60: ReadonlyArray<number> = [0, -10, -20, -30, -40, -50, -60];
-const DB_TICKS_40: ReadonlyArray<number> = [0, -5, -10, -15, -20, -25, -30, -35, -40];
+const DB_TICK_COUNT = 8;
 
 function ampToDb(amp: number, floorDb: number): number {
 	if (amp <= 0 || !Number.isFinite(amp)) return floorDb;
@@ -247,9 +249,10 @@ interface ScalarLabelsProps {
 	readonly visibleSources: ReadonlyArray<Source>;
 	readonly loudnessMap: ReadonlyMap<string, { data: LoudnessData; query?: SpectralQuery }>;
 	readonly metric: MetricSpec;
+	readonly range: AxisRange;
 }
 
-function ScalarLabels({ visibleSources, loudnessMap, metric }: ScalarLabelsProps) {
+function ScalarLabels({ visibleSources, loudnessMap, metric, range }: ScalarLabelsProps) {
 	return (
 		<>
 			{visibleSources.map((source) => {
@@ -261,13 +264,15 @@ function ScalarLabels({ visibleSources, loudnessMap, metric }: ScalarLabelsProps
 
 				if (!scalar || !Number.isFinite(scalar.value)) return null;
 
-				const yPct = dbToY(scalar.value, metric.axisMin) * 100;
+				const position = axisFractionOf(dbToY(scalar.value, metric.axisMin), range);
+
+				if (position < 0 || position > 1) return null;
 
 				return (
 					<div
 						key={source.id}
 						className="pointer-events-none absolute right-2 -translate-y-1/2 whitespace-nowrap font-technical text-[length:var(--text-xs)] tabular-nums"
-						style={{ top: `${yPct}%`, color: source.layerColor.primary }}
+						style={{ top: `${position * 100}%`, color: source.layerColor.primary }}
 					>
 						{scalar.text}
 						{measurement.query && (
@@ -307,12 +312,12 @@ function ChartCanvas({ chart, renderableSources, metric }: ChartCanvasProps) {
 		});
 	}, []);
 
-	const dbTicks = metric.axisMin === -60 ? DB_TICKS_60 : DB_TICKS_40;
+	const dbTicks = visibleValueTicksOf(metric.axisMin, DB_MAX, chart.yRange, DB_TICK_COUNT);
 
 	return (
 		<div className="relative h-full w-full overflow-hidden bg-void">
-			<HorizontalGridlines fractions={dbTicks.map((db) => dbToY(db, metric.axisMin))} />
-			<ChartSvg>
+			<HorizontalGridlines fractions={dbTicks.map((db) => dbToY(db, metric.axisMin))} range={chart.yRange} />
+			<ChartSvg yRange={chart.yRange}>
 				{renderableSources.map(({ source, audioData }) => (
 					<SourceLoudnessTrace
 						key={source.id}
@@ -334,6 +339,7 @@ function ChartCanvas({ chart, renderableSources, metric }: ChartCanvasProps) {
 					visibleSources={renderableSources.map((entry) => entry.source)}
 					loudnessMap={loudnessMap}
 					metric={metric}
+					range={chart.yRange}
 				/>
 			)}
 		</div>
@@ -353,6 +359,8 @@ export function LoudnessView({ sources, sourceAudio, settings, onTransportContro
 			max: DB_MAX,
 			min: metricSpec.axisMin,
 			formatValue: (value) => `${value.toFixed(1)} dB`,
+			rangeLabel: "Loudness range",
+			unit: "dB",
 			emptyValue: "— dB",
 		}),
 		[metricSpec.axisMin],
@@ -360,10 +368,8 @@ export function LoudnessView({ sources, sourceAudio, settings, onTransportContro
 
 	const chart = useChartView(chromeAudio, layerColor, axis, onTransportControlChange);
 
-	const dbTicks = metricSpec.axisMin === -60 ? DB_TICKS_60 : DB_TICKS_40;
-
 	return (
-		<ChartLayout chart={chart} ticks={dbTicks} isEmpty={renderableSources.length === 0}>
+		<ChartLayout chart={chart} tickCount={DB_TICK_COUNT} isEmpty={renderableSources.length === 0}>
 			<ChartCanvas chart={chart} renderableSources={renderableSources} metric={metricSpec} />
 		</ChartLayout>
 	);

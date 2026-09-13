@@ -35,7 +35,6 @@ describe("strip display modes", () => {
 		expect(tree.find((element) => element.type === DbAxis)?.props.verticalRange).toEqual(view.frequencyRange);
 		const minimap = tree.find((element) => element.type === FrequencyMinimap);
 		expect(minimap?.props.amplitude).toBe(true);
-		expect(minimap?.props.computeResult).toBeNull();
 		expect(minimap?.props.onFrequencyRangeChange).toBe(view.onFrequencyRangeChange);
 		const grid = elements(StripOverlays({ view, settings: INITIAL_VIEW_CONTROL_SETTINGS, spectrogram: false }));
 		expect(grid.find((element) => element.type === GridOverlay)?.props.mode).toBe("amp");

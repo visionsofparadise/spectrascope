@@ -1,206 +1,113 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FrequencyMinimap } from "./FrequencyMinimap";
+import { ScrollTrack } from "./ScrollTrack";
+import { MIN_FREQUENCY_SPAN } from "../utils/frequencyRange";
 import { EMPTY_AUDIO_DATA } from "../views/viewAudio";
-import { SpectrogramCanvas } from "spectral-display";
 import type { ComponentProps, ReactElement } from "react";
-import type { ComputeResultReady, FrequencyScale } from "spectral-display";
+import type { FrequencyScale } from "spectral-display";
 
-const runtime = vi.hoisted(() => ({
-	index: 0,
-	refs: [] as Array<{ current: unknown }>,
-	result: null as ComputeResultReady | null,
-}));
+const runtime = vi.hoisted(() => ({ index: 0, refs: [] as Array<{ current: unknown }> }));
 vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
-	memo: (component: unknown) => component,
 	useRef: (initial: unknown) => {
 		const index = runtime.index++;
 		return (runtime.refs[index] ??= { current: initial });
 	},
-	useMemo: (compute: () => unknown) => compute(),
 	useCallback: (callback: unknown) => callback,
 	useEffect: () => {},
 }));
-vi.mock("./useContainerSize", () => ({ useContainerSize: () => ({ width: 64, height: 800 }) }));
-vi.mock("spectral-display", async (importOriginal) => ({
-	...(await importOriginal<typeof import("spectral-display")>()),
-	useSpectralCompute: vi.fn(() => {
-		throw new Error("Minimap must reuse displayed spectrum");
-	}),
-	SpectrogramCanvas: () => null,
-}));
 
-function buttons(node: unknown): Array<ReactElement<ComponentProps<"button">>> {
-	if (!node || typeof node !== "object") return [];
-	if (Array.isArray(node)) return node.flatMap(buttons);
-	const element = node as ReactElement<{ children?: unknown }>;
-	return [
-		...(element.type === "button" ? [element as ReactElement<ComponentProps<"button">>] : []),
-		...buttons(element.props?.children),
-	];
-}
-function renderTree(change: ReturnType<typeof vi.fn>, frequencyScale: FrequencyScale = "mel", amplitude = false) {
-	runtime.index = 0;
+type TrackElement = ReactElement<ComponentProps<typeof ScrollTrack>>;
+type ButtonElement = ReactElement<ComponentProps<"button">>;
+
+function renderTrack(change: ReturnType<typeof vi.fn>, frequencyScale: FrequencyScale = "mel", amplitude = false) {
 	return FrequencyMinimap({
 		amplitude,
 		sampleRate: EMPTY_AUDIO_DATA.sampleRate,
-		computeResult: runtime.result,
 		frequencyRange: { top: 0.25, bottom: 0.75 },
 		frequencyScale,
 		onFrequencyRangeChange: change,
-	});
+	}) as TrackElement;
 }
-function render(change: ReturnType<typeof vi.fn>) {
-	return buttons(renderTree(change));
-}
-function hasCanvas(node: unknown): boolean {
-	if (Array.isArray(node)) return node.some(hasCanvas);
-	if (!node || typeof node !== "object") return false;
+function buttons(node: unknown): Array<ButtonElement> {
+	if (!node || typeof node !== "object") return [];
+	if (Array.isArray(node)) return node.flatMap(buttons);
 	const element = node as ReactElement<{ children?: unknown }>;
-	return (
-		element.type === SpectrogramCanvas ||
-		(typeof element.type === "function" && hasCanvas((element.type as (props: unknown) => unknown)(element.props))) ||
-		hasCanvas(element.props?.children)
-	);
+	return [...(element.type === "button" ? [element as ButtonElement] : []), ...buttons(element.props?.children)];
 }
+function controlsOf(track: TrackElement) {
+	runtime.index = 0;
+	return buttons(ScrollTrack(track.props));
+}
+function keyDown(button: ButtonElement | undefined, key: string) {
+	button?.props.onKeyDown?.({
+		key,
+		shiftKey: false,
+		preventDefault: vi.fn(),
+		stopPropagation: vi.fn(),
+	} as unknown as React.KeyboardEvent<HTMLButtonElement>);
+}
+
 beforeEach(() => {
 	runtime.refs = [];
 	runtime.index = 0;
-	runtime.result = null;
 });
-describe("frequency minimap controls", () => {
-	it("keeps overlapping tile canvas identity when earlier tiles leave the viewport", () => {
-		const first = {
-			status: "ready",
-			query: { startMs: 0, endMs: 500 },
-			options: { config: { frequencyScale: "mel" } },
-		} as ComputeResultReady;
-		const second = { ...first, query: { ...first.query, startMs: 500, endMs: 1000 } };
-		const draw = (results: Array<ComputeResultReady>) => {
-			runtime.index = 0;
-			const tree = FrequencyMinimap({
-				sampleRate: 48000,
-				computeResult: null,
-				tiles: results.map((result) => ({ result, timeOffsetMs: 0 })),
-				startMs: 0,
-				endMs: 1000,
-				frequencyRange: { top: 0, bottom: 1 },
-				onFrequencyRangeChange: vi.fn(),
-			});
-			return (tree.props.children as Array<unknown>)
-				.flat()
-				.filter(
-					(child) =>
-						child &&
-						typeof child === "object" &&
-						(child as ReactElement<ComponentProps<"div">>).props?.style?.transform,
-				) as Array<ReactElement>;
-		};
-		expect(draw([second])[0]?.key).toBe(draw([first, second])[1]?.key);
+
+describe("frequency track", () => {
+	it("renders the design scroll track with the frequency crop and minimum span", () => {
+		const track = renderTrack(vi.fn());
+		expect(track.type).toBe(ScrollTrack);
+		expect(track.props.axis).toBe("y");
+		expect(track.props.range).toEqual({ start: 0.25, end: 0.75 });
+		expect(track.props.minSpan).toBe(MIN_FREQUENCY_SPAN);
+		expect(controlsOf(track).map((button) => button.props["aria-label"])).toEqual([
+			"Frequency range",
+			"Upper frequency limit",
+			"Lower frequency limit",
+		]);
 	});
-	it("places progressive spectral tiles in the live timeline and masks replaced coverage", () => {
-		const old = {
-			status: "ready",
-			query: { startMs: 0, endMs: 1000 },
-			options: { config: { frequencyScale: "mel" } },
-		} as ComputeResultReady;
-		const next = { ...old, query: { ...old.query, startMs: 500, endMs: 1000 } };
-		const tree = FrequencyMinimap({
-			sampleRate: 48000,
-			computeResult: null,
-			tiles: [
-				{ result: old, timeOffsetMs: 250 },
-				{ result: next, timeOffsetMs: 250 },
-			],
-			startMs: 0,
-			endMs: 2000,
-			frequencyRange: { top: 0, bottom: 1 },
-			onFrequencyRangeChange: vi.fn(),
-		});
-		const children = (tree.props.children as Array<unknown>).flat() as Array<ReactElement<ComponentProps<"div">>>;
-		const layers = children.filter((child) => child && typeof child === "object" && child.props?.style?.transform);
-		expect(layers[0]?.props.style?.transform).toBe("translateX(12.5%) scaleX(0.5)");
-		expect(layers[0]?.props.style?.maskImage).toContain("black 50%, transparent 50%");
-		expect(layers[1]?.props.style?.transform).toBe("translateX(37.5%) scaleX(0.25)");
-		expect(layers[1]?.props.style?.maskImage).toBeUndefined();
-	});
-	it("keeps amplitude navigation without mounting a supplied spectrum", () => {
-		runtime.result = {
-			status: "ready",
-			query: { startMs: 0, endMs: 1000, width: 256, height: 400 },
-			options: { config: { frequencyScale: "mel" } },
-		} as ComputeResultReady;
-		const change = vi.fn();
-		const tree = renderTree(change, "mel", true);
-		const controls = buttons(tree);
-		const pan = controls.find((button) => button.props["aria-label"] === "Amplitude range");
-		expect(hasCanvas(tree)).toBe(false);
-		expect(pan?.props["aria-valuetext"]).toBe("-0.5 to 0.5 FS");
-		expect(
-			controls.find((button) => button.props["aria-label"] === "Upper amplitude limit")?.props["aria-valuetext"],
-		).toBe("0.5 FS");
-		expect(
-			controls.find((button) => button.props["aria-label"] === "Lower amplitude limit")?.props["aria-valuetext"],
-		).toBe("-0.5 FS");
-		pan?.props.onKeyDown?.({
-			key: "+",
-			shiftKey: false,
-			preventDefault: vi.fn(),
-			stopPropagation: vi.fn(),
-		} as unknown as React.KeyboardEvent<HTMLButtonElement>);
-		expect(change).toHaveBeenCalledWith({ top: 0.3, bottom: 0.7 });
-		controls
-			.find((button) => button.props["aria-label"] === "Reset amplitude range")
-			?.props.onClick?.({} as React.MouseEvent<HTMLButtonElement>);
-		expect(change).toHaveBeenLastCalledWith({ top: 0, bottom: 1 });
+	it("keeps amplitude labels and value texts", () => {
+		const controls = controlsOf(renderTrack(vi.fn(), "mel", true));
+		const text = (label: string) =>
+			controls.find((button) => button.props["aria-label"] === label)?.props["aria-valuetext"];
+		expect(text("Amplitude range")).toBe("-0.5 to 0.5 FS");
+		expect(text("Upper amplitude limit")).toBe("0.5 FS");
+		expect(text("Lower amplitude limit")).toBe("-0.5 FS");
 	});
 	it("uses the selected scale for accessible frequency values", () => {
-		const controls = buttons(renderTree(vi.fn(), "linear"));
-		const pan = controls.find((button) => button.props["aria-label"] === "Frequency range");
+		const track = renderTrack(vi.fn(), "linear");
 		const nyquist = EMPTY_AUDIO_DATA.sampleRate / 2;
-		expect(pan?.props["aria-valuetext"]).toBe(`${Math.round(nyquist * 0.25)} to ${Math.round(nyquist * 0.75)} Hz`);
+		expect(track.props.valueText).toBe(`${Math.round(nyquist * 0.25)} to ${Math.round(nyquist * 0.75)} Hz`);
+		expect(track.props.edgeValueTexts).toEqual([
+			`${Math.round(nyquist * 0.75)} Hz`,
+			`${Math.round(nyquist * 0.25)} Hz`,
+		]);
 	});
-	it("hides held pixels from a different scale until matching output is ready", () => {
-		const previous = {
-			status: "ready",
-			query: { startMs: 0, endMs: 1000, width: 256, height: 400 },
-			options: { config: { frequencyScale: "mel" } },
-		};
-		runtime.result = previous as ComputeResultReady;
-		expect(hasCanvas(renderTree(vi.fn(), "linear"))).toBe(false);
-		expect(hasCanvas(renderTree(vi.fn(), "mel"))).toBe(true);
-		runtime.result = {
-			status: "ready",
-			query: { startMs: 0, endMs: 1000, width: 256, height: 400 },
-			options: { config: { frequencyScale: "linear" } },
-		} as ComputeResultReady;
-		expect(hasCanvas(renderTree(vi.fn(), "linear"))).toBe(true);
-	});
-	it("zooms and resets through keyboard and the named reset action", () => {
+	it("zooms and resets through keyboard and double-click as frequency ranges", () => {
 		const change = vi.fn();
-		const controls = render(change);
+		const controls = controlsOf(renderTrack(change));
 		const pan = controls.find((button) => button.props["aria-label"] === "Frequency range");
-		pan?.props.onKeyDown?.({
-			key: "+",
-			shiftKey: false,
-			preventDefault: vi.fn(),
-			stopPropagation: vi.fn(),
-		} as unknown as React.KeyboardEvent<HTMLButtonElement>);
+		keyDown(pan, "+");
 		expect(change).toHaveBeenCalledWith({ top: 0.3, bottom: 0.7 });
-		controls
-			.find((button) => button.props["aria-label"] === "Reset frequency range")
-			?.props.onClick?.({} as React.MouseEvent<HTMLButtonElement>);
+		keyDown(pan, "Escape");
 		expect(change).toHaveBeenLastCalledWith({ top: 0, bottom: 1 });
+		change.mockClear();
+		keyDown(pan, "0");
+		expect(change).toHaveBeenLastCalledWith({ top: 0, bottom: 1 });
+		change.mockClear();
+		pan?.props.onDoubleClick?.({} as React.MouseEvent<HTMLButtonElement>);
+		expect(change).toHaveBeenCalledWith({ top: 0, bottom: 1 });
 	});
 	it("focuses and pans a captured drag within the full spectrum", () => {
 		const change = vi.fn();
-		const controls = render(change);
-		runtime.refs[0]!.current = { getBoundingClientRect: () => ({ top: 0, height: 100 }) };
+		const controls = controlsOf(renderTrack(change));
+		runtime.refs[0]!.current = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 8, height: 100 }) };
 		const surface = { focus: vi.fn(), setPointerCapture: vi.fn(), hasPointerCapture: () => true };
 		const pan = controls.find((button) => button.props["aria-label"] === "Frequency range");
 		const event = {
 			button: 0,
 			pointerId: 1,
+			clientX: 0,
 			clientY: 50,
 			currentTarget: surface,
 			preventDefault: vi.fn(),

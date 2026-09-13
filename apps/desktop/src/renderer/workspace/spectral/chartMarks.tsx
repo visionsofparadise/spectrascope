@@ -1,4 +1,6 @@
 import { computeWindowTransform } from "../useTimeViewport";
+import { axisFractionOf, FULL_AXIS_RANGE } from "../utils/axisRange";
+import type { AxisRange } from "../utils/axisRange";
 import type { SpectralQuery } from "spectral-display";
 
 export function TracePolylines({
@@ -24,38 +26,64 @@ export function TracePolylines({
 	);
 }
 
-export function HorizontalGridlines({ fractions }: { readonly fractions: ReadonlyArray<number> }) {
+interface GridlinesProps {
+	readonly fractions: ReadonlyArray<number>;
+	readonly range?: AxisRange;
+}
+
+function visiblePositionsOf(fractions: ReadonlyArray<number>, range: AxisRange) {
+	return fractions
+		.map((fraction) => ({ fraction, position: axisFractionOf(fraction, range) }))
+		.filter(({ position }) => position >= 0 && position <= 1);
+}
+
+export function HorizontalGridlines({ fractions, range = FULL_AXIS_RANGE }: GridlinesProps) {
 	return (
 		<>
-			{fractions.map((fraction) => (
+			{visiblePositionsOf(fractions, range).map(({ fraction, position }) => (
 				<div
 					key={`h${fraction}`}
 					className="pointer-events-none absolute left-0 right-0 h-px bg-chrome-border-subtle"
-					style={{ top: `${fraction * 100}%` }}
+					style={{ top: `${position * 100}%` }}
 				/>
 			))}
 		</>
 	);
 }
 
-export function VerticalGridlines({ fractions }: { readonly fractions: ReadonlyArray<number> }) {
+export function VerticalGridlines({ fractions, range = FULL_AXIS_RANGE }: GridlinesProps) {
 	return (
 		<>
-			{fractions.map((fraction) => (
+			{visiblePositionsOf(fractions, range).map(({ fraction, position }) => (
 				<div
 					key={`v${fraction}`}
 					className="pointer-events-none absolute top-0 bottom-0 w-px bg-chrome-border-subtle"
-					style={{ left: `${fraction * 100}%` }}
+					style={{ left: `${position * 100}%` }}
 				/>
 			))}
 		</>
 	);
 }
 
-export function ChartSvg({ children }: { readonly children: React.ReactNode }) {
+export function rangeTransformOf(xRange: AxisRange, yRange: AxisRange): string {
+	const xSpan = xRange.end - xRange.start;
+	const ySpan = yRange.end - yRange.start;
+
+	return `translate(${-xRange.start / xSpan} ${-yRange.start / ySpan}) scale(${1 / xSpan} ${1 / ySpan})`;
+}
+
+export function ChartSvg({
+	children,
+	xRange = FULL_AXIS_RANGE,
+	yRange = FULL_AXIS_RANGE,
+}: {
+	readonly children: React.ReactNode;
+	readonly xRange?: AxisRange;
+	readonly yRange?: AxisRange;
+}) {
 	return (
 		<svg className="absolute inset-0 h-full w-full" viewBox="0 0 1 1" preserveAspectRatio="none">
-			{children}
+			<g transform={rangeTransformOf(xRange, yRange)}>{children}</g>
 		</svg>
 	);
 }

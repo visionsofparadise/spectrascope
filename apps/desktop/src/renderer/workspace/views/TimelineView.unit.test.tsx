@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createDefaultSource } from "../source";
 import { INITIAL_VIEW_CONTROL_SETTINGS } from "../viewSettings";
-import { TimelineView } from "./TimelineView";
+import { trackStackStyleOf, TimelineView, visibleTracksOf } from "./TimelineView";
 import { EMPTY_AUDIO_DATA } from "./viewAudio";
 import type { SpectralOptions } from "spectral-display";
 
@@ -117,5 +117,35 @@ describe("Timeline viewport rendering", () => {
 		expect(clipQuery?.query).toEqual({ startMs: 0, endMs: 5, width: 800, height: 400 });
 		expect(clipQuery?.config?.channelInput).toBe("side");
 		expect(html).toContain("left:50%;width:50%");
+	});
+});
+
+describe("Timeline track range", () => {
+	it("doubles the track stack and lifts it by half a viewport at a half range", () => {
+		expect(trackStackStyleOf({ start: 0.5, end: 1 })).toEqual({ height: "200%", top: "-100%" });
+		expect(trackStackStyleOf({ start: 0.25, end: 0.75 })).toEqual({ height: "200%", top: "-50%" });
+		expect(trackStackStyleOf({ start: 0, end: 1 })).toEqual({ height: "100%", top: "0%" });
+	});
+
+	it("counts fully or partly visible tracks", () => {
+		expect(visibleTracksOf({ start: 0, end: 1 }, 5)).toEqual({ first: 1, last: 5 });
+		expect(visibleTracksOf({ start: 0.3, end: 0.5 }, 5)).toEqual({ first: 2, last: 3 });
+		expect(visibleTracksOf({ start: 0.4, end: 0.6 }, 5)).toEqual({ first: 3, last: 3 });
+	});
+
+	it("renders the full-range stack beside a track scroll track", () => {
+		const source = createDefaultSource(0, { id: "only" });
+		const html = renderToStaticMarkup(
+			createElement(TimelineView, {
+				sources: [source],
+				sourceAudio: new Map([["only", { ...EMPTY_AUDIO_DATA, durationMs: 3600000, totalSamples: 172800000 }]]),
+				channelInput: "mono",
+				settings: INITIAL_VIEW_CONTROL_SETTINGS,
+			}),
+		);
+
+		expect(html).toContain("height:100%;top:0%");
+		expect(html).toContain('aria-label="Track range"');
+		expect(html).toContain('aria-valuetext="tracks 1 to 1 of 1"');
 	});
 });

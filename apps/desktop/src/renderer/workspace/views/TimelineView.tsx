@@ -5,10 +5,12 @@ import { hexToRgb255 } from "../spectral/colorUtil";
 import { GridOverlay } from "../spectral/GridOverlay";
 import { MinimapDisplay } from "../spectral/MinimapDisplay";
 import { trackPointerDrag } from "../spectral/pointerDrag";
+import { ScrollTrack } from "../spectral/ScrollTrack";
 import { SelectionSurface } from "../spectral/SelectionSurface";
 import { useWaveformReadouts } from "../spectral/useWaveformReadouts";
 import { useTransportPlayback } from "../spectral/viewScaffold";
 import { useTimeViewport } from "../useTimeViewport";
+import { FULL_AXIS_RANGE } from "../utils/axisRange";
 import { placeAudioOnTimeline } from "../utils/placeAudioOnTimeline";
 import { clipWindowIntersection, computeTimelineExtent } from "./timelineExtent";
 import { EMPTY_AUDIO_DATA, resolveVisibleSourceAudio } from "./viewAudio";
@@ -18,9 +20,26 @@ import type { TimelineDrag } from "./timelineExtent";
 import type { AudioData } from "../spectral/types";
 import type { DisplayedWaveform } from "../spectral/useWaveformReadouts";
 import type { TransportControl } from "../Transport";
+import type { AxisRange } from "../utils/axisRange";
 import type { ViewControlSettings } from "../viewSettings";
 import type { FrequencyScale } from "spectral-display";
 import type { ChannelInput } from "spectral-display";
+
+const TRACK_MIN_SPAN = 1 / 4;
+const TRACK_EDGE_EPSILON = 1e-9;
+
+export function trackStackStyleOf(range: AxisRange): { readonly height: string; readonly top: string } {
+	const span = range.end - range.start;
+
+	return { height: `${100 / span}%`, top: `${(-range.start / span) * 100}%` };
+}
+
+export function visibleTracksOf(range: AxisRange, count: number): { readonly first: number; readonly last: number } {
+	const first = Math.min(count, Math.floor(range.start * count + TRACK_EDGE_EPSILON) + 1);
+	const last = Math.max(first, Math.min(count, Math.ceil(range.end * count - TRACK_EDGE_EPSILON)));
+
+	return { first, last };
+}
 
 function TimelineTrack({
 	source,
@@ -253,6 +272,7 @@ export function TimelineView({
 }: TimelineViewProps) {
 	const readouts = useWaveformReadouts();
 	const [drag, setDrag] = useState<TimelineDrag | null>(null);
+	const [yRange, setYRange] = useState<AxisRange>(FULL_AXIS_RANGE);
 
 	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
@@ -329,6 +349,9 @@ export function TimelineView({
 		}
 	}, [onTransportControlChange, transportControl]);
 
+	const trackCount = renderableSources.length;
+	const visibleTracks = visibleTracksOf(yRange, trackCount);
+
 	return (
 		<div className="flex h-full min-h-0 w-full overflow-hidden bg-void">
 			<div
@@ -354,7 +377,7 @@ export function TimelineView({
 						</div>
 					) : (
 						<>
-							<div className="absolute inset-0 flex flex-col">
+							<div className="absolute inset-x-0 flex flex-col" style={trackStackStyleOf(yRange)}>
 								{renderableSources.map(({ source, audioData }) => (
 									<TimelineTrack
 										key={source.id}
@@ -410,6 +433,21 @@ export function TimelineView({
 					channelInput={channelInput}
 					onScrubToFraction={setViewportToFraction}
 				/>
+			</div>
+			<div className="flex shrink-0 flex-col">
+				<div className="h-8" />
+				<ScrollTrack
+					axis="y"
+					className="min-h-0 flex-1"
+					range={yRange}
+					minSpan={TRACK_MIN_SPAN}
+					onRangeChange={setYRange}
+					label="Track range"
+					valueText={`tracks ${visibleTracks.first} to ${visibleTracks.last} of ${trackCount}`}
+					edgeLabels={["Upper track range", "Lower track range"]}
+					edgeValueTexts={[`track ${visibleTracks.first}`, `track ${visibleTracks.last}`]}
+				/>
+				<div className="h-8" />
 			</div>
 		</div>
 	);

@@ -3,6 +3,7 @@ import { ChartSvg, HorizontalGridlines, TraceGroup } from "../spectral/chartMark
 import { ChartLayout, useChartView, type ChartAxis, type ChartCanvasBaseProps } from "../spectral/chartView";
 import { useReportComputeState } from "../spectral/firstComputeProgress";
 import { useTraceCompute } from "../spectral/traceCompute";
+import { visibleValueTicksOf } from "../spectral/valueTicks";
 import { buildPolylineSegments } from "./chartTrace";
 import { useTimelineChromeSources } from "./viewAudio";
 import type { SourceViewProps } from "./viewProps";
@@ -19,13 +20,14 @@ const CORRELATION_CONFIG: SpectralOptions["config"] = {
 
 const CORR_MAX = 1;
 const CORR_MIN = -1;
-const CORR_TICKS: ReadonlyArray<number> = [1, 0.5, 0, -0.5, -1];
-const CORR_GRID_FRACTIONS: ReadonlyArray<number> = CORR_TICKS.map((corr) => corrToY(corr));
+const CORR_TICK_COUNT = 5;
 
 const CORR_AXIS: ChartAxis = {
 	max: CORR_MAX,
 	min: CORR_MIN,
 	formatValue: (value) => `${value.toFixed(2)} r`,
+	rangeLabel: "Correlation range",
+	unit: "r",
 	emptyValue: "— r",
 };
 
@@ -101,8 +103,11 @@ function ChartCanvas({ chart, renderableSources }: ChartCanvasBaseProps) {
 
 	return (
 		<div className="relative h-full w-full overflow-hidden bg-void">
-			<HorizontalGridlines fractions={CORR_GRID_FRACTIONS} />
-			<ChartSvg>
+			<HorizontalGridlines
+				fractions={visibleValueTicksOf(CORR_MIN, CORR_MAX, chart.yRange, CORR_TICK_COUNT).map(corrToY)}
+				range={chart.yRange}
+			/>
+			<ChartSvg yRange={chart.yRange}>
 				{renderableSources.map(({ source, audioData }) => (
 					<SourceCorrelationTrace
 						key={source.id}
@@ -127,7 +132,7 @@ export function CorrelationView({ sources, sourceAudio, onTransportControlChange
 	const chart = useChartView(chromeAudio, layerColor, CORR_AXIS, onTransportControlChange);
 
 	return (
-		<ChartLayout chart={chart} ticks={CORR_TICKS} isEmpty={renderableSources.length === 0}>
+		<ChartLayout chart={chart} tickCount={CORR_TICK_COUNT} isEmpty={renderableSources.length === 0}>
 			<ChartCanvas chart={chart} renderableSources={renderableSources} />
 		</ChartLayout>
 	);

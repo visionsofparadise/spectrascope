@@ -1,27 +1,13 @@
-import { useRef, useEffect, useCallback, memo } from "react";
-import { SpectrogramCanvas } from "spectral-display";
-import { computeWindowTransform } from "../useTimeViewport";
-import {
-	constrainFrequencyRange,
-	FULL_FREQUENCY_RANGE,
-	MIN_FREQUENCY_SPAN,
-	panFrequencyRange,
-	resizeFrequencyRange,
-	zoomFrequencyRange,
-} from "../utils/frequencyRange";
+import { constrainFrequencyRange, MIN_FREQUENCY_SPAN } from "../utils/frequencyRange";
 import { fractionToFrequency } from "../utils/frequencyScale";
-import { displayResultKey } from "./displayResultKey";
-import { tileCoverageMask } from "./tileCoverageMask";
-import type { FrequencyScale } from "spectral-display";
-import type { ComputeResultReady, TextureVerticalRange } from "spectral-display";
+import { ScrollTrack } from "./ScrollTrack";
+import { scrollTrackTextsOf } from "./scrollTrackTexts";
+import type { AxisRange } from "../utils/axisRange";
+import type { FrequencyScale, TextureVerticalRange } from "spectral-display";
 
 interface FrequencyMinimapProps {
 	readonly amplitude?: boolean;
 	readonly sampleRate: number;
-	readonly computeResult: ComputeResultReady | null;
-	readonly tiles?: ReadonlyArray<{ readonly result: ComputeResultReady; readonly timeOffsetMs: number }>;
-	readonly startMs?: number;
-	readonly endMs?: number;
 	readonly frequencyScale?: FrequencyScale;
 	readonly frequencyRange: TextureVerticalRange;
 	readonly onFrequencyRangeChange: (range: TextureVerticalRange) => void;
@@ -30,209 +16,37 @@ interface FrequencyMinimapProps {
 export function FrequencyMinimap({
 	amplitude = false,
 	sampleRate,
-	computeResult,
-	tiles,
-	startMs = computeResult?.query.startMs ?? 0,
-	endMs = computeResult?.query.endMs ?? 1,
 	frequencyScale = "mel",
 	frequencyRange,
 	onFrequencyRangeChange,
 }: FrequencyMinimapProps) {
-	const containerRef = useRef<HTMLDivElement>(null);
-	const range = constrainFrequencyRange(frequencyRange);
-	const rangeRef = useRef(range);
-	const changeRef = useRef(onFrequencyRangeChange);
-
-	rangeRef.current = range;
-	changeRef.current = onFrequencyRangeChange;
-
-	const dragRef = useRef<{ mode: "pan" | "top" | "bottom"; start: number; range: TextureVerticalRange } | null>(null);
-	const fractionOf = useCallback((clientY: number) => {
-		const rect = containerRef.current?.getBoundingClientRect();
-
-		return rect && rect.height > 0 ? Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)) : 0;
-	}, []);
-
-	useEffect(() => {
-		const element = containerRef.current;
-
-		if (!element) return;
-
-		const wheel = (event: WheelEvent) => {
-			event.preventDefault();
-			event.stopPropagation();
-			changeRef.current(
-				zoomFrequencyRange(rangeRef.current, Math.exp(event.deltaY * 0.002), fractionOf(event.clientY)),
+	const constrained = constrainFrequencyRange(frequencyRange);
+	const range: AxisRange = { start: constrained.top, end: constrained.bottom };
+	const texts = amplitude
+		? scrollTrackTextsOf(
+				"y",
+				"Amplitude range",
+				range,
+				(fraction) => String(Number((1 - 2 * fraction).toFixed(3))),
+				"FS",
+			)
+		: scrollTrackTextsOf(
+				"y",
+				"Frequency range",
+				range,
+				(fraction) => String(Math.round(fractionToFrequency(fraction, sampleRate, undefined, frequencyScale))),
+				"Hz",
 			);
-		};
-
-		element.addEventListener("wheel", wheel, { passive: false });
-
-		return () => element.removeEventListener("wheel", wheel);
-	}, [fractionOf]);
-
-	const pointerDown = (event: React.PointerEvent<HTMLButtonElement>, mode: "pan" | "top" | "bottom") => {
-		if (event.button !== 0) return;
-
-		event.preventDefault();
-		event.stopPropagation();
-		event.currentTarget.focus({ preventScroll: true });
-		event.currentTarget.setPointerCapture(event.pointerId);
-		dragRef.current = { mode, start: fractionOf(event.clientY), range: rangeRef.current };
-	};
-	const pointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
-		const drag = dragRef.current;
-
-		if (!drag || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
-
-		const fraction = fractionOf(event.clientY);
-
-		onFrequencyRangeChange(
-			drag.mode === "pan"
-				? panFrequencyRange(drag.range, fraction - drag.start)
-				: resizeFrequencyRange(drag.range, drag.mode, fraction),
-		);
-	};
-	const keyDown = (event: React.KeyboardEvent<HTMLButtonElement>, mode: "pan" | "top" | "bottom") => {
-		const step = (range.bottom - range.top) / (event.shiftKey ? 100 : 10);
-		let next: TextureVerticalRange | undefined;
-		const delta =
-			event.key === "ArrowUp"
-				? -step
-				: event.key === "ArrowDown"
-					? step
-					: event.key === "PageUp"
-						? -step * 5
-						: event.key === "PageDown"
-							? step * 5
-							: 0;
-
-		if (delta)
-			next =
-				mode === "pan" ? panFrequencyRange(range, delta) : resizeFrequencyRange(range, mode, range[mode] + delta);
-		else if (event.key === "Home")
-			next =
-				mode === "pan"
-					? panFrequencyRange(range, -1)
-					: resizeFrequencyRange(range, mode, mode === "top" ? 0 : range.top + MIN_FREQUENCY_SPAN);
-		else if (event.key === "End")
-			next =
-				mode === "pan"
-					? panFrequencyRange(range, 1)
-					: resizeFrequencyRange(range, mode, mode === "bottom" ? 1 : range.bottom - MIN_FREQUENCY_SPAN);
-		else if (event.key === "+" || event.key === "=")
-			next = zoomFrequencyRange(range, 0.8, (range.top + range.bottom) / 2);
-		else if (event.key === "-") next = zoomFrequencyRange(range, 1.25, (range.top + range.bottom) / 2);
-		else if (event.key === "Escape" || event.key === "0") next = FULL_FREQUENCY_RANGE;
-
-		if (next) {
-			event.preventDefault();
-			event.stopPropagation();
-			onFrequencyRangeChange(next);
-		}
-	};
-	const renderable = amplitude
-		? []
-		: (tiles ?? (computeResult ? [{ result: computeResult, timeOffsetMs: 0 }] : [])).filter(
-				(tile) => tile.result.options.config.frequencyScale === frequencyScale,
-			);
-	const amplitudeOf = (fraction: number) => Number((1 - 2 * fraction).toFixed(3));
-	const label = amplitude
-		? `${amplitudeOf(range.bottom)} to ${amplitudeOf(range.top)} FS`
-		: `${Math.round(fractionToFrequency(range.bottom, sampleRate, undefined, frequencyScale))} to ${Math.round(fractionToFrequency(range.top, sampleRate, undefined, frequencyScale))} Hz`;
+	const subject = amplitude ? "amplitude" : "frequency";
 
 	return (
-		<div ref={containerRef} className="relative w-8 overflow-hidden bg-void">
-			{renderable.map(({ result, timeOffsetMs }, index) => (
-				<div
-					key={displayResultKey(result)}
-					className="pointer-events-none absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full"
-					style={{
-						transform: computeWindowTransform(
-							{ startMs: result.query.startMs + timeOffsetMs, endMs: result.query.endMs + timeOffsetMs },
-							{ startMs, endMs },
-						),
-						transformOrigin: "left",
-						maskImage: tileCoverageMask(
-							result,
-							renderable.slice(index + 1).map((tile) => tile.result),
-						),
-					}}
-				>
-					<FrequencyTile result={result} />
-				</div>
-			))}
-			<div
-				className="pointer-events-none absolute inset-x-0 top-0 bg-black/65"
-				style={{ height: `${range.top * 100}%` }}
-			/>
-			<div
-				className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/65"
-				style={{ height: `${(1 - range.bottom) * 100}%` }}
-			/>
-			<button
-				type="button"
-				role="slider"
-				aria-label={amplitude ? "Amplitude range" : "Frequency range"}
-				aria-orientation="vertical"
-				aria-valuemin={0}
-				aria-valuemax={1}
-				aria-valuenow={(range.top + range.bottom) / 2}
-				aria-valuetext={label}
-				onPointerDown={(event) => pointerDown(event, "pan")}
-				onPointerMove={pointerMove}
-				onPointerUp={() => {
-					dragRef.current = null;
-				}}
-				onPointerCancel={() => {
-					dragRef.current = null;
-				}}
-				onKeyDown={(event) => keyDown(event, "pan")}
-				onDoubleClick={() => onFrequencyRangeChange(FULL_FREQUENCY_RANGE)}
-				className="absolute inset-x-0 cursor-ns-resize border border-data-selection-border bg-transparent outline-none focus-visible:ring-1 focus-visible:ring-primary"
-				style={{ top: `${range.top * 100}%`, height: `${(range.bottom - range.top) * 100}%` }}
-			/>
-			{(["top", "bottom"] as const).map((edge) => (
-				<button
-					key={edge}
-					type="button"
-					role="slider"
-					aria-label={`${edge === "top" ? "Upper" : "Lower"} ${amplitude ? "amplitude" : "frequency"} limit`}
-					aria-orientation="vertical"
-					aria-valuemin={0}
-					aria-valuemax={1}
-					aria-valuenow={range[edge]}
-					aria-valuetext={
-						amplitude
-							? `${amplitudeOf(range[edge])} FS`
-							: `${Math.round(fractionToFrequency(range[edge], sampleRate, undefined, frequencyScale))} Hz`
-					}
-					onPointerDown={(event) => pointerDown(event, edge)}
-					onPointerMove={pointerMove}
-					onPointerUp={() => {
-						dragRef.current = null;
-					}}
-					onPointerCancel={() => {
-						dragRef.current = null;
-					}}
-					onKeyDown={(event) => keyDown(event, edge)}
-					className="absolute inset-x-0 h-2 cursor-ns-resize bg-data-selection-border/70 outline-none focus-visible:ring-1 focus-visible:ring-primary"
-					style={{ top: `${range[edge] * 100}%`, transform: edge === "bottom" ? "translateY(-100%)" : undefined }}
-				/>
-			))}
-			<button
-				type="button"
-				aria-label={amplitude ? "Reset amplitude range" : "Reset frequency range"}
-				title={amplitude ? "Reset amplitude range" : "Reset frequency range"}
-				onClick={() => onFrequencyRangeChange(FULL_FREQUENCY_RANGE)}
-				className="absolute right-0 top-1/2 bg-void/80 px-1 font-technical text-xs text-chrome-text-secondary hover:text-primary"
-			>
-				↕
-			</button>
-		</div>
+		<ScrollTrack
+			axis="y"
+			range={range}
+			minSpan={MIN_FREQUENCY_SPAN}
+			{...texts}
+			edgeLabels={[`Upper ${subject} limit`, `Lower ${subject} limit`]}
+			onRangeChange={(next) => onFrequencyRangeChange({ top: next.start, bottom: next.end })}
+		/>
 	);
 }
-
-const FrequencyTile = memo(({ result }: { readonly result: ComputeResultReady }) => (
-	<SpectrogramCanvas computeResult={result} />
-));
