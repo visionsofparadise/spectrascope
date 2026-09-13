@@ -377,8 +377,8 @@ export function Transport({
 						<TransportCluster
 							label="View"
 							icon="lucide:sliders-horizontal"
-							inlineClassName="hidden min-w-0 @[1280px]:block"
-							compactClassName="shrink-0 @[1280px]:hidden"
+							inlineClassName="hidden min-w-0 @[1360px]:block"
+							compactClassName="shrink-0 @[1360px]:hidden"
 						>
 							<div className="[&_[role=listbox]]:bottom-full [&_[role=listbox]]:top-auto">{viewControls}</div>
 						</TransportCluster>

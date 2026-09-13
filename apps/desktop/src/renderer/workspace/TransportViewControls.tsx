@@ -84,7 +84,7 @@ function SpectrogramSelectors({
 	onSettingsChange,
 }: Pick<TransportViewControlsProps, "settings" | "onSettingsChange">) {
 	return (
-		<div className="flex max-w-[150px] flex-wrap items-center gap-x-1 gap-y-0.5">
+		<div className="flex items-center gap-1">
 			<Select
 				variant="chip"
 				direction="up"

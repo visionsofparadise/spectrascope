@@ -130,11 +130,15 @@ describe("spectrogram sampling control", () => {
 });
 
 describe("transport view control layout", () => {
-	it.each(["timeline", "slider"] as const)("wraps the spectrogram selectors into one block in %s", (view) => {
+	it.each(["timeline", "slider"] as const)("keeps the spectrogram selectors in one row in %s", (view) => {
 		const nodes = render(view);
 		expect(nodes[0]?.props.className).toContain("gap-2.5");
-		const block = nodes.find((element) => String(element.props.className).includes("max-w-[150px]"))!;
-		expect(block.props.className).toBe("flex max-w-[150px] flex-wrap items-center gap-x-1 gap-y-0.5");
+		const block = nodes.find(
+			(element) =>
+				element.props.className === "flex items-center gap-1" &&
+				elements(element.props.children).some((child) => child.props.ariaLabel === "Colour map"),
+		)!;
+		expect(String(block.props.className)).not.toContain("flex-wrap");
 		const blockNodes = elements(block.props.children);
 		expect(
 			blockNodes.filter((element) => element.type === "mock-select").map((element) => element.props.ariaLabel),
