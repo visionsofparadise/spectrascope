@@ -61,7 +61,7 @@ export function SliderView({
 					<div className="absolute inset-0">
 						{pairEntries.map((entry, index) => (
 							<StripSourceRender
-								key={entry.source.id}
+								key={index}
 								view={view}
 								settings={settings}
 								channelInput={channelInput}

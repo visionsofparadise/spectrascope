@@ -9,5 +9,5 @@ export function SumView({ theme, ...props }: DerivedSpectralViewProps & Differen
 		[theme],
 	);
 
-	return <DerivedPairView {...props} viewId="sum" operator="+" layerColorOf={layerColorOf} />;
+	return <DerivedPairView {...props} viewId="sum" operator="+" layerColorOf={layerColorOf} emptyNotice="No sources" />;
 }

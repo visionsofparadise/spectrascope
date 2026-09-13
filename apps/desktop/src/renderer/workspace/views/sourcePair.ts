@@ -1,5 +1,7 @@
 import type { Source } from "../source";
 
+export const NO_SOURCE = "";
+
 export interface SourcePair {
 	readonly a: string | null;
 	readonly b: string | null;
@@ -13,7 +15,7 @@ export function sourcePairOf(
 	const ids = new Set(sources.map((source) => source.id));
 	const resolvedA = selectedA !== null && ids.has(selectedA) ? selectedA : (sources[0]?.id ?? null);
 
-	if (sources.length < 2) return { a: resolvedA, b: null };
+	if (resolvedA === null || selectedB === NO_SOURCE) return { a: resolvedA, b: null };
 
 	const resolvedB =
 		selectedB !== null && ids.has(selectedB)

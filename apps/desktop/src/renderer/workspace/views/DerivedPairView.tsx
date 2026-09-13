@@ -10,12 +10,14 @@ interface DerivedPairViewProps extends Omit<DerivedSpectralViewProps, "theme">, 
 	readonly viewId: "sum" | "difference";
 	readonly operator: "+" | "−";
 	readonly layerColorOf: (pairA: Source | undefined) => LayerColor;
+	readonly emptyNotice?: string;
 }
 
 export function DerivedPairView({
 	viewId,
 	operator,
 	layerColorOf,
+	emptyNotice,
 	sources,
 	derivedAudio,
 	channelInput,
@@ -62,9 +64,11 @@ export function DerivedPairView({
 			}
 		>
 			{pair.a === null ? (
-				<div className="flex h-full items-center justify-center">
-					<p className="font-technical text-sm text-chrome-text-dim">No sources</p>
-				</div>
+				emptyNotice && (
+					<div className="flex h-full items-center justify-center">
+						<p className="font-technical text-sm text-chrome-text-dim">{emptyNotice}</p>
+					</div>
+				)
 			) : (
 				<>
 					<div className="absolute inset-0">
