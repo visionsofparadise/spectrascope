@@ -1,7 +1,3 @@
-export function defaultCurtainPositions(count: number): Array<number> {
-	return Array.from({ length: Math.max(0, count - 1) }, () => 1);
-}
-
 function stripLeft(stripIndex: number, positions: ReadonlyArray<number>): number {
 	return stripIndex === 0 ? 0 : (positions[stripIndex - 1] ?? 0);
 }
@@ -15,11 +11,4 @@ export function stripClipPath(stripIndex: number, positions: ReadonlyArray<numbe
 	const right = stripRight(stripIndex, positions, count);
 
 	return `inset(0 ${(1 - right) * 100}% 0 ${left * 100}%)`;
-}
-
-export function curtainBounds(
-	curtainIndex: number,
-	positions: ReadonlyArray<number>,
-): { readonly min: number; readonly max: number } {
-	return { min: positions[curtainIndex - 1] ?? 0, max: positions[curtainIndex + 1] ?? 1 };
 }

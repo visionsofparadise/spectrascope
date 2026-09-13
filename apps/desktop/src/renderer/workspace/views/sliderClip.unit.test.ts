@@ -1,16 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { curtainBounds, defaultCurtainPositions, stripClipPath } from "./sliderClip";
-
-describe("defaultCurtainPositions", () => {
-	it("returns N−1 curtains all at the right edge", () => {
-		expect(defaultCurtainPositions(3)).toEqual([1, 1]);
-	});
-
-	it("returns an empty array below two sources", () => {
-		expect(defaultCurtainPositions(1)).toEqual([]);
-		expect(defaultCurtainPositions(0)).toEqual([]);
-	});
-});
+import { stripClipPath } from "./sliderClip";
 
 describe("stripClipPath", () => {
 	// Three sources, curtains at 0.25 and 0.6.
@@ -33,26 +22,10 @@ describe("stripClipPath", () => {
 	});
 
 	it("shows the first source full-width when all curtains sit at the right edge", () => {
-		const full = defaultCurtainPositions(count);
+		const full = [1, 1];
 
 		expect(stripClipPath(0, full, count)).toBe("inset(0 0% 0 0%)");
 		// A trailing strip is fully masked away (left inset 100%).
 		expect(stripClipPath(1, full, count)).toBe("inset(0 0% 0 100%)");
-	});
-});
-
-describe("curtainBounds", () => {
-	const positions = [0.25, 0.6, 0.8];
-
-	it("bounds the first curtain by 0 and its right neighbour", () => {
-		expect(curtainBounds(0, positions)).toEqual({ min: 0, max: 0.6 });
-	});
-
-	it("bounds a middle curtain by both neighbours", () => {
-		expect(curtainBounds(1, positions)).toEqual({ min: 0.25, max: 0.8 });
-	});
-
-	it("bounds the last curtain by its left neighbour and 1", () => {
-		expect(curtainBounds(2, positions)).toEqual({ min: 0.6, max: 1 });
 	});
 });

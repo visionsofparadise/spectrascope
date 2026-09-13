@@ -95,6 +95,9 @@ export function Workspace({
 			)}
 			{activeView === "slider" && (
 				<SliderView
+					differenceA={differenceA}
+					differenceB={differenceB}
+					onDifferenceChange={onDifferenceChange}
 					onFrequencyRangeChange={onFrequencyRangeChange}
 					sources={sources}
 					sourceAudio={sourceAudio}
@@ -119,6 +122,9 @@ export function Workspace({
 			)}
 			{activeView === "sum" && (
 				<SumView
+					differenceA={differenceA}
+					differenceB={differenceB}
+					onDifferenceChange={onDifferenceChange}
 					onFrequencyRangeChange={onFrequencyRangeChange}
 					sources={sources}
 					derivedAudio={derivedAudio}

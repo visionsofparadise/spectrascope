@@ -1,64 +1,65 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Curtain } from "../spectral/Curtain";
 import { StripLayout, StripOverlays, StripSourceRender, useStripView } from "../spectral/stripView";
-import { curtainBounds, defaultCurtainPositions, stripClipPath } from "./sliderClip";
+import { stripClipPath } from "./sliderClip";
+import { sourcePairOf } from "./sourcePair";
+import { SourcePairSelector } from "./SourcePairSelector";
 import { useTimelineChromeSources } from "./viewAudio";
-import type { PerSourceSpectralViewProps } from "./viewProps";
+import type { DifferenceSelectionProps, PerSourceSpectralViewProps } from "./viewProps";
+
+interface SliderViewProps extends PerSourceSpectralViewProps, DifferenceSelectionProps {}
 
 export function SliderView({
 	sources,
 	sourceAudio,
 	channelInput,
 	settings,
+	differenceA,
+	differenceB,
+	onDifferenceChange,
 	onFrequencyRangeChange,
 	onTransportControlChange,
-}: PerSourceSpectralViewProps) {
+}: SliderViewProps) {
 	const { renderableSources, chromeAudio, layerColor } = useTimelineChromeSources(sources, sourceAudio);
-	const highestRateSource = renderableSources.reduce<(typeof renderableSources)[number] | undefined>(
+	const pair = useMemo(() => sourcePairOf(sources, differenceA, differenceB), [sources, differenceA, differenceB]);
+	const pairEntries = useMemo(
+		() =>
+			[pair.a, pair.b].flatMap((id) => {
+				const entry = id === null ? undefined : renderableSources.find((candidate) => candidate.source.id === id);
+
+				return entry ? [entry] : [];
+			}),
+		[pair.a, pair.b, renderableSources],
+	);
+	const highestRateEntry = pairEntries.reduce<(typeof pairEntries)[number] | undefined>(
 		(highest, entry) => (!highest || entry.audioData.sampleRate > highest.audioData.sampleRate ? entry : highest),
 		undefined,
 	);
 
-	const sourceCount = renderableSources.length;
-
-	const idsKey = useMemo(() => renderableSources.map((entry) => entry.source.id).join("|"), [renderableSources]);
-
-	const [positions, setPositions] = useState<Array<number>>(() => defaultCurtainPositions(sourceCount));
-	const [positionsKey, setPositionsKey] = useState(idsKey);
-
-	if (positionsKey !== idsKey) {
-		setPositionsKey(idsKey);
-		setPositions(defaultCurtainPositions(sourceCount));
-	}
-
-	const setCurtainAt = useCallback((index: number, next: number) => {
-		setPositions((previous) => {
-			const updated = previous.slice();
-
-			updated[index] = next;
-
-			return updated;
-		});
-	}, []);
+	const [curtain, setCurtain] = useState(0.5);
 
 	const view = useStripView(
 		"slider",
-		highestRateSource?.audioData ?? chromeAudio,
-		highestRateSource?.source.layerColor ?? layerColor,
+		highestRateEntry?.audioData ?? chromeAudio,
+		highestRateEntry?.source.layerColor ?? layerColor,
 		settings.frequencyRange,
 		settings.frequencyScale,
 		onFrequencyRangeChange,
 		onTransportControlChange,
 	);
 
-	const hasSources = sourceCount >= 2;
+	const count = pairEntries.length;
 
 	return (
-		<StripLayout channelInput={channelInput} view={view}>
-			{hasSources ? (
+		<StripLayout
+			channelInput={channelInput}
+			view={view}
+			header={<SourcePairSelector sources={sources} pair={pair} onPairChange={onDifferenceChange} />}
+		>
+			{count > 0 ? (
 				<>
 					<div className="absolute inset-0">
-						{renderableSources.map((entry, index) => (
+						{pairEntries.map((entry, index) => (
 							<StripSourceRender
 								key={entry.source.id}
 								view={view}
@@ -66,35 +67,20 @@ export function SliderView({
 								channelInput={channelInput}
 								source={entry.source}
 								audioData={entry.audioData}
-								clipPath={stripClipPath(index, positions, sourceCount)}
+								clipPath={count > 1 ? stripClipPath(index, [curtain], count) : undefined}
 							/>
 						))}
 					</div>
-					{positions.map((position, index) => {
-						const bounds = curtainBounds(index, positions);
-
-						return (
-							<div
-								key={renderableSources[index]?.source.id ?? index}
-								className="pointer-events-none absolute inset-0"
-								style={{ zIndex: positions.length - index }}
-							>
-								<Curtain
-									position={position}
-									min={bounds.min}
-									max={bounds.max}
-									onPositionChange={(next) => {
-										setCurtainAt(index, next);
-									}}
-								/>
-							</div>
-						);
-					})}
+					{count > 1 && (
+						<div className="pointer-events-none absolute inset-0">
+							<Curtain position={curtain} min={0} max={1} onPositionChange={setCurtain} />
+						</div>
+					)}
 					<StripOverlays view={view} settings={settings} />
 				</>
 			) : (
 				<div className="flex h-full items-center justify-center">
-					<p className="font-technical text-sm text-chrome-text-dim">Need at least two visible sources</p>
+					<p className="font-technical text-sm text-chrome-text-dim">No visible sources</p>
 				</div>
 			)}
 		</StripLayout>

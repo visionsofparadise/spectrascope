@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { sourcePairOf } from "../workspace/views/sourcePair";
 import {
 	derivedStreamQueryOptions,
 	initializeStreamQueries,
@@ -77,51 +78,41 @@ export function useDerivedStreams(
 		onDefaultDifferenceRef.current = onDefaultDifference;
 	}, [onDefaultDifference]);
 
-	const sumInputs = useMemo<ReadonlyArray<StreamInput>>(() => {
-		const inputs: Array<StreamInput> = [];
+	const pair = useMemo(() => sourcePairOf(sources, differenceA, differenceB), [sources, differenceA, differenceB]);
 
-		for (const source of resolveAudibleSources(sources)) {
-			const preparedSource = prepared.get(source.id);
+	const pairInputsOf = useCallback(
+		(gainB: StreamInput["gain"]): ReadonlyArray<StreamInput> | null => {
+			const inputs: Array<StreamInput> = [];
 
-			if (!preparedSource) continue;
+			for (const [id, gain] of [
+				[pair.a, 1],
+				[pair.b, gainB],
+			] as const) {
+				if (id === null) continue;
 
-			inputs.push({ pcmPath: preparedSource.pcmPath, offsetMs: Math.max(0, source.timelineOffsetMs), gain: 1 });
-		}
+				const source = sources.find((candidate) => candidate.id === id);
+				const preparedSource = source ? prepared.get(source.id) : undefined;
 
-		return inputs;
-	}, [sources, prepared]);
+				if (!source || !preparedSource) return null;
 
-	const sumSpec = useMemo(() => (sumInputs.length === 0 ? null : { inputs: sumInputs }), [sumInputs]);
+				inputs.push({ pcmPath: preparedSource.pcmPath, offsetMs: Math.max(0, source.timelineOffsetMs), gain });
+			}
 
-	const effectiveA =
-		differenceA !== null && sources.some((source) => source.id === differenceA)
-			? differenceA
-			: (sources[0]?.id ?? null);
-	const effectiveB =
-		differenceB !== null && sources.some((source) => source.id === differenceB)
-			? differenceB
-			: (sources[1]?.id ?? null);
+			return inputs.length === 0 ? null : inputs;
+		},
+		[pair, sources, prepared],
+	);
 
-	const diffInputs = useMemo<ReadonlyArray<StreamInput> | null>(() => {
-		if (effectiveA === null || effectiveB === null) return null;
+	const sumSpec = useMemo(() => {
+		const inputs = pairInputsOf(1);
 
-		const sourceA = sources.find((source) => source.id === effectiveA);
-		const sourceB = sources.find((source) => source.id === effectiveB);
+		return inputs === null ? null : { inputs };
+	}, [pairInputsOf]);
+	const diffSpec = useMemo(() => {
+		const inputs = pairInputsOf(-1);
 
-		if (!sourceA || !sourceB) return null;
-
-		const preparedA = prepared.get(sourceA.id);
-		const preparedB = prepared.get(sourceB.id);
-
-		if (!preparedA || !preparedB) return null;
-
-		return [
-			{ pcmPath: preparedA.pcmPath, offsetMs: Math.max(0, sourceA.timelineOffsetMs), gain: 1 },
-			{ pcmPath: preparedB.pcmPath, offsetMs: Math.max(0, sourceB.timelineOffsetMs), gain: -1 },
-		];
-	}, [sources, prepared, effectiveA, effectiveB]);
-
-	const diffSpec = useMemo(() => (diffInputs === null ? null : { inputs: diffInputs }), [diffInputs]);
+		return inputs === null ? null : { inputs };
+	}, [pairInputsOf]);
 
 	useEffect(() => {
 		if (differenceA !== null || differenceB !== null) return;
