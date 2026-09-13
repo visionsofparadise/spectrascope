@@ -29,6 +29,8 @@ export { LoudnessCanvas } from "./LoudnessCanvas";
 export type { LoudnessCanvasProps } from "./LoudnessCanvas";
 export { SpectrogramCanvas } from "./SpectrogramCanvas";
 export { useSpectralCompute } from "./useSpectralCompute";
+export { useDisplayCompute } from "./useDisplayCompute";
+export type { DisplayComputeResult, DisplayComputeTile } from "./useDisplayCompute";
 export type { ComputeResult, ComputeResultReady, SpectralOptions, SpectralQuery } from "./useSpectralCompute";
 export { lavaColormap } from "./utils/lava";
 export { VectorscopeCanvas } from "./VectorscopeCanvas";

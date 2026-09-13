@@ -30,6 +30,7 @@ export interface SampleQuery extends Dimensions {
 
 export interface PipelineOptions {
 	waveformSamplesPerPoint?: number;
+	skipWaveform?: boolean;
 	spectralEndSample?: number;
 	metadata: SpectralMetadata;
 	sampleQuery: SampleQuery;
@@ -116,7 +117,7 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 	const pointCount = Math.ceil(sampleCount / samplesPerPoint);
 	const waveformSamplesPerPoint =
 		options.waveformSamplesPerPoint ?? computeWaveformSamplesPerPoint(sampleCount, sampleQuery.width);
-	const waveformPointCount = Math.ceil(sampleCount / waveformSamplesPerPoint);
+	const waveformPointCount = options.skipWaveform ? 0 : Math.ceil(sampleCount / waveformSamplesPerPoint);
 	const scanRequest = {
 		metadata,
 		readSamples,
@@ -130,7 +131,7 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 		stereo,
 	};
 
-	if (!spectrogram && !ltas && options.waveformSamplesPerPoint === undefined) {
+	if (!spectrogram && !ltas && !options.skipWaveform && options.waveformSamplesPerPoint === undefined) {
 		const cached = cpuScanCache.get(scanRequest);
 
 		if (cached) {
@@ -344,7 +345,7 @@ export async function runPipeline(options: PipelineOptions, engine: SpectralEngi
 
 	signal.throwIfAborted();
 
-	if (options.waveformSamplesPerPoint === undefined) cpuScanCache.set(scanRequest, result);
+	if (!options.skipWaveform && options.waveformSamplesPerPoint === undefined) cpuScanCache.set(scanRequest, result);
 
 	return result;
 }

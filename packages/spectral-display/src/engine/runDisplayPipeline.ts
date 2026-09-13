@@ -1,5 +1,6 @@
 import { displayTiles } from "../utils/displayTiles";
 import { SharedWorkCache, type SharedWorkLease } from "../utils/SharedWorkCache";
+import { retainTexture } from "../utils/textureOwnership";
 import { WaveformTileCache } from "../utils/WaveformTileCache";
 import { getMaxFftSize } from "./device";
 import { runPipeline, type PipelineOptions, type PipelineResult } from "./runPipeline";
@@ -12,6 +13,7 @@ const work = new SharedWorkCache<PipelineResult>();
 const waveforms = new WaveformTileCache();
 const engines = new WeakMap<GPUDevice, SpectralEngine>();
 const deviceIds = new WeakMap<GPUDevice, number>();
+const textureReleases = new WeakMap<PipelineResult, () => void>();
 let nextDeviceId = 0;
 
 function engineOf(device: GPUDevice): SpectralEngine {
@@ -123,7 +125,12 @@ async function sampledSpectrum(
 	}
 }
 
-async function computeTile(options: PipelineOptions, tiles: DisplayTiles, sourceKey: string): Promise<PipelineResult> {
+async function computeTile(
+	options: PipelineOptions,
+	tiles: DisplayTiles,
+	sourceKey: string,
+	waveformOnly = false,
+): Promise<PipelineResult> {
 	const config = resolveConfig(options.config);
 	const { startSample, endSample } = options.sampleQuery;
 	const fftSize = Math.min(config.fftSize, getMaxFftSize(config.device));
@@ -153,12 +160,13 @@ async function computeTile(options: PipelineOptions, tiles: DisplayTiles, source
 	let summaryLease: SharedWorkLease<PipelineResult> | undefined;
 
 	try {
-		if (!summary || (config.spectrogram && !sampled)) {
+		if (!summary || (config.spectrogram && !sampled && !waveformOnly)) {
 			const scan = (signal: AbortSignal, spectrogram: boolean) =>
 				runPipeline(
 					{
 						...options,
 						onProgress: undefined,
+						skipWaveform: Boolean(summary),
 						waveformSamplesPerPoint: baseStep,
 						spectralEndSample: startSample + tiles.tileSamples,
 						config: { ...config, signal, spectrogram },
@@ -166,7 +174,7 @@ async function computeTile(options: PipelineOptions, tiles: DisplayTiles, source
 					engineOf(config.device),
 				);
 
-			if (config.spectrogram && !sampled) result = await scan(config.signal, true);
+			if (config.spectrogram && !sampled && !waveformOnly) result = await scan(config.signal, true);
 			else {
 				summaryLease = await work.run(
 					options.readSamples,
@@ -179,23 +187,26 @@ async function computeTile(options: PipelineOptions, tiles: DisplayTiles, source
 				result = summaryLease.value;
 			}
 
-			if (!result.waveformEnergyBuffer) throw new Error("Missing waveform energy summary");
+			if (!summary) {
+				if (!result.waveformEnergyBuffer) throw new Error("Missing waveform energy summary");
 
-			waveforms.set(
-				options.readSamples,
-				sourceKey,
-				startSample,
-				endSample,
-				baseStep,
-				result.waveformBuffer,
-				result.waveformEnergyBuffer,
-			);
-			summary = { ...result, waveformEnergyBuffer: result.waveformEnergyBuffer };
+				waveforms.set(
+					options.readSamples,
+					sourceKey,
+					startSample,
+					endSample,
+					baseStep,
+					result.waveformBuffer,
+					result.waveformEnergyBuffer,
+				);
+				summary = { ...result, waveformEnergyBuffer: result.waveformEnergyBuffer };
+			}
 		}
 
-		const texture = sampled
-			? await sampledSpectrum(options, tiles, summary.waveformEnergyBuffer, baseStep, frames)
-			: (result?.spectrogramTexture ?? null);
+		const texture =
+			sampled && !waveformOnly
+				? await sampledSpectrum(options, tiles, summary.waveformEnergyBuffer, baseStep, frames)
+				: (result?.spectrogramTexture ?? null);
 		const count = Math.ceil((endSample - startSample) / tiles.waveformSamplesPerPoint);
 		const waveformBuffer = new Float32Array(count * 2);
 		const waveformEnergyBuffer = new Float64Array(count);
@@ -227,6 +238,7 @@ async function computeTile(options: PipelineOptions, tiles: DisplayTiles, source
 			ltas: null,
 			correlationEnvelope: null,
 			vectorscopeHistogram: null,
+			displayEndSample: startSample + tiles.tileSamples,
 			options: { ...options, config },
 		};
 	} finally {
@@ -234,18 +246,41 @@ async function computeTile(options: PipelineOptions, tiles: DisplayTiles, source
 	}
 }
 
-export async function runDisplayPipeline(
-	options: PipelineOptions,
-	fallbackEngine: SpectralEngine,
-): Promise<PipelineResult> {
+export interface DisplayTileRequest {
+	readonly key: string;
+	readonly owner: object;
+	readonly options: PipelineOptions;
+	readonly displayEndSample: number;
+	readonly waveformKey: string;
+	readonly spectrogramKey: string | null;
+	compute(signal: AbortSignal, waveformOnly: boolean): Promise<PipelineResult>;
+}
+
+export const displayTileWork = work;
+export const displayTileBytes = bytesOf;
+
+export function retainDisplayTile(result: PipelineResult): PipelineResult {
+	if (result.spectrogramTexture && !textureReleases.has(result))
+		textureReleases.set(result, retainTexture(result.spectrogramTexture));
+
+	return result;
+}
+
+export function releaseDisplayTile(result: PipelineResult): void {
+	textureReleases.get(result)?.();
+}
+
+function tilesOf(options: PipelineOptions): DisplayTiles | null {
 	const config = resolveConfig(options.config);
-	const tiles =
-		config.displayTiles && !config.loudness && !config.truePeak && !config.stereo && !config.ltas
-			? displayTiles(options.sampleQuery, options.metadata, config.device, config.fftSize)
-			: null;
 
-	if (!tiles) return runPipeline(options, fallbackEngine);
+	return config.displayTiles && !config.loudness && !config.truePeak && !config.stereo && !config.ltas
+		? displayTiles(options.sampleQuery, options.metadata, config.device, config.fftSize)
+		: null;
+}
 
+export function createDisplayTileRequests(options: PipelineOptions): Array<DisplayTileRequest> {
+	const config = resolveConfig(options.config);
+	const tiles = tilesOf(options);
 	const sourceKey = JSON.stringify([options.metadata, config.channelInput]);
 	const spectralKey = JSON.stringify([
 		deviceIdOf(config.device),
@@ -255,40 +290,67 @@ export async function runDisplayPipeline(
 		config.colormap,
 		config.hopOverlap,
 		config.spectrogramSampling,
-		tiles.height,
+		tiles?.height ?? options.sampleQuery.height,
 	]);
+
+	return (tiles?.tileStarts ?? [options.sampleQuery.startSample]).map((startSample) => {
+		const endSample = tiles
+			? Math.min(options.metadata.sampleCount, startSample + tiles.tileSamples)
+			: options.sampleQuery.endSample;
+		const query = tiles
+			? { startSample, endSample, width: tiles.tileWidth, height: tiles.height }
+			: options.sampleQuery;
+		const base = [sourceKey, startSample, tiles?.tileSamples ?? endSample - startSample, query.width];
+		const waveformKey = JSON.stringify(tiles ? [...base, "waveform"] : [...base, "fine-waveform"]);
+		const spectrogramKey = config.spectrogram
+			? JSON.stringify(tiles ? [...base, spectralKey] : [...base, spectralKey, "fine"])
+			: null;
+		const tileOptions = { ...options, onProgress: undefined, sampleQuery: query, config };
+
+		return {
+			key: JSON.stringify([waveformKey, spectrogramKey]),
+			owner: options.readSamples,
+			options: tileOptions,
+			displayEndSample: tiles ? startSample + tiles.tileSamples : endSample,
+			waveformKey,
+			spectrogramKey,
+			compute: (signal, waveformOnly) =>
+				tiles
+					? computeTile({ ...tileOptions, config: { ...config, signal } }, tiles, sourceKey, waveformOnly)
+					: runPipeline(
+							{
+								...tileOptions,
+								config: { ...config, signal, spectrogram: !waveformOnly && config.spectrogram },
+							},
+							engineOf(config.device),
+						),
+		};
+	});
+}
+
+export async function runDisplayPipeline(
+	options: PipelineOptions,
+	fallbackEngine: SpectralEngine,
+): Promise<PipelineResult> {
+	const config = resolveConfig(options.config);
+	const tiles = tilesOf(options);
+
+	if (!tiles) return runPipeline(options, fallbackEngine);
+
 	const leases: Array<SharedWorkLease<PipelineResult>> = [];
 	let texture: GPUTexture | null = null;
 
 	try {
-		for (const startSample of tiles.tileStarts) {
+		for (const request of createDisplayTileRequests(options)) {
 			config.signal.throwIfAborted();
 
-			const endSample = Math.min(options.metadata.sampleCount, startSample + tiles.tileSamples);
-			const key = JSON.stringify([
-				sourceKey,
-				startSample,
-				tiles.tileSamples,
-				tiles.tileWidth,
-				config.spectrogram ? spectralKey : "waveform",
-			]);
 			const lease = await work.run(
-				options.readSamples,
-				key,
+				request.owner,
+				request.spectrogramKey ?? request.waveformKey,
 				config.signal,
-				(signal) =>
-					computeTile(
-						{
-							...options,
-							onProgress: undefined,
-							sampleQuery: { startSample, endSample, width: tiles.tileWidth, height: tiles.height },
-							config: { ...config, signal },
-						},
-						tiles,
-						sourceKey,
-					),
+				async (signal) => retainDisplayTile(await request.compute(signal, false)),
 				bytesOf,
-				(result) => result.spectrogramTexture?.destroy(),
+				releaseDisplayTile,
 			);
 
 			leases.push(lease);
