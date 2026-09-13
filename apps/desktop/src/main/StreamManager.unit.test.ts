@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { StreamManager } from "./StreamManager";
 import { renderRange } from "./audio/streamDsp";
 import { buildWavHeader } from "./audio/wavHeader";
@@ -21,6 +21,68 @@ afterAll(async () => {
 });
 
 describe("StreamManager ownership", () => {
+	it("retains resampled inputs through active requests and releases them after handles close", async () => {
+		const highPath = path.join(directory, "high.wav");
+		const convertedPath = path.join(directory, "converted.wav");
+		const samples = Buffer.alloc(16);
+		await fs.writeFile(highPath, Buffer.concat([buildWavHeader(2000, 1, 4), samples]));
+		await fs.writeFile(convertedPath, Buffer.concat([buildWavHeader(2000, 1, 4), samples]));
+		const release = vi.fn();
+		const prepare = vi.fn(async () => ({ pcmPath: convertedPath, release }));
+		const manager = new StreamManager(prepare);
+		try {
+			const info = await manager.registerStream({
+				inputs: [
+					{ pcmPath, offsetMs: 0, gain: 1 },
+					{ pcmPath: highPath, offsetMs: 0, gain: -1 },
+				],
+			});
+			expect(info).toMatchObject({ sampleRate: 2000, totalFrames: 4, durationMs: 2 });
+			expect(prepare).toHaveBeenCalledExactlyOnceWith(pcmPath, 2000);
+			const lease = await manager.acquire(info.key);
+			if (!lease) throw new Error("Missing stream");
+			manager.releaseStream(info.key);
+			expect(manager.usesPath(convertedPath)).toBe(true);
+			expect(release).not.toHaveBeenCalled();
+			expect((await renderRange(lease.resolved, 0, 4)).length).toBe(8);
+			lease.release();
+			await vi.waitFor(() => expect(release).toHaveBeenCalledOnce());
+			expect(manager.usesPath(convertedPath)).toBe(false);
+			for (const input of lease.resolved.inputs) await expect(input.fileHandle.stat()).rejects.toThrow();
+		} finally {
+			manager.dispose();
+		}
+	});
+
+	it("releases preparation that settles after manager disposal", async () => {
+		const highPath = path.join(directory, "disposed-high.wav");
+		const convertedPath = path.join(directory, "disposed-converted.wav");
+		const samples = Buffer.alloc(16);
+		await fs.writeFile(highPath, Buffer.concat([buildWavHeader(2000, 1, 4), samples]));
+		await fs.writeFile(convertedPath, Buffer.concat([buildWavHeader(2000, 1, 4), samples]));
+		const release = vi.fn();
+		let complete!: (value: { pcmPath: string; release: () => void }) => void;
+		const prepare = vi.fn(
+			() =>
+				new Promise<{ pcmPath: string; release: () => void }>((resolve) => {
+					complete = resolve;
+				}),
+		);
+		const manager = new StreamManager(prepare);
+		const pending = manager.registerStream({
+			inputs: [
+				{ pcmPath, offsetMs: 0, gain: 1 },
+				{ pcmPath: highPath, offsetMs: 0, gain: 1 },
+			],
+		});
+		const rejected = expect(pending).rejects.toThrow("disposed");
+		await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce());
+		manager.dispose();
+		complete({ pcmPath: convertedPath, release });
+		await rejected;
+		await vi.waitFor(() => expect(release).toHaveBeenCalledOnce());
+	});
+
 	it("resets window ownership while active responses and a recreated window remain usable", async () => {
 		const manager = new StreamManager();
 		try {

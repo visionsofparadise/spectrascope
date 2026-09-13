@@ -23,7 +23,7 @@ const options: ExportStreamOptions = {
 
 function fixture() {
 	const release = vi.fn();
-	const resolved = { spec: { inputs: [{ pcmPath: "cached.wav" }] } };
+	const resolved = { spec: { inputs: [{ pcmPath: "cached.wav" }] }, inputs: [{ pcmPath: "resampled.wav" }] };
 	const acquire = vi.fn().mockResolvedValue({ release, resolved });
 	const dependencies = { streamManager: { acquire }, browserWindow: {} } as unknown as IpcHandlerDependencies;
 	return { release, resolved, acquire, dependencies };
@@ -51,7 +51,12 @@ describe("stream export IPC", () => {
 			expect(release).not.toHaveBeenCalled();
 		});
 		expect(await new ExportStreamMainIpc().handler(options, dependencies)).toBe("output.wav");
-		expect(mocks.validate).toHaveBeenCalledWith("output.wav", ["source.wav", "session.spectra", "cached.wav"]);
+		expect(mocks.validate).toHaveBeenCalledWith("output.wav", [
+			"source.wav",
+			"session.spectra",
+			"cached.wav",
+			"resampled.wav",
+		]);
 		expect(mocks.write).toHaveBeenCalledWith("output.wav", resolved, options);
 		expect(release).toHaveBeenCalledTimes(1);
 	});

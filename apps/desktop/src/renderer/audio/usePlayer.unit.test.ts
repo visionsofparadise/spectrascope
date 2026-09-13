@@ -12,6 +12,7 @@ const media = vi.hoisted(() => ({
 	positionSec: 3,
 	durationSec: 10,
 	url: "",
+	positionListener: (_position: number) => {},
 	play: vi.fn(),
 	pause: vi.fn(),
 	seek: vi.fn(),
@@ -72,8 +73,11 @@ vi.mock("./PlaybackEngine", () => ({
 		setPlaybackRate() {}
 		setLoopRegion() {}
 		setLooping() {}
-		onPositionChange() {
-			return () => {};
+		onPositionChange(listener: (position: number) => void) {
+			media.positionListener = listener;
+			return () => {
+				media.positionListener = () => {};
+			};
 		}
 		onPlayingChange() {
 			return () => {};
@@ -123,6 +127,25 @@ afterEach(() => {
 });
 
 describe("playback stream transitions", () => {
+	it.each([true, false])(
+		"retains seconds and playing=%s when a higher-rate derived stream replaces the held stream",
+		async (playing) => {
+			const player = render("media://stream/44100/wav");
+			if (playing) player.onPlayToggle();
+			media.positionSec = 6.25;
+			media.positionListener(6.25);
+			render("media://stream/44100/wav", true);
+			expect(media.positionSec).toBe(6.25);
+			expect(media.playing).toBe(playing);
+			render("media://stream/96000/wav");
+			await Promise.resolve();
+			expect(media.url).toBe("media://stream/96000/wav");
+			expect(media.positionSec).toBe(6.25);
+			expect(media.playing).toBe(playing);
+			expect(media.play).toHaveBeenCalledTimes(playing ? 2 : 0);
+		},
+	);
+
 	it("cancels pending startup with the next toggle", async () => {
 		let resolvePlay: (() => void) | undefined;
 		media.play.mockImplementationOnce(() => {

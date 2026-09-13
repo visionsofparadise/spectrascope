@@ -207,6 +207,7 @@ export function StripSourceRender({
 }: StripSourceRenderProps) {
 	return (
 		<SourceRender
+			displaySampleRate={view.chromeAudio.sampleRate}
 			spectrogram={spectrogram}
 			spectrogramColormap={settings.spectrogramColormap}
 			frequencyRange={view.frequencyRange}

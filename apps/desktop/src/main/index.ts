@@ -14,8 +14,19 @@ protocol.registerSchemesAsPrivileged([
 	{ scheme: "media", privileges: { stream: true, supportFetchAPI: true, secure: true } },
 ]);
 
-const streamManager = new StreamManager();
 let sourceCacheManager: SourceCacheManager | null = null;
+const streamManager = new StreamManager(async (pcmPath, targetSampleRate) => {
+	const cache = sourceCacheManager;
+
+	if (!cache) throw new Error("Source cache is not ready");
+
+	const lease = await cache.prepareLease(pcmPath, targetSampleRate);
+
+	return {
+		pcmPath: lease.prepared.pcmPath,
+		release: lease.release,
+	};
+});
 
 app.whenReady()
 	.then(() => {

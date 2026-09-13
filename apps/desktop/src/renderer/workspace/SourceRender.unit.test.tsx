@@ -58,11 +58,11 @@ const props: SourceRenderProps = {
 	channelInput: "mono",
 };
 
-function ready(): ComputeResultReady {
+function ready(frequencyScale = "mel"): ComputeResultReady {
 	return {
 		status: "ready",
 		query: { startMs: 0, endMs: 1000, width: 800, height: 400 },
-		options: { config: { frequencyScale: "mel" } },
+		options: { metadata: { sampleRate: 48000 }, config: { frequencyScale } },
 	} as ComputeResultReady;
 }
 
@@ -90,6 +90,48 @@ beforeEach(() => {
 });
 
 describe("replacement analysis progress", () => {
+	it("finishes drawing a source even when the selected frequency crop is above its native Nyquist", () => {
+		const incoming = ready("linear");
+		runtime.result = incoming;
+		const overrides = {
+			displaySampleRate: 96000,
+			frequencyScale: "linear" as const,
+			frequencyRange: { top: 0, bottom: 0.25 },
+		};
+		const tree = render(overrides);
+		const spectrum = tree.find((element) => element.type === SpectrogramCanvas)!;
+		const container = tree.find((element) => element.props.children === spectrum);
+		expect(container?.props.style).toMatchObject({ visibility: "hidden" });
+		const waveform = tree.find((element) => element.type === WaveformCanvas)!;
+		(spectrum.props.onRendered as () => void)();
+		expect(runtime.held).toBeNull();
+		(waveform.props.onRendered as () => void)();
+		expect(runtime.held).toBe(incoming);
+		expect(render(overrides).some((element) => element.props.role === "progressbar")).toBe(false);
+	});
+	it("aligns native spectral pixels to a common display rate while keeping waveform crop independent", () => {
+		runtime.result = ready();
+		const frequencyRange = { top: 0, bottom: 0.75 };
+		const tree = render({ displaySampleRate: 96000, frequencyScale: "linear", frequencyRange });
+		expect(runtime.options?.metadata.sampleRate).toBe(48000);
+		const spectrum = tree.find((element) => element.type === SpectrogramCanvas);
+		expect(spectrum?.props.frequencyRange).toEqual({ top: 0, bottom: 0.5 });
+		const container = tree.find((element) => element.props.children === spectrum);
+		const style = container?.props.style as { top: string; height: string };
+		expect(Number.parseFloat(style.top)).toBeCloseTo(200 / 3);
+		expect(Number.parseFloat(style.height)).toBeCloseTo(100 / 3);
+		expect(tree.find((element) => element.type === WaveformCanvas)?.props.verticalRange).toBe(frequencyRange);
+	});
+	it("reports common-domain frequencies only within the native source bandwidth", () => {
+		const onCursorMove = vi.fn();
+		const tree = render({ displaySampleRate: 96000, frequencyScale: "linear", onCursorMove });
+		runtime.refs[0]!.current = { getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }) };
+		const move = tree[0]!.props.onMouseMove as (event: { clientX: number; clientY: number }) => void;
+		move({ clientX: 50, clientY: 75 });
+		expect(onCursorMove).toHaveBeenLastCalledWith(expect.objectContaining({ frequencyHz: 12000, freq: "12.0 kHz" }));
+		move({ clientX: 50, clientY: 25 });
+		expect(onCursorMove).toHaveBeenLastCalledWith(expect.objectContaining({ frequencyHz: 0, freq: "—" }));
+	});
 	it.each(["lava", "viridis"] as const)(
 		"uses the package %s palette independently of source colour",
 		(spectrogramColormap) => {

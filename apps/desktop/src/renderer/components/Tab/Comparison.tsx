@@ -103,16 +103,13 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 
 					if (!paths?.[0]) return;
 
-					const replacement = await relinkSource(context.main, source, paths[0], comparison.canonicalSampleRate);
+					const replacement = await relinkSource(context.main, source, paths[0]);
 
 					appStore.mutate(app, (proxy) => {
 						const targetComparison = proxy.comparisons.find((entry) => entry.id === comparison.id);
 						const target = targetComparison?.sources.find((entry) => entry.id === sourceId);
 
-						if (
-							target?.audioFilePath === source.audioFilePath &&
-							targetComparison?.canonicalSampleRate === comparison.canonicalSampleRate
-						) {
+						if (target?.audioFilePath === source.audioFilePath) {
 							target.audioFilePath = replacement.audioFilePath;
 							target.name = replacement.name;
 						}
@@ -129,19 +126,6 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 
 	const activeView = comparison.activeView;
 
-	const setCanonicalSampleRate = useCallback(
-		(rate: number) => {
-			appStore.mutate(app, (proxy) => {
-				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
-
-				if (!target) return;
-
-				target.canonicalSampleRate = rate;
-			});
-		},
-		[app, appStore, comparison.id],
-	);
-
 	const setDifference = useCallback(
 		(differenceA: string, differenceB: string) => {
 			appStore.mutate(app, (proxy) => {
@@ -156,13 +140,7 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 		[app, appStore, comparison.id],
 	);
 
-	const {
-		sourceAudio,
-		prepared,
-		status,
-		errors: sourceErrors,
-		retrySource,
-	} = useSourceStreams(sources, comparison.canonicalSampleRate, setCanonicalSampleRate);
+	const { sourceAudio, prepared, status, errors: sourceErrors, retrySource } = useSourceStreams(sources);
 
 	const {
 		sumAudio,
@@ -468,8 +446,6 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 							onActiveViewChange={handleActiveViewChange}
 							channelInput={comparison.channelInput}
 							onChannelInputChange={handleChannelInputChange}
-							canonicalSampleRate={comparison.canonicalSampleRate}
-							onSampleRateChange={setCanonicalSampleRate}
 							sources={sources}
 							sourceStatus={status}
 							sourceErrors={sourceErrors}
@@ -506,7 +482,7 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 								onPlaybackRateChange={setPlaybackRate}
 								looping={looping}
 								onLoopingChange={setLooping}
-								sampleRate={comparison.canonicalSampleRate ?? 48000}
+								sampleRate={activeStreamInfo?.sampleRate ?? 48000}
 								volume={volume}
 								onVolumeChange={handleVolumeChange}
 								viewControls={

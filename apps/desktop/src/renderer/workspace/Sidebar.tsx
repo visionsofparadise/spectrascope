@@ -10,8 +10,6 @@ interface SidebarProps {
 	readonly onActiveViewChange: (id: ViewId) => void;
 	readonly channelInput: ChannelInput;
 	readonly onChannelInputChange: (next: ChannelInput) => void;
-	readonly canonicalSampleRate: number | null;
-	readonly onSampleRateChange: (rate: number) => void;
 	readonly sources: ReadonlyArray<Source>;
 	readonly sourceStatus?: ReadonlyMap<string, SourceStreamStatus>;
 	readonly sourceErrors?: ReadonlyMap<string, string>;
@@ -19,10 +17,6 @@ interface SidebarProps {
 	readonly onRelinkSource?: (sourceId: string) => void;
 	readonly onSourcesChange: (next: ReadonlyArray<Source>) => void;
 }
-
-const STANDARD_SAMPLE_RATES: ReadonlyArray<number> = [44100, 48000, 88200, 96000, 176400, 192000];
-
-const RATE_UNSET_LABEL = "—";
 
 const VIEW_OPTIONS: ReadonlyArray<{ readonly value: ViewId; readonly label: string }> = [
 	{ value: "timeline", label: "Timeline" },
@@ -47,8 +41,6 @@ export function Sidebar({
 	onActiveViewChange,
 	channelInput,
 	onChannelInputChange,
-	canonicalSampleRate,
-	onSampleRateChange,
 	sources,
 	sourceStatus,
 	sourceErrors,
@@ -56,13 +48,6 @@ export function Sidebar({
 	onRelinkSource,
 	onSourcesChange,
 }: SidebarProps) {
-	const rateValues =
-		canonicalSampleRate !== null && !STANDARD_SAMPLE_RATES.includes(canonicalSampleRate)
-			? [...STANDARD_SAMPLE_RATES, canonicalSampleRate]
-			: STANDARD_SAMPLE_RATES;
-
-	const rateOptions = rateValues.map((rate) => ({ value: String(rate), label: String(rate) }));
-
 	return (
 		<div className="flex h-full flex-col bg-void">
 			<div className="flex flex-col gap-1.5 px-4 py-3">
@@ -89,19 +74,6 @@ export function Sidebar({
 						const option = CHANNEL_OPTIONS.find((entry) => entry.value === value);
 
 						if (option) onChannelInputChange(option.value);
-					}}
-				/>
-			</div>
-
-			<div className="flex flex-col gap-1.5 px-4 py-3">
-				<span className="font-technical text-xs uppercase tracking-[0.08em] text-chrome-text-secondary">Rate</span>
-				<Select
-					value={canonicalSampleRate === null ? RATE_UNSET_LABEL : String(canonicalSampleRate)}
-					options={rateOptions}
-					onChange={(value) => {
-						const rate = Number(value);
-
-						if (Number.isFinite(rate) && rate > 0) onSampleRateChange(rate);
 					}}
 				/>
 			</div>

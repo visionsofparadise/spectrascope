@@ -10,6 +10,62 @@ import type { WavHeader } from "./audio/wavReader";
 vi.mock("./audio/probe", () => ({ probeAudioFile: vi.fn() }));
 
 describe("SourceCacheManager window reset", () => {
+	it("keeps a new same-path pin when an older lease releases after reset", async () => {
+		const directory = await fs.mkdtemp(path.join(os.tmpdir(), "spectrascope-source-lease-"));
+		const pcmPath = path.join(directory, "source.wav");
+		await fs.writeFile(pcmPath, Buffer.concat([buildWavHeader(24000, 1, 2), Buffer.alloc(8)]));
+		const manager = new SourceCacheManager(directory);
+		const stats = await fs.stat(pcmPath);
+		const hash = computeCacheKey(pcmPath, stats.size, stats.mtimeMs, 48000);
+		const convertedPath = path.join(directory, "source-cache", `${hash}.wav`);
+		await fs.writeFile(convertedPath, Buffer.concat([buildWavHeader(48000, 1, 4), Buffer.alloc(16)]));
+		vi.mocked(probeAudioFile).mockResolvedValue({
+			sampleRate: 24000,
+			channelCount: 1,
+			durationMs: 2 / 24,
+			container: "WAVE",
+			codec: "PCM",
+		});
+		const release = vi.spyOn(manager, "releasePreparedSource");
+		try {
+			const oldLease = await manager.prepareLease(pcmPath, 48000);
+			manager.reset();
+			const currentLease = await manager.prepareLease(pcmPath, 48000);
+			expect(currentLease.prepared.pcmPath).toBe(oldLease.prepared.pcmPath);
+			oldLease.release();
+			oldLease.release();
+			expect(release).not.toHaveBeenCalled();
+			currentLease.release();
+			currentLease.release();
+			expect(release).toHaveBeenCalledExactlyOnceWith(convertedPath);
+		} finally {
+			manager.dispose();
+			await fs.rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 20 });
+		}
+	});
+
+	it("rejects a lease when reset occurs between preparation and lease acquisition", async () => {
+		const directory = await fs.mkdtemp(path.join(os.tmpdir(), "spectrascope-source-lease-reset-"));
+		const manager = new SourceCacheManager(directory);
+		vi.spyOn(manager, "prepare").mockImplementation(() => {
+			manager.reset();
+			return Promise.resolve({
+				pcmPath: "prepared.wav",
+				sampleRate: 48000,
+				channelCount: 1,
+				sampleCount: 4,
+				nativeSampleRate: 24000,
+				durationMs: 4 / 48,
+			});
+		});
+		try {
+			await expect(manager.prepareLease("source.wav", 48000)).rejects.toThrow("reset");
+		} finally {
+			manager.dispose();
+			await fs.rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 20 });
+		}
+	});
+
 	it("rejects old preparation completion and permits preparation after window recreation", async () => {
 		const directory = await fs.mkdtemp(path.join(os.tmpdir(), "spectrascope-source-reset-"));
 		const pcmPath = path.join(directory, "source.wav");

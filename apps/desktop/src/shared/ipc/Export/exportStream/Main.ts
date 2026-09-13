@@ -34,6 +34,7 @@ export class ExportStreamMainIpc extends AsyncMainIpc<ExportStreamIpcParameters,
 			await assertExportDestination(result.filePath, [
 				...options.protectedPaths,
 				...lease.resolved.spec.inputs.map((input) => input.pcmPath),
+				...lease.resolved.inputs.map((input) => input.pcmPath),
 			]);
 			await writeStreamExport(result.filePath, lease.resolved, options);
 

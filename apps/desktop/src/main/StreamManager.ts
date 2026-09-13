@@ -1,6 +1,12 @@
 import crypto from "node:crypto";
 import fsPromises from "node:fs/promises";
-import { resolveStream, type ResolvedStream, type StreamSpec } from "./audio/streamDsp";
+import {
+	closeResolvedStream,
+	resolveStream,
+	type PrepareStreamInput,
+	type ResolvedStream,
+	type StreamSpec,
+} from "./audio/streamDsp";
 
 export interface StreamInfo {
 	readonly key: string;
@@ -32,9 +38,7 @@ const toStreamInfo = (key: string, resolved: ResolvedStream): StreamInfo => ({
 });
 
 const closeHandles = (resolved: ResolvedStream): void => {
-	for (const input of resolved.inputs) {
-		void input.fileHandle.close().catch(() => undefined);
-	}
+	void closeResolvedStream(resolved).catch(() => undefined);
 };
 
 export class StreamManager {
@@ -43,6 +47,8 @@ export class StreamManager {
 	private readonly inFlight = new Map<string, Promise<ResolvedStream>>();
 	private disposed = false;
 	private generation = 0;
+
+	constructor(private readonly prepareInput?: PrepareStreamInput) {}
 
 	async registerStream(spec: StreamSpec): Promise<StreamInfo> {
 		this.assertActive();
@@ -93,7 +99,10 @@ export class StreamManager {
 	}
 
 	usesPath(pcmPath: string): boolean {
-		return [...this.entries.values()].some((entry) => entry.spec.inputs.some((input) => input.pcmPath === pcmPath));
+		return (
+			[...this.entries.values()].some((entry) => entry.spec.inputs.some((input) => input.pcmPath === pcmPath)) ||
+			[...this.cache.values()].some((resolved) => resolved.inputs.some((input) => input.pcmPath === pcmPath))
+		);
 	}
 
 	async acquire(key: string): Promise<StreamLease | undefined> {
@@ -174,7 +183,7 @@ export class StreamManager {
 
 		if (existing !== undefined) return existing;
 
-		const promise = resolveStream(spec, (pcmPath) => fsPromises.open(pcmPath, "r"))
+		const promise = resolveStream(spec, (pcmPath) => fsPromises.open(pcmPath, "r"), this.prepareInput)
 			.then((resolved) => {
 				if (this.disposed) {
 					closeHandles(resolved);

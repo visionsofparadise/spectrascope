@@ -1,5 +1,5 @@
 import { useQueries, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import { initializeStreamQueries, sourceStreamQueryOptions, type StreamQueryEntry } from "./utils/streamQueryOptions";
 import type { PreparedSource } from "../../main/SourceCacheManager";
 import type { Source } from "../workspace/source";
@@ -19,11 +19,7 @@ function combineSourceResults(results: Array<UseQueryResult<StreamQueryEntry>>) 
 	return results.map((result) => ({ data: result.data, error: result.error }));
 }
 
-export function useSourceStreams(
-	sources: ReadonlyArray<Source>,
-	canonicalSampleRate: number | null,
-	onCaptureRate: (nativeSampleRate: number) => void,
-): UseSourceStreamsResult {
+export function useSourceStreams(sources: ReadonlyArray<Source>): UseSourceStreamsResult {
 	const client = useQueryClient();
 
 	initializeStreamQueries(client);
@@ -33,24 +29,9 @@ export function useSourceStreams(
 		[sources],
 	);
 	const results = useQueries({
-		queries: filePaths.map((filePath) => sourceStreamQueryOptions(filePath, canonicalSampleRate)),
+		queries: filePaths.map((filePath) => sourceStreamQueryOptions(filePath, null)),
 		combine: combineSourceResults,
 	});
-	const firstPrepared = results[0]?.data?.prepared;
-	const captureFired = useRef(false);
-
-	useEffect(() => {
-		if (canonicalSampleRate !== null) {
-			captureFired.current = false;
-
-			return;
-		}
-
-		if (!captureFired.current && firstPrepared) {
-			captureFired.current = true;
-			onCaptureRate(firstPrepared.nativeSampleRate);
-		}
-	}, [canonicalSampleRate, firstPrepared, onCaptureRate]);
 
 	const retrySource = useCallback(
 		(sourceId: string): void => {
@@ -59,11 +40,11 @@ export function useSourceStreams(
 			if (!source?.audioFilePath) return;
 
 			void client.resetQueries({
-				queryKey: sourceStreamQueryOptions(source.audioFilePath, canonicalSampleRate).queryKey,
+				queryKey: sourceStreamQueryOptions(source.audioFilePath, null).queryKey,
 				exact: true,
 			});
 		},
-		[sources, canonicalSampleRate, client],
+		[sources, client],
 	);
 
 	return useMemo(() => {

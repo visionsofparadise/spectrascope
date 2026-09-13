@@ -14,6 +14,10 @@ export function SliderView({
 	onTransportControlChange,
 }: PerSourceSpectralViewProps) {
 	const { renderableSources, chromeAudio, layerColor } = useTimelineChromeSources(sources, sourceAudio);
+	const highestRateSource = renderableSources.reduce<(typeof renderableSources)[number] | undefined>(
+		(highest, entry) => (!highest || entry.audioData.sampleRate > highest.audioData.sampleRate ? entry : highest),
+		undefined,
+	);
 
 	const sourceCount = renderableSources.length;
 
@@ -39,8 +43,8 @@ export function SliderView({
 
 	const view = useStripView(
 		"slider",
-		chromeAudio,
-		layerColor,
+		highestRateSource?.audioData ?? chromeAudio,
+		highestRateSource?.source.layerColor ?? layerColor,
 		settings.frequencyRange,
 		settings.frequencyScale,
 		onFrequencyRangeChange,

@@ -6,9 +6,8 @@ export async function relinkSource(
 	main: Pick<Main, "prepareSource" | "releasePreparedSource">,
 	source: Snapshot<SourceState>,
 	filePath: string,
-	sampleRate: number | null,
 ): Promise<SourceState> {
-	const prepared = await main.prepareSource(filePath, sampleRate);
+	const prepared = await main.prepareSource(filePath, null);
 
 	try {
 		return {

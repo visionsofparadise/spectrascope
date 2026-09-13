@@ -11,9 +11,16 @@ export interface StreamSpec {
 	readonly inputs: ReadonlyArray<StreamInput>;
 }
 
+export type PrepareStreamInput = (
+	pcmPath: string,
+	sampleRate: number,
+) => Promise<{ readonly pcmPath: string; readonly release: () => void }>;
+
 interface ResolvedInput {
+	readonly pcmPath: string;
 	readonly header: WavHeader;
 	readonly fileHandle: fs.FileHandle;
+	readonly releasePreparedSource?: () => void;
 	readonly offsetFrames: number;
 	readonly gain: 1 | -1;
 	/**
@@ -58,6 +65,7 @@ const deriveFoldCoefficients = (channelCount: number): Float32Array => {
 export const resolveStream = async (
 	spec: StreamSpec,
 	openHandle: (pcmPath: string) => Promise<fs.FileHandle>,
+	prepareInput?: PrepareStreamInput,
 ): Promise<ResolvedStream> => {
 	if (spec.inputs.length === 0) throw new Error("Cannot resolve a stream with no inputs");
 
@@ -71,55 +79,92 @@ export const resolveStream = async (
 		throw failed.reason;
 	}
 
+	const ownedHandles = new Set(fileHandles);
+	const releases: Array<() => void> = [];
+
 	try {
-		const parsed = await Promise.all(
-			spec.inputs.map(async (input, index) => {
-				const fileHandle = fileHandles[index];
+		const parsed: Array<{ input: StreamInput; fileHandle: fs.FileHandle; header: WavHeader }> = [];
 
-				if (fileHandle === undefined) throw new Error(`Missing file handle for stream input "${input.pcmPath}"`);
+		for (const [index, input] of spec.inputs.entries()) {
+			const fileHandle = fileHandles[index];
 
-				return { input, fileHandle, header: await parseWavHeader(fileHandle) };
-			}),
-		);
+			if (fileHandle === undefined) throw new Error(`Missing file handle for stream input "${input.pcmPath}"`);
 
-		const multiInput = parsed.length > 1;
+			parsed.push({ input, fileHandle, header: await parseWavHeader(fileHandle) });
+		}
 
-		let sampleRate = 0;
-		let firstChannelCount = 0;
+		const sampleRate = Math.max(...parsed.map(({ header }) => header.sampleRate));
+		const inputs: Array<ResolvedInput> = [];
 		let totalFrames = 0;
 
-		const inputs = parsed.map(({ input, fileHandle, header }, index): ResolvedInput => {
-			if (index === 0) {
-				sampleRate = header.sampleRate;
-				firstChannelCount = header.channelCount;
-			} else if (header.sampleRate !== sampleRate) {
-				throw new Error(
-					`Stream input "${input.pcmPath}" sample rate ${String(header.sampleRate)} ≠ ${String(sampleRate)} (all inputs must share the canonical rate)`,
-				);
+		for (const original of parsed) {
+			const { input } = original;
+			let { header, fileHandle } = original;
+			let pcmPath = input.pcmPath;
+			let releasePreparedSource: (() => void) | undefined;
+
+			if (header.sampleRate !== sampleRate) {
+				if (!prepareInput) throw new Error("Mixed-rate streams require source preparation");
+
+				const prepared = await prepareInput(pcmPath, sampleRate);
+				let released = false;
+
+				releasePreparedSource = () => {
+					if (released) return;
+
+					released = true;
+					prepared.release();
+				};
+				releases.push(releasePreparedSource);
+				pcmPath = prepared.pcmPath;
+				fileHandle = await openHandle(pcmPath);
+				ownedHandles.add(fileHandle);
+				header = await parseWavHeader(fileHandle);
+
+				if (header.sampleRate !== sampleRate || header.channelCount !== original.header.channelCount)
+					throw new Error("Prepared stream input has an unexpected sample rate or channel count");
+
+				await original.fileHandle.close();
+				ownedHandles.delete(original.fileHandle);
 			}
 
-			const offsetFrames = Math.round((input.offsetMs * header.sampleRate) / 1000);
+			const offsetFrames = Math.round((input.offsetMs * sampleRate) / 1000);
 
 			totalFrames = Math.max(totalFrames, offsetFrames + header.frameCount);
-
-			return {
+			inputs.push({
+				pcmPath,
 				header,
 				fileHandle,
+				releasePreparedSource,
 				offsetFrames,
 				gain: input.gain,
-				foldCoefficients: multiInput ? deriveFoldCoefficients(header.channelCount) : null,
-			};
-		});
+				foldCoefficients: parsed.length > 1 ? deriveFoldCoefficients(header.channelCount) : null,
+			});
+		}
 
-		const outputChannels = spec.inputs.length === 1 ? firstChannelCount : 2;
+		const firstInput = inputs[0];
+
+		if (!firstInput) throw new Error("Stream has no resolved inputs");
+
+		const outputChannels = spec.inputs.length === 1 ? firstInput.header.channelCount : 2;
 
 		return { spec, sampleRate, outputChannels, totalFrames, inputs };
 	} catch (error) {
-		await Promise.all(fileHandles.map((fileHandle) => fileHandle.close().catch(() => undefined)));
+		await Promise.all([...ownedHandles].map((fileHandle) => fileHandle.close().catch(() => undefined)));
+		await Promise.allSettled(releases.map((release) => Promise.resolve().then(release)));
 
 		throw error;
 	}
 };
+
+export async function closeResolvedStream(resolved: ResolvedStream): Promise<void> {
+	await Promise.all(
+		resolved.inputs.map(async (input) => {
+			await input.fileHandle.close().catch(() => undefined);
+			input.releasePreparedSource?.();
+		}),
+	);
+}
 
 const accumulateInput = (
 	output: Float32Array,

@@ -7,6 +7,7 @@ import { computeWindowTransform } from "./useTimeViewport";
 import { formatInspectionTime } from "./utils/formatInspectionTime";
 import { fractionToFrequency } from "./utils/frequencyScale";
 import { SPECTROGRAM_COLORMAPS } from "./utils/spectrogramColormaps";
+import { spectrogramPlacement } from "./utils/spectrogramPlacement";
 import type { Source } from "./source";
 import type { AudioData } from "./spectral/types";
 import type { DisplayedWaveform } from "./spectral/useWaveformReadouts";
@@ -29,6 +30,7 @@ export interface SourceRenderProps {
 	readonly spectrogramSampling: SpectrogramSampling;
 	readonly spectrogramColormap?: "lava" | "viridis";
 	readonly spectrogram?: boolean;
+	readonly displaySampleRate?: number;
 	readonly frequencyRange?: TextureVerticalRange;
 	readonly onDisplayedResultChange?: (sourceId: string, displayed: DisplayedWaveform | null) => void;
 	readonly audioData: AudioData;
@@ -65,6 +67,7 @@ export function SourceRender({
 	frequencyRange,
 	onDisplayedResultChange,
 	audioData,
+	displaySampleRate = audioData.sampleRate,
 	startMs,
 	endMs,
 	liveStartMs,
@@ -104,10 +107,11 @@ export function SourceRender({
 			const timeMs = readoutTimeOffsetMs + cursorStartMs + xFrac * (cursorEndMs - cursorStartMs);
 			const timeStr = formatInspectionTime(timeMs);
 
-			const freqHz = spectrogram
-				? fractionToFrequency(yFrac, audioData.sampleRate, frequencyRange, frequencyScale)
-				: 0;
-			const freqStr = spectrogram
+			const displayFrequency = fractionToFrequency(yFrac, displaySampleRate, frequencyRange, frequencyScale);
+			const nyquist = audioData.sampleRate / 2;
+			const hasFrequency = spectrogram && displayFrequency <= nyquist * (1 + Number.EPSILON * 8);
+			const freqHz = hasFrequency ? Math.min(displayFrequency, nyquist) : 0;
+			const freqStr = hasFrequency
 				? freqHz >= 1000
 					? `${(freqHz / 1000).toFixed(1)} kHz`
 					: `${Math.round(freqHz)} Hz`
@@ -123,6 +127,7 @@ export function SourceRender({
 			liveEndMs,
 			readoutTimeOffsetMs,
 			audioData.sampleRate,
+			displaySampleRate,
 			frequencyRange,
 			frequencyScale,
 			source.id,
@@ -246,44 +251,58 @@ export function SourceRender({
 			style={{ opacity, clipPath }}
 			onMouseMove={handleMouseMove}
 		>
-			{layers.map(({ result, isFront }) => (
-				<div
-					key={keyForResult(result)}
-					className="absolute inset-0"
-					style={
-						isFront
-							? {
-									transform: computeWindowTransform(result.query, live),
-									transformOrigin: "left",
-								}
-							: { visibility: "hidden" }
-					}
-				>
-					{spectrogram && (
+			{layers.map(({ result, isFront }) => {
+				const placement = spectrogramPlacement(
+					result.options.metadata.sampleRate,
+					displaySampleRate,
+					frequencyRange,
+					frequencyScale,
+				);
+
+				return (
+					<div
+						key={keyForResult(result)}
+						className="absolute inset-0"
+						style={
+							isFront
+								? {
+										transform: computeWindowTransform(result.query, live),
+										transformOrigin: "left",
+									}
+								: { visibility: "hidden" }
+						}
+					>
+						{spectrogram && (
+							<div
+								className="absolute inset-x-0 [&>canvas]:h-full [&>canvas]:w-full"
+								style={{
+									opacity: spectrogramOpacity,
+									top: `${placement.top * 100}%`,
+									height: `${placement.height * 100}%`,
+									visibility: placement.visible ? undefined : "hidden",
+								}}
+							>
+								<SpectrogramCanvas
+									frequencyRange={placement.range}
+									computeResult={result}
+									onRendered={isFront ? undefined : handleBackRendered}
+								/>
+							</div>
+						)}
 						<div
 							className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full"
-							style={{ opacity: spectrogramOpacity }}
+							style={{ opacity: waveformOpacity }}
 						>
-							<SpectrogramCanvas
-								frequencyRange={frequencyRange}
+							<WaveformCanvas
+								verticalRange={frequencyRange}
 								computeResult={result}
+								color={waveformColor}
 								onRendered={isFront ? undefined : handleBackRendered}
 							/>
 						</div>
-					)}
-					<div
-						className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full"
-						style={{ opacity: waveformOpacity }}
-					>
-						<WaveformCanvas
-							verticalRange={frequencyRange}
-							computeResult={result}
-							color={waveformColor}
-							onRendered={isFront ? undefined : handleBackRendered}
-						/>
 					</div>
-				</div>
-			))}
+				);
+			})}
 			{front === null && computeResult.status === "computing" && (
 				<ComputeProgress fraction={computeResult.fraction} />
 			)}

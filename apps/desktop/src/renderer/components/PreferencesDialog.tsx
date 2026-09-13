@@ -32,38 +32,6 @@ export function PreferencesDialog({ preferences, theme, onPreferencesChange, onT
 					Defaults below apply to new sessions. Existing sessions keep their saved settings.
 				</p>
 				<label className="flex items-center justify-between gap-4">
-					Sample rate
-					<select
-						className={FIELD}
-						value={preferences.sampleRate ?? "auto"}
-						onChange={(event) =>
-							onPreferencesChange({
-								...preferences,
-								sampleRate: event.target.value === "auto" ? null : Number(event.target.value),
-							})
-						}
-					>
-						<option value="auto">First source</option>
-						{Array.from(
-							new Set([
-								22050,
-								44100,
-								48000,
-								88200,
-								96000,
-								192000,
-								...(preferences.sampleRate === null ? [] : [preferences.sampleRate]),
-							]),
-						)
-							.sort((left, right) => left - right)
-							.map((rate) => (
-								<option key={rate} value={rate}>
-									{rate.toLocaleString()} Hz
-								</option>
-							))}
-					</select>
-				</label>
-				<label className="flex items-center justify-between gap-4">
 					Monitor volume: {Math.round(preferences.monitorVolume * 100)}%
 					<input
 						className="accent-primary"

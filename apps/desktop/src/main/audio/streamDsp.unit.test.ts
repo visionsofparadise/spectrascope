@@ -2,8 +2,8 @@ import fs from "node:fs";
 import fsPromises from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
-import { renderRange, resolveStream, type ResolvedStream, type StreamSpec } from "./streamDsp";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import { closeResolvedStream, renderRange, resolveStream, type ResolvedStream, type StreamSpec } from "./streamDsp";
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "spectrascope-streamdsp-test-"));
 
@@ -62,7 +62,7 @@ const writeFloatWav = (
 const openHandle = (pcmPath: string): Promise<fsPromises.FileHandle> => fsPromises.open(pcmPath, "r");
 
 const closeStream = async (resolved: ResolvedStream): Promise<void> => {
-	await Promise.all(resolved.inputs.map((input) => input.fileHandle.close()));
+	await closeResolvedStream(resolved);
 };
 
 const withStream = async (spec: StreamSpec, body: (resolved: ResolvedStream) => Promise<void>): Promise<void> => {
@@ -76,6 +76,131 @@ const withStream = async (spec: StreamSpec, body: (resolved: ResolvedStream) => 
 };
 
 describe("streamDsp", () => {
+	it.each([1, -1] as const)(
+		"prepares only lower native rates and renders gain %s at the highest rate",
+		async (gain) => {
+			const low = writeFloatWav(`low-${gain}.wav`, 1, 24000, [1, 2]);
+			const high = writeFloatWav(`high-${gain}.wav`, 1, 48000, [10, 20, 30, 40]);
+			const converted = writeFloatWav(`converted-${gain}.wav`, 1, 48000, [1, 1.5, 2, 2]);
+			const release = vi.fn();
+			const prepare = vi.fn(async () => ({ pcmPath: converted, release }));
+			const spec: StreamSpec = {
+				inputs: [
+					{ pcmPath: low, offsetMs: 1000 / 48000, gain },
+					{ pcmPath: high, offsetMs: 0, gain: 1 },
+				],
+			};
+			const resolved = await resolveStream(spec, openHandle, prepare);
+			try {
+				expect(prepare).toHaveBeenCalledExactlyOnceWith(low, 48000);
+				expect(resolved.spec).toBe(spec);
+				expect(resolved.sampleRate).toBe(48000);
+				expect(resolved.outputChannels).toBe(2);
+				expect(resolved.totalFrames).toBe(5);
+				expect(resolved.inputs[0]?.pcmPath).toBe(converted);
+				expect(resolved.inputs[0]?.offsetFrames).toBe(1);
+				expect([...(await renderRange(resolved, 0, 5))]).toEqual([
+					10,
+					10,
+					20 + gain,
+					20 + gain,
+					30 + gain * 1.5,
+					30 + gain * 1.5,
+					40 + gain * 2,
+					40 + gain * 2,
+					gain * 2,
+					gain * 2,
+				]);
+				expect(release).not.toHaveBeenCalled();
+			} finally {
+				await closeStream(resolved);
+			}
+			expect(release).toHaveBeenCalledOnce();
+			await closeStream(resolved);
+			expect(release).toHaveBeenCalledOnce();
+		},
+	);
+
+	it("keeps individual native streams and already matched streams on their original files", async () => {
+		const native = writeFloatWav("native-96000.wav", 2, 96000, [1, 2]);
+		const prepare = vi.fn();
+		for (const count of [1, 2]) {
+			const resolved = await resolveStream(
+				{ inputs: Array.from({ length: count }, () => ({ pcmPath: native, offsetMs: 0, gain: 1 as const })) },
+				openHandle,
+				prepare,
+			);
+			try {
+				expect(resolved.sampleRate).toBe(96000);
+				expect(resolved.inputs.every((input) => input.pcmPath === native)).toBe(true);
+			} finally {
+				await closeStream(resolved);
+			}
+		}
+		expect(prepare).not.toHaveBeenCalled();
+	});
+
+	it.each(["rate", "channels", "missing"])(
+		"releases prepared ownership and all handles on invalid %s",
+		async (failure) => {
+			const low = writeFloatWav(`failed-low-${failure}.wav`, 1, 24000, [1]);
+			const high = writeFloatWav(`failed-high-${failure}.wav`, 1, 48000, [1, 1]);
+			const converted =
+				failure === "missing"
+					? path.join(tempDir, "missing.wav")
+					: writeFloatWav(
+							`failed-prepared-${failure}.wav`,
+							failure === "channels" ? 2 : 1,
+							failure === "rate" ? 24000 : 48000,
+							[1, 1],
+						);
+			const handles: Array<fsPromises.FileHandle> = [];
+			const release = vi.fn();
+			await expect(
+				resolveStream(
+					{
+						inputs: [
+							{ pcmPath: high, offsetMs: 0, gain: 1 },
+							{ pcmPath: low, offsetMs: 0, gain: 1 },
+						],
+					},
+					async (pcmPath) => {
+						const handle = await openHandle(pcmPath);
+						handles.push(handle);
+						return handle;
+					},
+					async () => ({ pcmPath: converted, release }),
+				),
+			).rejects.toThrow();
+			expect(release).toHaveBeenCalledOnce();
+			for (const handle of handles) await expect(handle.stat()).rejects.toThrow();
+		},
+	);
+
+	it("releases an earlier prepared input when a later resample fails", async () => {
+		const low = writeFloatWav("multi-low.wav", 1, 24000, [1]);
+		const middle = writeFloatWav("multi-middle.wav", 1, 44100, [1]);
+		const high = writeFloatWav("multi-high.wav", 1, 48000, [1, 1]);
+		const converted = writeFloatWav("multi-converted.wav", 1, 48000, [1, 1]);
+		const release = vi.fn();
+		const prepare = vi
+			.fn()
+			.mockResolvedValueOnce({ pcmPath: converted, release })
+			.mockRejectedValueOnce(new Error("Resample failed"));
+		await expect(
+			resolveStream(
+				{ inputs: [low, middle, high].map((pcmPath) => ({ pcmPath, offsetMs: 0, gain: 1 })) },
+				openHandle,
+				prepare,
+			),
+		).rejects.toThrow("Resample failed");
+		expect(release).toHaveBeenCalledOnce();
+		expect(prepare.mock.calls).toEqual([
+			[low, 48000],
+			[middle, 48000],
+		]);
+	});
+
 	it("closes successfully opened inputs when a sibling open fails", async () => {
 		const filePath = writeFloatWav("partial-open.wav", 1, 1000, [1]);
 		const handle = await fsPromises.open(filePath, "r");

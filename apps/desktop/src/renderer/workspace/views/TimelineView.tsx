@@ -281,12 +281,9 @@ export function TimelineView({
 		[renderableSources],
 	);
 
-	const viewport = useTimeViewport(
-		extent.startMs,
-		extent.endMs,
-		drag !== null,
-		1000 / (renderableSources[0]?.audioData.sampleRate ?? 48000),
-	);
+	const highestSampleRate =
+		renderableSources.reduce((highest, entry) => Math.max(highest, entry.audioData.sampleRate), 0) || 48000;
+	const viewport = useTimeViewport(extent.startMs, extent.endMs, drag !== null, 1000 / highestSampleRate);
 	const windowStartMs = viewport.startMs;
 	const windowEndMs = viewport.endMs;
 

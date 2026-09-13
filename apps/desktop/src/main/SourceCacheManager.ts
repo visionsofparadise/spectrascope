@@ -117,6 +117,29 @@ export class SourceCacheManager {
 		}
 	}
 
+	async prepareLease(
+		filePath: string,
+		targetSampleRate: number,
+	): Promise<{ readonly prepared: PreparedSource; readonly release: () => void }> {
+		const generation = this.generation;
+		const prepared = await this.prepare(filePath, targetSampleRate);
+
+		this.assertGeneration(generation);
+
+		let released = false;
+
+		return {
+			prepared,
+			release: () => {
+				if (released) return;
+
+				released = true;
+
+				if (generation === this.generation) this.releasePreparedSource(prepared.pcmPath);
+			},
+		};
+	}
+
 	releasePreparedSource(pcmPath: string): void {
 		const count = this.pins.get(pcmPath) ?? 0;
 
