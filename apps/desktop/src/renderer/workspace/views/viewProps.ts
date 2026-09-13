@@ -1,3 +1,4 @@
+import type { ThemeId } from "../../utils/themePalettes";
 import type { Source } from "../source";
 import type { AudioData } from "../spectral/types";
 import type { TransportControl } from "../Transport";
@@ -19,6 +20,7 @@ export interface PerSourceSpectralViewProps extends SourceViewProps, SpectralVie
 export interface DerivedSpectralViewProps extends SpectralViewControls {
 	readonly sources: ReadonlyArray<Source>;
 	readonly derivedAudio: AudioData;
+	readonly theme: ThemeId;
 }
 export interface DifferenceSelectionProps {
 	readonly differenceA: string | null;

@@ -1,4 +1,7 @@
 import { useEffect, useRef } from "react";
+import { THEME_PALETTES } from "../utils/themePalettes";
+import { hexToRgb255 } from "../workspace/spectral/colorUtil";
+import type { ThemeId } from "../utils/themePalettes";
 
 const VERT = `#version 300 es
 in vec2 a_position;
@@ -12,6 +15,17 @@ precision mediump float;
 
 uniform vec2 u_resolution;
 uniform float u_time;
+uniform float u_gscale;
+uniform float u_gwell;
+uniform float u_gwellw;
+uniform float u_gthin;
+uniform float u_gint;
+uniform vec2 u_gcenter;
+uniform float u_gpar;
+uniform float u_gtilt;
+uniform vec3 u_stops[16];
+uniform int u_nstops;
+uniform vec3 u_sky;
 out vec4 fragColor;
 
 const float SPEED = 5.8;
@@ -28,6 +42,7 @@ const float COLOR_MAX = 8.0;
 const float SWAY_AMT = 3.0;
 const float SWAY_SPEED = 0.5;
 const float TROUGH = 0.004;
+const vec3 GRID_COL = vec3(184.0, 184.0, 192.0) / 255.0;
 const float COS_ROT = cos(ROTATION);
 const float SIN_ROT = sin(ROTATION);
 
@@ -77,79 +92,93 @@ float terrain(vec2 p, float camX) {
 }
 
 vec3 colormapFn(float t) {
-  t = clamp(t, 0.0, 1.0);
-  vec3 c0 = vec3(2.0, 2.0, 4.0);
-  vec3 c1 = vec3(68.0, 1.0, 84.0);
-  vec3 c2 = vec3(163.0, 230.0, 53.0);
-  vec3 col = mix(c0, c1, smoothstep(0.0, 0.55, t));
-  col = mix(col, c2, smoothstep(0.55, 1.0, t));
-  return col / 255.0;
+  float f = clamp(t, 0.0, 1.0) * float(u_nstops - 1);
+  int i = int(floor(f));
+  i = clamp(i, 0, u_nstops - 2);
+  float k = f - float(i);
+  return mix(u_stops[i], u_stops[i + 1], k);
 }
 
 void main() {
   vec2 uv = gl_FragCoord.xy / u_resolution;
   float aspect = u_resolution.x / u_resolution.y;
-
   float t = u_time * SPEED;
-
   float swayX = sin(u_time * SWAY_SPEED) * SWAY_AMT;
   float swayY = cos(u_time * SWAY_SPEED * 0.7) * SWAY_AMT * 0.3;
-
   vec3 camPos = vec3(swayX, CAM_HEIGHT + swayY, t);
   vec3 camTarget = vec3(swayX * 0.5, CAM_HEIGHT - LOOK_DOWN, t + 5.0);
   vec3 camUp = vec3(0.0, 1.0, 0.0);
-
   vec3 cw = normalize(camTarget - camPos);
   vec3 cu = normalize(cross(cw, camUp));
   vec3 cv = cross(cu, cw);
-
   vec2 screen = (uv - 0.5) * vec2(aspect, 1.0) * 2.0;
   screen = vec2(screen.x * COS_ROT - screen.y * SIN_ROT, screen.x * SIN_ROT + screen.y * COS_ROT);
-
   vec3 rd = normalize(screen.x * cu + screen.y * cv + FOV * cw);
-
   vec3 voidColor = vec3(2.0 / 255.0, 2.0 / 255.0, 4.0 / 255.0);
-
   float tRay = 0.0;
   bool hit = false;
   vec3 hitPos;
-
   for (int i = 0; i < 64; i++) {
     hitPos = camPos + rd * tRay;
-    float h = terrain(hitPos.xz, camPos.x);
-    float dist = hitPos.y - h;
-
+    float hh = terrain(hitPos.xz, camPos.x);
+    float dist = hitPos.y - hh;
     if (dist < 0.1) {
       hit = true;
       break;
     }
-
     tRay += max(dist * 0.6, 0.16);
-
     if (tRay > 60.0) break;
   }
-
   vec3 col = voidColor;
-
+  float alpha = 0.0;
   if (hit) {
-    float h = terrainBase(hitPos.xz);
-    float normalizedH = clamp((h - COLOR_MIN) / (COLOR_MAX - COLOR_MIN), 0.0, 1.0);
-    col = colormapFn(normalizedH);
-
+    float hh = terrainBase(hitPos.xz);
+    float nh = clamp((hh - COLOR_MIN) / (COLOR_MAX - COLOR_MIN), 0.0, 1.0);
+    col = colormapFn(nh);
     float fogDist = max(tRay - FOG_START, 0.0);
     float fogFactor = 1.0 - exp(-fogDist * FOG_DENSITY);
     col = mix(col, voidColor, fogFactor);
+    alpha = 1.0;
   } else {
-    vec3 skyBase = vec3(30.0, 0.0, 36.0) / 255.0;
+    vec3 skyBase = u_sky;
     float skyGrad = smoothstep(-0.2, 0.5, rd.y);
     col = mix(skyBase, voidColor, skyGrad);
+    alpha = 1.0 - skyGrad;
+    vec3 cw0 = normalize(vec3(0.0, -LOOK_DOWN, 5.0));
+    vec3 cu0 = normalize(cross(cw0, camUp));
+    vec3 cv0 = cross(cu0, cw0);
+    float dz = max(dot(rd, cw0), 0.05);
+    vec2 gsFixed = vec2(dot(rd, cu0), dot(rd, cv0)) / dz * FOV;
+    vec2 gs = mix(screen, gsFixed, u_gtilt) - u_gcenter;
+    float r2 = dot(gs, gs);
+    gs *= 1.0 + u_gwell * exp(-sqrt(r2) * u_gwellw);
+    gs += u_gcenter;
+    vec2 g = gs * u_gscale + vec2(swayX, swayY) * u_gpar;
+    vec2 fw = fwidth(g);
+    vec2 d = abs(fract(g) - 0.5);
+    vec2 lw = 1.0 - smoothstep(vec2(0.0), fw * u_gthin, vec2(0.5) - d);
+    float line = max(lw.x, lw.y);
+    float gi = line * u_gint;
+    col = col * alpha + GRID_COL * gi;
+    alpha = min(alpha + gi, 1.0);
+    fragColor = vec4(col, alpha);
+    return;
   }
-
-  fragColor = vec4(col, 1.0);
+  fragColor = vec4(col * alpha, alpha);
 }
 `;
 
-const DPR = 0.5;
+const PIXEL_RATIO_CAP = 0.75;
+const MAX_STOPS = 16;
+const GRID_SCALE = 10;
+const GRID_WELL = -0.95;
+const GRID_WELL_WIDTH = 1.4;
+const GRID_THIN = 0.5;
+const GRID_INTENSITY = 0.16;
+const GRID_CENTER_X = -0.1;
+const GRID_CENTER_Y = -0.85;
+const GRID_PARALLAX = 0.1;
+const GRID_TILT = 0;
 
 function createShader(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader | null {
 	const shader = gl.createShader(type);
@@ -186,9 +215,18 @@ function createProgram(gl: WebGL2RenderingContext, vert: WebGLShader, frag: WebG
 	return program;
 }
 
-export function TerrainShader({ className }: { readonly className?: string }) {
+function unitRgbOf(hex: string): [number, number, number] {
+	const [red, green, blue] = hexToRgb255(hex);
+
+	return [red / 255, green / 255, blue / 255];
+}
+
+export function TerrainShader({ theme, className }: { readonly theme: ThemeId; readonly className?: string }) {
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const rafRef = useRef<number>(0);
+	const themeRef = useRef(theme);
+
+	themeRef.current = theme;
 
 	useEffect(() => {
 		const canvas = canvasRef.current;
@@ -197,7 +235,12 @@ export function TerrainShader({ className }: { readonly className?: string }) {
 
 		const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-		const gl = canvas.getContext("webgl2", { alpha: false, antialias: false });
+		const gl = canvas.getContext("webgl2", {
+			alpha: true,
+			premultipliedAlpha: true,
+			antialias: false,
+			preserveDrawingBuffer: true,
+		});
 
 		if (!gl) return;
 
@@ -213,6 +256,17 @@ export function TerrainShader({ className }: { readonly className?: string }) {
 		const posAttr = gl.getAttribLocation(program, "a_position");
 		const uResolution = gl.getUniformLocation(program, "u_resolution");
 		const uTime = gl.getUniformLocation(program, "u_time");
+		const uGridScale = gl.getUniformLocation(program, "u_gscale");
+		const uGridWell = gl.getUniformLocation(program, "u_gwell");
+		const uGridWellWidth = gl.getUniformLocation(program, "u_gwellw");
+		const uGridThin = gl.getUniformLocation(program, "u_gthin");
+		const uGridIntensity = gl.getUniformLocation(program, "u_gint");
+		const uGridCenter = gl.getUniformLocation(program, "u_gcenter");
+		const uGridParallax = gl.getUniformLocation(program, "u_gpar");
+		const uGridTilt = gl.getUniformLocation(program, "u_gtilt");
+		const uStops = gl.getUniformLocation(program, "u_stops");
+		const uStopCount = gl.getUniformLocation(program, "u_nstops");
+		const uSky = gl.getUniformLocation(program, "u_sky");
 
 		const buffer = gl.createBuffer();
 
@@ -220,11 +274,11 @@ export function TerrainShader({ className }: { readonly className?: string }) {
 		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
 		const resize = () => {
-			const dpr = Math.min(window.devicePixelRatio, DPR);
+			const pixelRatio = Math.min(window.devicePixelRatio || 1, PIXEL_RATIO_CAP);
 			const rect = canvas.getBoundingClientRect();
 
-			canvas.width = rect.width * dpr;
-			canvas.height = rect.height * dpr;
+			canvas.width = Math.max(1, rect.width * pixelRatio);
+			canvas.height = Math.max(1, rect.height * pixelRatio);
 			gl.viewport(0, 0, canvas.width, canvas.height);
 		};
 
@@ -234,25 +288,56 @@ export function TerrainShader({ className }: { readonly className?: string }) {
 
 		observer.observe(canvas);
 
+		const stops = new Float32Array(MAX_STOPS * 3);
+		let stopCount = 0;
+		let sky: [number, number, number] = [0, 0, 0];
+		let paletteTheme: ThemeId | null = null;
 		const startTime = performance.now();
 
 		const render = () => {
 			const elapsed = (performance.now() - startTime) / 1000;
-			const time = reducedMotion ? 0 : elapsed;
 
+			if (paletteTheme !== themeRef.current) {
+				const palette = THEME_PALETTES[themeRef.current];
+				const ramp = palette.ramp.slice(0, MAX_STOPS);
+
+				stops.fill(0);
+				ramp.forEach((hex, index) => stops.set(unitRgbOf(hex), index * 3));
+				stopCount = ramp.length;
+				sky = unitRgbOf(palette.sky);
+				paletteTheme = themeRef.current;
+			}
+
+			gl.clearColor(0, 0, 0, 0);
+			gl.clear(gl.COLOR_BUFFER_BIT);
 			gl.useProgram(program);
 			gl.uniform2f(uResolution, canvas.width, canvas.height);
-			gl.uniform1f(uTime, time);
+			gl.uniform1f(uTime, reducedMotion ? 0 : elapsed);
+			gl.uniform1f(uGridScale, GRID_SCALE);
+			gl.uniform1f(uGridWell, GRID_WELL);
+			gl.uniform1f(uGridWellWidth, GRID_WELL_WIDTH);
+			gl.uniform1f(uGridThin, GRID_THIN);
+			gl.uniform1f(uGridIntensity, GRID_INTENSITY);
+			gl.uniform2f(uGridCenter, GRID_CENTER_X, GRID_CENTER_Y);
+			gl.uniform1f(uGridParallax, GRID_PARALLAX);
+			gl.uniform1f(uGridTilt, GRID_TILT);
+			gl.uniform3fv(uStops, stops);
+			gl.uniform1i(uStopCount, stopCount);
+			gl.uniform3f(uSky, ...sky);
 
 			gl.enableVertexAttribArray(posAttr);
 			gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
 			gl.vertexAttribPointer(posAttr, 2, gl.FLOAT, false, 0, 0);
 			gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-			rafRef.current = requestAnimationFrame(render);
 		};
 
-		rafRef.current = requestAnimationFrame(render);
+		const loop = () => {
+			render();
+			rafRef.current = requestAnimationFrame(loop);
+		};
+
+		render();
+		rafRef.current = requestAnimationFrame(loop);
 
 		return () => {
 			cancelAnimationFrame(rafRef.current);
@@ -264,5 +349,12 @@ export function TerrainShader({ className }: { readonly className?: string }) {
 		};
 	}, []);
 
-	return <canvas ref={canvasRef} className={className} style={{ width: "100%", height: "100%" }} aria-hidden="true" />;
+	return (
+		<canvas
+			ref={canvasRef}
+			className={className}
+			style={{ display: "block", width: "100%", height: "100%" }}
+			aria-hidden="true"
+		/>
+	);
 }

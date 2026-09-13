@@ -10,8 +10,8 @@
 	--color-chrome-text-secondary: #6e6e78;
 	--color-chrome-text-dim: #44444c;
 
-	--color-primary: #a3e635;
-	--color-secondary: #440154;
+	--color-primary: #f09b19;
+	--color-secondary: #0f1446;
 	--color-void: #020204;
 
 	--color-state-rendered: #34d399;
@@ -32,7 +32,7 @@
 
 	--color-interactive-hover: #1f1f24;
 	--color-interactive-active: #252528;
-	--color-interactive-focus: #a3e635;
+	--color-interactive-focus: #f09b19;
 
 	--font-display: "Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif;
 	--font-body: "Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif;
@@ -78,19 +78,21 @@
 		cursor: pointer;
 	}
 
+	:root[data-theme="viridis"] {
+		--color-primary: #fde725;
+		--color-secondary: #21918c;
+		--color-interactive-focus: #fde725;
+	}
+
 	*::-webkit-scrollbar {
-		width: 6px;
-		height: 6px;
+		width: 8px;
+		height: 8px;
 	}
 	*::-webkit-scrollbar-track {
-		background: var(--color-chrome-border);
+		background: var(--color-void);
 	}
 	*::-webkit-scrollbar-thumb {
-		background: var(--color-chrome-text-dim);
-	}
-	* {
-		scrollbar-width: thin;
-		scrollbar-color: var(--color-chrome-text-dim) var(--color-chrome-border);
+		background: var(--color-chrome-raised);
 	}
 }
 

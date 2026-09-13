@@ -9,7 +9,7 @@ interface Props {
 export function HomeScreen({ context }: Props) {
 	return (
 		<div className="relative flex flex-1 flex-col overflow-hidden bg-void">
-			<TerrainShader className="absolute inset-0" />
+			<TerrainShader theme={context.app.theme} className="absolute inset-0" />
 			<div className="relative flex h-full flex-col p-4">
 				<h1 className="-mt-[0.16em] font-display text-[6rem] font-bold leading-none -tracking-[0.02em] text-chrome-text">
 					SPECTRASCOPE

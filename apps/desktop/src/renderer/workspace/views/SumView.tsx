@@ -1,26 +1,27 @@
 import { useMemo } from "react";
+import { THEME_PALETTES } from "../../utils/themePalettes";
 import { StripLayout, StripOverlays, StripSourceRender, useStripView } from "../spectral/stripView";
 import type { LayerColor } from "../layers";
 import type { Source } from "../source";
 import type { DerivedSpectralViewProps } from "./viewProps";
-
-const SUM_LAYER_COLOR: LayerColor = {
-	primary: "#A3E635",
-	secondary: "#440154",
-};
 
 export function SumView({
 	sources,
 	derivedAudio,
 	channelInput,
 	settings,
+	theme,
 	onFrequencyRangeChange,
 	onTransportControlChange,
 }: DerivedSpectralViewProps) {
+	const layerColor = useMemo<LayerColor>(
+		() => ({ primary: THEME_PALETTES[theme].accent, secondary: THEME_PALETTES[theme].tint }),
+		[theme],
+	);
 	const view = useStripView(
 		"sum",
 		derivedAudio,
-		SUM_LAYER_COLOR,
+		layerColor,
 		settings.frequencyRange,
 		settings.frequencyScale,
 		onFrequencyRangeChange,
@@ -35,12 +36,12 @@ export function SumView({
 			name: "Σ all sources",
 			audioFilePath: "derived",
 			timelineOffsetMs: 0,
-			layerColor: SUM_LAYER_COLOR,
+			layerColor,
 			visible: true,
 			muted: false,
 			soloed: false,
 		}),
-		[],
+		[layerColor],
 	);
 
 	return (

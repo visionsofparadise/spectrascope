@@ -10,6 +10,7 @@ import { VectorscopeView } from "./views/VectorscopeView";
 import type { Source } from "./source";
 import type { AudioData } from "./spectral/types";
 import type { SpectralViewControls, DifferenceSelectionProps } from "./views/viewProps";
+import type { ThemeId } from "../utils/themePalettes";
 
 export type ViewId =
 	| "timeline"
@@ -38,6 +39,7 @@ interface WorkspaceProps extends SpectralViewControls, DifferenceSelectionProps 
 	 */
 	readonly derivedAudio: AudioData;
 	readonly sources: ReadonlyArray<Source>;
+	readonly theme: ThemeId;
 	/**
 	 * The active view. Controlled — the host owns which view is shown so it can
 	 * resolve view-specific data (e.g. the desktop app routes the Sum vs
@@ -61,6 +63,7 @@ export function Workspace({
 	activeView,
 	channelInput,
 	settings,
+	theme,
 	onFrequencyRangeChange,
 	differenceA,
 	differenceB,
@@ -107,6 +110,7 @@ export function Workspace({
 					derivedAudio={derivedAudio}
 					channelInput={channelInput}
 					settings={settings}
+					theme={theme}
 					differenceA={differenceA}
 					differenceB={differenceB}
 					onDifferenceChange={onDifferenceChange}
@@ -120,6 +124,7 @@ export function Workspace({
 					derivedAudio={derivedAudio}
 					channelInput={channelInput}
 					settings={settings}
+					theme={theme}
 					onTransportControlChange={onTransportControlChange}
 				/>
 			)}
