@@ -28,6 +28,27 @@ afterAll(async () => {
 });
 
 describe("media stream responses", () => {
+	it("serves a shared interleaved range with all channels in one render", async () => {
+		const stereoPath = path.join(directory, "stereo.wav");
+		const samples = new Float32Array([1, 10, 2, 20, 3, 30]);
+		await fs.writeFile(stereoPath, Buffer.concat([buildWavHeader(48000, 2, 3), Buffer.from(samples.buffer)]));
+		const manager = new StreamManager();
+		try {
+			registerMediaProtocol(manager);
+			const info = await manager.registerStream({ inputs: [{ pcmPath: stereoPath, offsetMs: 0, gain: 1 }] });
+			if (!protocol.handler) throw new Error("Protocol not registered");
+			const response = await protocol.handler(
+				new Request(`media://stream/${info.key}/raw/interleaved`, { headers: { Range: "bytes=8-23" } }),
+			);
+			expect(response.status).toBe(206);
+			expect(response.headers.get("Content-Range")).toBe("bytes 8-23/24");
+			expect([...new Float32Array(await response.arrayBuffer())]).toEqual([2, 20, 3, 30]);
+			manager.releaseStream(info.key);
+			expect(manager.usesPath(stereoPath)).toBe(false);
+		} finally {
+			manager.dispose();
+		}
+	});
 	it("bounds open-ended ranges and retains a released registration until cancellation", async () => {
 		const manager = new StreamManager();
 		try {

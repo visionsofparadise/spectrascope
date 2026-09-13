@@ -1,5 +1,8 @@
+import { PcmBlockCache } from "./utils/PcmBlockCache";
 import type { StreamInfo } from "../../main/StreamManager";
 import type { AudioData } from "../workspace/spectral/types";
+
+const blocks = new PcmBlockCache();
 
 export type StreamFlavor = "raw" | "wav";
 
@@ -12,6 +15,9 @@ export function streamUrl(key: string, flavor: StreamFlavor, channel?: number): 
 }
 
 export function createStreamAudioData(info: StreamInfo): AudioData {
+	const blockFrames = Math.max(1, Math.min(65536, Math.floor((1024 * 1024) / (info.channelCount * 4))));
+	const sourceKey = JSON.stringify([info.key, info.sampleRate, info.channelCount, info.totalFrames]);
+
 	return {
 		sampleRate: info.sampleRate,
 		channels: info.channelCount,
@@ -32,25 +38,45 @@ export function createStreamAudioData(info: StreamInfo): AudioData {
 
 			if (end <= start) return samples;
 
-			const startByte = start * 4;
-			const endByte = end * 4 - 1;
+			for (
+				let blockStart = Math.floor(start / blockFrames) * blockFrames;
+				blockStart < end;
+				blockStart += blockFrames
+			) {
+				const blockEnd = Math.min(info.totalFrames, blockStart + blockFrames);
+				const interleaved = await blocks.read(
+					`${sourceKey}:${String(blockStart)}`,
+					async (blockSignal) => {
+						const startByte = blockStart * info.channelCount * 4;
+						const endByte = blockEnd * info.channelCount * 4 - 1;
+						const response = await fetch(`media://stream/${info.key}/raw/interleaved`, {
+							headers: { Range: `bytes=${String(startByte)}-${String(endByte)}` },
+							signal: blockSignal,
+						});
 
-			const response = await fetch(streamUrl(info.key, "raw", channel), {
-				headers: { Range: `bytes=${String(startByte)}-${String(endByte)}` },
-				signal,
-			});
+						blockSignal.throwIfAborted();
 
-			signal?.throwIfAborted();
+						if (!response.ok)
+							throw new Error(`Audio read failed (${String(response.status)} ${response.statusText})`);
 
-			if (!response.ok) throw new Error(`Audio read failed (${String(response.status)} ${response.statusText})`);
+						const buffer = await response.arrayBuffer();
 
-			const buffer = await response.arrayBuffer();
+						blockSignal.throwIfAborted();
 
-			signal?.throwIfAborted();
+						if (buffer.byteLength !== (blockEnd - blockStart) * info.channelCount * 4)
+							throw new Error("Audio read returned an incomplete sample range");
 
-			if (buffer.byteLength !== (end - start) * 4) throw new Error("Audio read returned an incomplete sample range");
+						return new Float32Array(buffer);
+					},
+					signal,
+				);
 
-			samples.set(new Float32Array(buffer), start - sampleOffset);
+				signal?.throwIfAborted();
+
+				for (let frame = Math.max(start, blockStart); frame < Math.min(end, blockEnd); frame++) {
+					samples[frame - sampleOffset] = interleaved[(frame - blockStart) * info.channelCount + channel] ?? 0;
+				}
+			}
 
 			return samples;
 		},

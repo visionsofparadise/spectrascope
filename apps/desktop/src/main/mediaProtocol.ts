@@ -180,8 +180,8 @@ function resolveRange(rangeHeader: string, total: number): { start: number; end:
 	return { start: parsed.start, end: Math.min(parsed.end, total - 1) };
 }
 
-function serveRaw(resolved: ResolvedStream, channel: number, rangeHeader: string | null): Response {
-	const total = resolved.totalFrames * BYTES_PER_SAMPLE;
+function serveRaw(resolved: ResolvedStream, channel: number | null, rangeHeader: string | null): Response {
+	const total = resolved.totalFrames * BYTES_PER_SAMPLE * (channel === null ? resolved.outputChannels : 1);
 
 	if (!rangeHeader)
 		return wholeBodyResponse(
@@ -245,6 +245,8 @@ async function handleStreamRequest(url: URL, request: Request, streamManager: St
 		const rangeHeader = request.headers.get("Range");
 
 		if (flavor === "raw") {
+			if (segments[2] === "interleaved") return leasedResponse(serveRaw(resolved, null, rangeHeader), lease);
+
 			const channel = Number.parseInt(segments[2] ?? "", 10);
 
 			if (!Number.isInteger(channel) || channel < 0 || channel >= resolved.outputChannels) {

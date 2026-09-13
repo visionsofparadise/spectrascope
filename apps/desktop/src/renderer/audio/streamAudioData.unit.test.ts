@@ -1,12 +1,16 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createStreamAudioData } from "./streamAudioData";
 
-const audio = createStreamAudioData({
-	key: "sample",
-	sampleRate: 1000,
-	channelCount: 1,
-	totalFrames: 3,
-	durationMs: 3,
+let sequence = 0;
+let audio: ReturnType<typeof createStreamAudioData>;
+beforeEach(() => {
+	audio = createStreamAudioData({
+		key: `sample-${String(sequence++)}`,
+		sampleRate: 1000,
+		channelCount: 1,
+		totalFrames: 3,
+		durationMs: 3,
+	});
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -26,9 +30,9 @@ describe("stream PCM reader", () => {
 		const fetch = vi.fn().mockResolvedValue(new Response(new Float32Array([1, 2, 3]).buffer));
 		vi.stubGlobal("fetch", fetch);
 		expect([...(await audio.readSamples(0, -1, 5))]).toEqual([0, 1, 2, 3, 0]);
-		expect(fetch).toHaveBeenCalledWith("media://stream/sample/raw/0", {
+		expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/\/raw\/interleaved$/), {
 			headers: { Range: "bytes=0-11" },
-			signal: undefined,
+			signal: expect.any(AbortSignal),
 		});
 	});
 	it("passes cancellation through fetch and rejects an obsolete pending read", async () => {
@@ -41,9 +45,10 @@ describe("stream PCM reader", () => {
 		);
 		vi.stubGlobal("fetch", fetch);
 		const pending = audio.readSamples(0, 0, 3, controller.signal);
-		expect(fetch).toHaveBeenCalledWith("media://stream/sample/raw/0", {
+		await Promise.resolve();
+		expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/\/raw\/interleaved$/), {
 			headers: { Range: "bytes=0-11" },
-			signal: controller.signal,
+			signal: expect.any(AbortSignal),
 		});
 		controller.abort();
 		await expect(pending).rejects.toMatchObject({ name: "AbortError" });
@@ -72,6 +77,7 @@ describe("stream PCM reader", () => {
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
 		const pending = audio.readSamples(0, 0, 3, controller.signal);
 		await Promise.resolve();
+		await Promise.resolve();
 		expect(response.arrayBuffer).toHaveBeenCalled();
 		controller.abort();
 		resolveBody?.(new Float32Array([1, 2, 3]).buffer);
@@ -83,5 +89,40 @@ describe("stream PCM reader", () => {
 		expect(await audio.readSamples(0, 0, 0)).toHaveLength(0);
 		expect([...(await audio.readSamples(0, 4, 2))]).toEqual([0, 0]);
 		expect(fetch).not.toHaveBeenCalled();
+	});
+	it("shares interleaved blocks across channels, overlapping ranges and independent readers", async () => {
+		const info = { key: "shared-stereo", sampleRate: 1000, channelCount: 2, totalFrames: 3, durationMs: 3 };
+		const first = createStreamAudioData(info);
+		const second = createStreamAudioData(info);
+		const fetch = vi.fn().mockResolvedValue(new Response(new Float32Array([1, 10, 2, 20, 3, 30]).buffer));
+		vi.stubGlobal("fetch", fetch);
+		const [left, right] = await Promise.all([first.readSamples(0, 0, 2), second.readSamples(1, 1, 2)]);
+		expect([...left]).toEqual([1, 2]);
+		expect([...right]).toEqual([20, 30]);
+		left[0] = 999;
+		expect([...(await first.readSamples(0, 0, 3))]).toEqual([1, 2, 3]);
+		expect(fetch).toHaveBeenCalledTimes(1);
+		expect(fetch).toHaveBeenCalledWith("media://stream/shared-stereo/raw/interleaved", {
+			headers: { Range: "bytes=0-23" },
+			signal: expect.any(AbortSignal),
+		});
+	});
+	it("anchors blocks at sample zero and handles a partial final block", async () => {
+		const source = createStreamAudioData({
+			key: "boundary",
+			sampleRate: 1000,
+			channelCount: 1,
+			totalFrames: 65538,
+			durationMs: 65538,
+		});
+		const first = new Float32Array(65536);
+		first[65535] = 4;
+		const fetch = vi
+			.fn()
+			.mockResolvedValueOnce(new Response(first.buffer))
+			.mockResolvedValueOnce(new Response(new Float32Array([5, 6]).buffer));
+		vi.stubGlobal("fetch", fetch);
+		expect([...(await source.readSamples(0, 65535, 3))]).toEqual([4, 5, 6]);
+		expect(fetch.mock.calls.map((call) => call[1].headers.Range)).toEqual(["bytes=0-262143", "bytes=262144-262151"]);
 	});
 });
