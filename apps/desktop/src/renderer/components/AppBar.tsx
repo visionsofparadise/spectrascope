@@ -1,6 +1,5 @@
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { isComparisonDirty } from "../comparison/utils/comparisonFingerprint";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -37,11 +36,6 @@ export function AppBar({ context, historyControl, canExport, exportBusy, onExpor
 	const tabs = app.tabs.map((tab) => ({
 		id: tab.id,
 		label: app.comparisons.find((entry) => entry.id === tab.comparisonId)?.name ?? "Session",
-		dirty: (() => {
-			const comparison = app.comparisons.find((entry) => entry.id === tab.comparisonId);
-
-			return comparison ? isComparisonDirty(comparison) : false;
-		})(),
 	}));
 
 	const selectTab = (id: string): void => {
@@ -186,7 +180,6 @@ export function AppBar({ context, historyControl, canExport, exportBusy, onExpor
 									}}
 								>
 									{tab.label}
-									{tab.dirty ? " •" : ""}
 								</span>
 							)}
 							<button
