@@ -9,13 +9,13 @@ import { axisFractionOf } from "../utils/axisRange";
 import { METRICS } from "../viewSettings";
 import { buildPolylineSegments } from "./chartTrace";
 import { useTimelineChromeSources } from "./viewAudio";
-import type { Source } from "../source";
+import type { SourceWithAudio } from "./viewAudio";
 import type { SourceViewProps } from "./viewProps";
 import type { ChartTraceProps } from "../spectral/chartTraceProps";
 import type { ChartReadoutTrace } from "../spectral/useChartReadouts";
 import type { AxisRange } from "../utils/axisRange";
 import type { LoudnessMetric, MetricSpec, ViewControlSettings } from "../viewSettings";
-import type { LoudnessData, SpectralOptions, SpectralQuery } from "spectral-display";
+import type { LoudnessData, SpectralOptions } from "spectral-display";
 
 const LOUDNESS_CONFIG: SpectralOptions["config"] = {
 	spectrogram: false,
@@ -27,9 +27,9 @@ interface LoudnessViewProps extends SourceViewProps {
 	readonly settings: ViewControlSettings;
 }
 
-const DEFAULT_METRIC: MetricSpec = METRICS[2] ?? {
-	id: "integrated",
-	label: "Integrated",
+const DEFAULT_METRIC: MetricSpec = METRICS[0] ?? {
+	id: "momentary",
+	label: "Momentary",
 	axisMin: -40,
 };
 
@@ -50,52 +50,31 @@ function dbToY(db: number, axisMin: number): number {
 	return (DB_MAX - clamped) / (DB_MAX - axisMin);
 }
 
-function formatLufs(lufs: number): string {
-	if (!Number.isFinite(lufs)) return "— LUFS";
-
-	return `${lufs.toFixed(1)} LUFS`;
+export interface LoudnessStripValues {
+	readonly integrated: number;
+	readonly truePeak: number;
+	readonly samplePeak: number;
 }
 
-function formatDbTp(db: number): string {
-	if (!Number.isFinite(db)) return "— dBTP";
-
-	return `${db.toFixed(1)} dBTP`;
+export function loudnessStripValuesOf(data: LoudnessData): LoudnessStripValues {
+	return {
+		integrated: data.integratedLufs,
+		truePeak: data.truePeakDb ?? data.peakDb,
+		samplePeak: data.peakDb,
+	};
 }
 
-function formatDbFs(db: number): string {
-	if (!Number.isFinite(db)) return "— dBFS";
+export function stripLinePositionOf(value: number, axisMin: number, range: AxisRange): number | null {
+	if (!Number.isFinite(value)) return null;
 
-	return `${db.toFixed(1)} dBFS`;
-}
+	const position = axisFractionOf(dbToY(value, axisMin), range);
 
-function isScalarMetric(metric: LoudnessMetric): boolean {
-	return metric === "truePeak" || metric === "samplePeak" || metric === "integrated";
-}
-
-function scalarMetricValue(
-	data: LoudnessData,
-	metric: LoudnessMetric,
-): { readonly value: number; readonly text: string } | null {
-	if (metric === "integrated") {
-		return { value: data.integratedLufs, text: formatLufs(data.integratedLufs) };
-	}
-
-	if (metric === "truePeak") {
-		const tp = data.truePeakDb ?? data.peakDb;
-
-		return { value: tp, text: formatDbTp(tp) };
-	}
-
-	if (metric === "samplePeak") {
-		return { value: data.peakDb, text: formatDbFs(data.peakDb) };
-	}
-
-	return null;
+	return position >= 0 && position <= 1 ? position : null;
 }
 
 interface SourceLoudnessTraceProps extends ChartTraceProps {
 	readonly metric: MetricSpec;
-	readonly onLoudnessData: (sourceId: string, data: LoudnessData | null, query?: SpectralQuery) => void;
+	readonly onLoudnessData: (sourceId: string, data: LoudnessData | null) => void;
 }
 
 function SourceLoudnessTrace({
@@ -123,17 +102,9 @@ function SourceLoudnessTrace({
 	const readout = useMemo<ChartReadoutTrace | null>(() => {
 		if (!renderable || !loudnessData) return null;
 
-		const scalar = scalarMetricValue(loudnessData, metric.id);
 		const series = pickSeriesForMetric(loudnessData, metric.id);
-		const values = scalar
-			? scalar.value
-			: series
-				? metric.id === "rms"
-					? series.map((value) => (value > 0 ? 20 * Math.log10(value) : -Infinity))
-					: series
-				: null;
-
-		if (values === null) return null;
+		const values =
+			metric.id === "rms" ? series.map((value) => (value > 0 ? 20 * Math.log10(value) : -Infinity)) : series;
 
 		return {
 			sourceId: source.id,
@@ -151,12 +122,12 @@ function SourceLoudnessTrace({
 	}, [source.id, readout, onTraceChange]);
 
 	useEffect(() => {
-		onLoudnessData(source.id, loudnessData, renderable?.query);
+		onLoudnessData(source.id, loudnessData);
 
 		return () => {
 			onLoudnessData(source.id, null);
 		};
-	}, [source.id, loudnessData, renderable?.query, onLoudnessData]);
+	}, [source.id, loudnessData, onLoudnessData]);
 
 	useReportComputeState(source.id, computeResult, onComputeState);
 
@@ -172,32 +143,7 @@ function SourceLoudnessTrace({
 		transformOrigin: "left" as const,
 	};
 
-	if (isScalarMetric(metric.id)) {
-		const scalar = scalarMetricValue(loudnessData, metric.id);
-
-		if (!scalar) return null;
-
-		const y = dbToY(scalar.value, metric.axisMin);
-
-		if (!Number.isFinite(y)) return null;
-
-		return (
-			<g style={transformStyle}>
-				<polyline
-					points={`0,${y} 1,${y}`}
-					fill="none"
-					stroke={color}
-					strokeWidth={1.5}
-					vectorEffect="non-scaling-stroke"
-				/>
-			</g>
-		);
-	}
-
 	const series = pickSeriesForMetric(loudnessData, metric.id);
-
-	if (!series) return null;
-
 	const mapValueToDb = mapperForMetric(metric.id, metric.axisMin);
 	const segments = buildPolylineSegments(series, (value) => dbToY(mapValueToDb(value), metric.axisMin));
 
@@ -208,7 +154,7 @@ function SourceLoudnessTrace({
 	);
 }
 
-function pickSeriesForMetric(data: LoudnessData, metric: LoudnessMetric): Float32Array | null {
+function pickSeriesForMetric(data: LoudnessData, metric: LoudnessMetric): Float32Array {
 	switch (metric) {
 		case "momentary":
 			return data.momentaryLufs;
@@ -216,11 +162,6 @@ function pickSeriesForMetric(data: LoudnessData, metric: LoudnessMetric): Float3
 			return data.shortTermLufs;
 		case "rms":
 			return data.rmsEnvelope;
-		case "truePeak":
-		case "samplePeak":
-		case "integrated":
-		default:
-			return null;
 	}
 }
 
@@ -236,73 +177,59 @@ function mapperForMetric(metric: LoudnessMetric, floorDb: number): (value: numbe
 	};
 }
 
-interface ScalarLabelsProps {
-	readonly visibleSources: ReadonlyArray<Source>;
-	readonly loudnessMap: ReadonlyMap<string, { data: LoudnessData; query?: SpectralQuery }>;
+const LOUDNESS_STRIPS: ReadonlyArray<{ readonly id: keyof LoudnessStripValues; readonly label: string }> = [
+	{ id: "integrated", label: "Int" },
+	{ id: "truePeak", label: "TP" },
+	{ id: "samplePeak", label: "SP" },
+];
+
+interface LoudnessStripsProps {
+	readonly renderableSources: ReadonlyArray<SourceWithAudio>;
+	readonly loudnessMap: ReadonlyMap<string, LoudnessData>;
 	readonly metric: MetricSpec;
 	readonly range: AxisRange;
 }
 
-function ScalarLabels({ visibleSources, loudnessMap, metric, range }: ScalarLabelsProps) {
+function LoudnessStrips({ renderableSources, loudnessMap, metric, range }: LoudnessStripsProps) {
+	const dbTicks = visibleValueTicksOf(metric.axisMin, DB_MAX, range, DB_TICK_COUNT);
+
 	return (
-		<>
-			{visibleSources.map((source) => {
-				const measurement = loudnessMap.get(source.id);
+		<div className="mr-4 flex shrink-0 gap-4">
+			{LOUDNESS_STRIPS.map((strip) => (
+				<div key={strip.id} className="relative w-[50px] shrink-0 overflow-hidden bg-void">
+					<HorizontalGridlines fractions={dbTicks.map((db) => dbToY(db, metric.axisMin))} range={range} />
+					{renderableSources.map(({ source }) => {
+						const data = loudnessMap.get(source.id);
+						const position = data
+							? stripLinePositionOf(loudnessStripValuesOf(data)[strip.id], metric.axisMin, range)
+							: null;
 
-				if (!measurement) return null;
+						if (position === null) return null;
 
-				const scalar = scalarMetricValue(measurement.data, metric.id);
-
-				if (!scalar || !Number.isFinite(scalar.value)) return null;
-
-				const position = axisFractionOf(dbToY(scalar.value, metric.axisMin), range);
-
-				if (position < 0 || position > 1) return null;
-
-				return (
-					<div
-						key={source.id}
-						className="pointer-events-none absolute right-2 -translate-y-1/2 whitespace-nowrap font-technical text-[length:var(--text-xs)] tabular-nums"
-						style={{ top: `${position * 100}%`, color: source.layerColor.primary }}
-					>
-						{scalar.text}
-						{measurement.query && (
-							<span className="ml-2 text-chrome-text-secondary">
-								Analyzed window {(measurement.query.startMs / 1000).toFixed(3)}–
-								{(measurement.query.endMs / 1000).toFixed(3)} s
-							</span>
-						)}
-					</div>
-				);
-			})}
-		</>
+						return (
+							<div
+								key={source.id}
+								className="absolute right-0 left-0 h-0.5"
+								style={{ top: `${position * 100}%`, background: source.layerColor.primary }}
+							/>
+						);
+					})}
+					<span className="absolute top-0 left-0 bg-chrome-raised font-technical text-xs uppercase tracking-[0.06em] leading-[1.6] text-chrome-text">
+						{strip.label}
+					</span>
+				</div>
+			))}
+		</div>
 	);
 }
 
 interface ChartCanvasProps extends ChartCanvasBaseProps {
 	readonly metric: MetricSpec;
+	readonly onLoudnessData: (sourceId: string, data: LoudnessData | null) => void;
 }
 
-function ChartCanvas({ chart, renderableSources, metric }: ChartCanvasProps) {
+function ChartCanvas({ chart, renderableSources, metric, onLoudnessData }: ChartCanvasProps) {
 	const { committedStartMs, committedEndMs, startMs: liveStartMs, endMs: liveEndMs } = chart.viewport;
-	const [loudnessMap, setLoudnessMap] = useState<Map<string, { data: LoudnessData; query?: SpectralQuery }>>(
-		() => new Map(),
-	);
-
-	const handleLoudnessData = useCallback((sourceId: string, data: LoudnessData | null, query?: SpectralQuery) => {
-		setLoudnessMap((previous) => {
-			const next = new Map(previous);
-
-			if (data === null) {
-				next.delete(sourceId);
-			} else {
-				next.set(sourceId, { data, query });
-			}
-
-			return next;
-		});
-	}, []);
-
 	const dbTicks = visibleValueTicksOf(metric.axisMin, DB_MAX, chart.yRange, DB_TICK_COUNT);
 
 	return (
@@ -319,20 +246,12 @@ function ChartCanvas({ chart, renderableSources, metric }: ChartCanvasProps) {
 						liveStartMs={liveStartMs}
 						liveEndMs={liveEndMs}
 						metric={metric}
-						onLoudnessData={handleLoudnessData}
+						onLoudnessData={onLoudnessData}
 						onComputeState={chart.progress.handleComputeState}
 						onTraceChange={chart.onTraceChange}
 					/>
 				))}
 			</ChartSvg>
-			{isScalarMetric(metric.id) && (
-				<ScalarLabels
-					visibleSources={renderableSources.map((entry) => entry.source)}
-					loudnessMap={loudnessMap}
-					metric={metric}
-					range={chart.yRange}
-				/>
-			)}
 		</div>
 	);
 }
@@ -361,9 +280,43 @@ export function LoudnessView({ sources, sourceAudio, settings, onTransportContro
 
 	const chart = useChartView(chromeAudio, axis, onTransportControlChange);
 
+	const [loudnessMap, setLoudnessMap] = useState<ReadonlyMap<string, LoudnessData>>(() => new Map());
+
+	const handleLoudnessData = useCallback((sourceId: string, data: LoudnessData | null) => {
+		setLoudnessMap((previous) => {
+			const next = new Map(previous);
+
+			if (data === null) {
+				next.delete(sourceId);
+			} else {
+				next.set(sourceId, data);
+			}
+
+			return next;
+		});
+	}, []);
+
 	return (
-		<ChartLayout chart={chart} tickCount={DB_TICK_COUNT} renderableSources={renderableSources}>
-			<ChartCanvas chart={chart} renderableSources={renderableSources} metric={metricSpec} />
+		<ChartLayout
+			chart={chart}
+			tickCount={DB_TICK_COUNT}
+			renderableSources={renderableSources}
+			leading={
+				<LoudnessStrips
+					renderableSources={renderableSources}
+					loudnessMap={loudnessMap}
+					metric={metricSpec}
+					range={chart.yRange}
+				/>
+			}
+			leadingSpacerClassName="w-[198px]"
+		>
+			<ChartCanvas
+				chart={chart}
+				renderableSources={renderableSources}
+				metric={metricSpec}
+				onLoudnessData={handleLoudnessData}
+			/>
 		</ChartLayout>
 	);
 }

@@ -5,7 +5,7 @@ import { METRICS } from "./viewSettings";
 import type { Source } from "./source";
 import type { ViewControlSettings } from "./viewSettings";
 import type { ViewId } from "./Workspace";
-import type { ChannelInput } from "spectral-display";
+import type { ChannelInput, VectorscopeScale } from "spectral-display";
 
 interface ViewTopBarProps {
 	readonly activeView: ViewId;
@@ -39,6 +39,12 @@ const CHANNEL_OPTIONS: ReadonlyArray<{ readonly value: ChannelInput; readonly la
 ];
 
 const METRIC_OPTIONS = METRICS.map((metric) => ({ value: metric.id, label: metric.label }));
+
+const SCALE_OPTIONS: ReadonlyArray<{ readonly value: VectorscopeScale; readonly label: string }> = [
+	{ value: "linear", label: "Linear" },
+	{ value: "sqrt", label: "Square root" },
+	{ value: "log", label: "Logarithmic" },
+];
 
 const LABEL_CLASS = "font-technical text-xs uppercase tracking-[0.08em] text-chrome-text-secondary";
 
@@ -154,6 +160,24 @@ export function ViewTopBar({
 							const metric = METRICS.find((entry) => entry.id === value);
 
 							if (metric) onSettingsChange({ loudnessMetric: metric.id });
+						}}
+					/>
+				</div>
+			)}
+			{activeView === "vectorscope" && (
+				<div className="flex items-center gap-2">
+					<span className={LABEL_CLASS}>Scale</span>
+					<Select
+						variant="chip"
+						ariaLabel="Vectorscope scale"
+						className="-mr-1 flex"
+						menuClassName="right-0 left-auto w-40"
+						value={settings.vectorscopeScale}
+						options={SCALE_OPTIONS}
+						onChange={(value) => {
+							const option = SCALE_OPTIONS.find((entry) => entry.value === value);
+
+							if (option) onSettingsChange({ vectorscopeScale: option.value });
 						}}
 					/>
 				</div>

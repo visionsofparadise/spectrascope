@@ -34,6 +34,8 @@ export type { DisplayComputeResult, DisplayComputeTile } from "./useDisplayCompu
 export type { ComputeResult, ComputeResultReady, SpectralOptions, SpectralQuery } from "./useSpectralCompute";
 export { lavaColormap } from "./utils/lava";
 export { VectorscopeCanvas } from "./VectorscopeCanvas";
+export { VECTORSCOPE_FULL_SCALE_RADIUS, vectorscopeAmplitudeOf, vectorscopeWarpOf } from "./engine/vectorscope-scale";
+export type { VectorscopeScale } from "./engine/vectorscope-scale";
 export type { VectorscopeCanvasProps } from "./VectorscopeCanvas";
 export { viridisColormap } from "./utils/viridis";
 export { WaveformCanvas } from "./WaveformCanvas";

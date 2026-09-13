@@ -1,9 +1,11 @@
 import { z } from "zod";
-import type { FrequencyScale, SpectrogramSampling } from "spectral-display";
+import type { FrequencyScale, SpectrogramSampling, VectorscopeScale } from "spectral-display";
 
 export type GridMode = "freq" | "amp";
 
-export type LoudnessMetric = "truePeak" | "samplePeak" | "integrated" | "momentary" | "shortTerm" | "rms";
+export type LoudnessMetric = "momentary" | "shortTerm" | "rms";
+
+const LEGACY_SCALAR_METRICS: ReadonlyArray<unknown> = ["integrated", "truePeak", "samplePeak"];
 
 export interface MetricSpec {
 	readonly id: LoudnessMetric;
@@ -12,9 +14,6 @@ export interface MetricSpec {
 }
 
 export const METRICS: ReadonlyArray<MetricSpec> = [
-	{ id: "truePeak", label: "True peak", axisMin: -60 },
-	{ id: "samplePeak", label: "Sample peak", axisMin: -60 },
-	{ id: "integrated", label: "Integrated", axisMin: -40 },
 	{ id: "momentary", label: "Momentary", axisMin: -40 },
 	{ id: "shortTerm", label: "Short term", axisMin: -40 },
 	{ id: "rms", label: "RMS", axisMin: -60 },
@@ -29,6 +28,7 @@ export interface ViewControlSettings {
 	readonly fftSize: number;
 	readonly hopOverlap: number;
 	readonly loudnessMetric: LoudnessMetric;
+	readonly vectorscopeScale: VectorscopeScale;
 	readonly frequencyRange: { readonly top: number; readonly bottom: number };
 	readonly frequencyScale: FrequencyScale;
 	readonly spectrogramSampling: SpectrogramSampling;
@@ -43,7 +43,8 @@ export const INITIAL_VIEW_CONTROL_SETTINGS: ViewControlSettings = {
 	loudnessOpacity: 0.5,
 	fftSize: 4096,
 	hopOverlap: 16,
-	loudnessMetric: "integrated",
+	loudnessMetric: "momentary",
+	vectorscopeScale: "sqrt",
 	frequencyRange: { top: 0, bottom: 1 },
 	frequencyScale: "mel",
 	spectrogramSampling: 4,
@@ -68,8 +69,12 @@ export const ViewControlSettingsSchema = z.object({
 		.refine((value) => [2, 4, 8, 16, 32].includes(value))
 		.default(16),
 	loudnessMetric: z
-		.enum(["truePeak", "samplePeak", "integrated", "momentary", "shortTerm", "rms"])
-		.default("integrated"),
+		.preprocess(
+			(value) => (LEGACY_SCALAR_METRICS.includes(value) ? "momentary" : value),
+			z.enum(["momentary", "shortTerm", "rms"]),
+		)
+		.default("momentary"),
+	vectorscopeScale: z.enum(["linear", "sqrt", "log"]).default("sqrt"),
 	frequencyRange: z
 		.object({ top: z.number().min(0).max(1), bottom: z.number().min(0).max(1) })
 		.refine(({ top, bottom }) => bottom - top >= 1 / 64 - Number.EPSILON)

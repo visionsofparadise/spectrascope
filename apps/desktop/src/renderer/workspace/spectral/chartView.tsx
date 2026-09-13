@@ -94,9 +94,20 @@ interface ChartLayoutProps {
 	readonly tickCount: number;
 	readonly renderableSources: ReadonlyArray<SourceWithAudio>;
 	readonly children: React.ReactNode;
+	readonly leading?: React.ReactNode;
+	readonly leadingSpacerClassName?: string;
 }
 
-export function ChartLayout({ chart, tickCount, renderableSources, children }: ChartLayoutProps) {
+export function ChartLayout({
+	chart,
+	tickCount,
+	renderableSources,
+	children,
+	leading,
+	leadingSpacerClassName,
+}: ChartLayoutProps) {
+	const leadingSpacer = leadingSpacerClassName && <div className={`${leadingSpacerClassName} shrink-0`} />;
+
 	const { max, min, rangeLabel, unit, widestLabel } = chart.axis;
 
 	return (
@@ -105,6 +116,7 @@ export function ChartLayout({ chart, tickCount, renderableSources, children }: C
 				<div className="flex min-h-0 flex-1 flex-col">
 					<div className="flex shrink-0">
 						<AxisSpacer sample={widestLabel} />
+						{leadingSpacer}
 						<div className="min-w-0 flex-1">
 							<TimeRuler startMs={chart.viewport.startMs} endMs={chart.viewport.endMs} />
 						</div>
@@ -112,6 +124,7 @@ export function ChartLayout({ chart, tickCount, renderableSources, children }: C
 					</div>
 					<div className="flex min-h-0 flex-1">
 						<LinearDbAxis min={min} max={max} tickCount={tickCount} range={chart.yRange} sample={widestLabel} />
+						{leading}
 						<SelectionSurface
 							ref={chart.viewport.wheelHandlers.ref}
 							startMs={chart.viewport.startMs}
@@ -149,6 +162,7 @@ export function ChartLayout({ chart, tickCount, renderableSources, children }: C
 					</div>
 					<div className="flex shrink-0">
 						<AxisSpacer sample={widestLabel} />
+						{leadingSpacer}
 						<div className="min-w-0 flex-1">
 							<MinimapDisplay
 								layers={minimapLayersOf(renderableSources)}

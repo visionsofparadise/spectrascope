@@ -163,6 +163,7 @@ export function Workspace({
 				<VectorscopeView
 					sources={sources}
 					sourceAudio={sourceAudio}
+					settings={settings}
 					onTransportControlChange={onTransportControlChange}
 				/>
 			)}

@@ -2,7 +2,9 @@ import { useEffect, useRef } from "react";
 import { BlitRenderer } from "./engine/blit";
 import { VECTORSCOPE_GRID_SIZE } from "./engine/sample-scan";
 import { VectorscopeRenderer } from "./engine/vectorscope-render";
+import { VECTORSCOPE_SCALES } from "./engine/vectorscope-scale";
 import { useCanvasRef } from "./useCanvasRef";
+import type { VectorscopeScale } from "./engine/vectorscope-scale";
 import type { ComputeResult } from "./useSpectralCompute";
 
 export interface VectorscopeCanvasProps {
@@ -16,9 +18,16 @@ export interface VectorscopeCanvasProps {
 	 */
 	tint: [number, number, number];
 	canvasScale?: number;
+	scale: VectorscopeScale;
 }
 
-export const VectorscopeCanvas: React.FC<VectorscopeCanvasProps> = ({ computeResult, ref, tint, canvasScale = 1 }) => {
+export const VectorscopeCanvas: React.FC<VectorscopeCanvasProps> = ({
+	computeResult,
+	ref,
+	tint,
+	canvasScale = 1,
+	scale: vectorscopeScale,
+}) => {
 	const [internalCanvasReference, canvasCallback] = useCanvasRef(ref);
 	const blitReference = useRef<BlitRenderer | null>(null);
 	const rendererReference = useRef<VectorscopeRenderer | null>(null);
@@ -56,11 +65,19 @@ export const VectorscopeCanvas: React.FC<VectorscopeCanvasProps> = ({ computeRes
 		rendererReference.current ??= new VectorscopeRenderer(device);
 		deviceReference.current = device;
 
-		const texture = rendererReference.current.render(vectorscopeHistogram, VECTORSCOPE_GRID_SIZE, size, size, tint);
+		const cellCount = VECTORSCOPE_GRID_SIZE * VECTORSCOPE_GRID_SIZE;
+		const offset = VECTORSCOPE_SCALES.indexOf(vectorscopeScale) * cellCount;
+		const texture = rendererReference.current.render(
+			vectorscopeHistogram.subarray(offset, offset + cellCount),
+			VECTORSCOPE_GRID_SIZE,
+			size,
+			size,
+			tint,
+		);
 
 		blitReference.current.resize(size, size);
 		blitReference.current.render(texture);
-	}, [computeResult, tint[0], tint[1], tint[2], size]);
+	}, [computeResult, tint[0], tint[1], tint[2], size, vectorscopeScale]);
 
 	useEffect(
 		() => () => {

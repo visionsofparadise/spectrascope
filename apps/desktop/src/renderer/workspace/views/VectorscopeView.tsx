@@ -1,5 +1,10 @@
-import { useMemo, useRef } from "react";
-import { VectorscopeCanvas } from "spectral-display";
+import { useCallback, useMemo, useRef } from "react";
+import {
+	VECTORSCOPE_FULL_SCALE_RADIUS,
+	VectorscopeCanvas,
+	vectorscopeAmplitudeOf,
+	vectorscopeWarpOf,
+} from "spectral-display";
 import { rangeTransformOf } from "../spectral/chartMarks";
 import { hexToRgb255 } from "../spectral/colorUtil";
 import { ComputeProgress } from "../spectral/ComputeProgress";
@@ -18,7 +23,8 @@ import type { ComputeState } from "../spectral/firstComputeProgress";
 import type { AudioData } from "../spectral/types";
 import type { TransportControl, TransportReadoutRow } from "../Transport";
 import type { AxisRange } from "../utils/axisRange";
-import type { SpectralOptions } from "spectral-display";
+import type { ViewControlSettings } from "../viewSettings";
+import type { SpectralOptions, VectorscopeScale } from "spectral-display";
 
 const VECTORSCOPE_CONFIG: SpectralOptions["config"] = {
 	spectrogram: false,
@@ -30,6 +36,7 @@ const VECTORSCOPE_CONFIG: SpectralOptions["config"] = {
 interface VectorscopeViewProps {
 	readonly sources: ReadonlyArray<Source>;
 	readonly sourceAudio: ReadonlyMap<string, AudioData>;
+	readonly settings: ViewControlSettings;
 	readonly onTransportControlChange?: (control: TransportControl) => void;
 }
 
@@ -57,15 +64,15 @@ function levelReadoutOf(amplitude: number): string {
 	return amplitude === 0 ? "−∞ dB" : `${(20 * Math.log10(Math.abs(amplitude))).toFixed(1)} dB`;
 }
 
-export function stereoReadoutRowsOf(side: number, mid: number): ReadonlyArray<TransportReadoutRow> {
-	const magnitude = Math.abs(mid) + Math.abs(side);
+export function stereoReadoutRowsOf(x: number, mid: number): ReadonlyArray<TransportReadoutRow> {
+	const magnitude = Math.abs(mid) + Math.abs(x);
 
 	return [
-		{ label: "L", cursor: levelReadoutOf(mid + side), in: EMPTY_READOUT, out: EMPTY_READOUT },
-		{ label: "R", cursor: levelReadoutOf(mid - side), in: EMPTY_READOUT, out: EMPTY_READOUT },
+		{ label: "L", cursor: levelReadoutOf(mid - x), in: EMPTY_READOUT, out: EMPTY_READOUT },
+		{ label: "R", cursor: levelReadoutOf(mid + x), in: EMPTY_READOUT, out: EMPTY_READOUT },
 		{
 			label: "Width",
-			cursor: magnitude === 0 ? EMPTY_READOUT : (Math.abs(side) / magnitude).toFixed(2),
+			cursor: magnitude === 0 ? EMPTY_READOUT : (Math.abs(x) / magnitude).toFixed(2),
 			in: EMPTY_READOUT,
 			out: EMPTY_READOUT,
 		},
@@ -79,10 +86,23 @@ const EMPTY_STEREO_ROWS = ["L", "R", "Width"].map((label) => ({
 	out: EMPTY_READOUT,
 }));
 
-function stereoPointerReadoutRowsOf(
-	pointer: { readonly x: number; readonly y: number } | null,
-): ReadonlyArray<TransportReadoutRow> {
-	return pointer ? stereoReadoutRowsOf(2 * pointer.x - 1, 1 - 2 * pointer.y) : EMPTY_STEREO_ROWS;
+export function scopeSignalOf(
+	pointer: { readonly x: number; readonly y: number },
+	scale: VectorscopeScale,
+): { readonly x: number; readonly mid: number } {
+	const x = 2 * pointer.x - 1;
+	const y = 1 - 2 * pointer.y;
+	const distance = Math.hypot(x, y);
+
+	if (distance === 0) return { x: 0, mid: 0 };
+
+	const factor = vectorscopeAmplitudeOf(distance / VECTORSCOPE_FULL_SCALE_RADIUS, scale) / distance;
+
+	return { x: x * factor, mid: y * factor };
+}
+
+export function ringRadiiOf(scale: VectorscopeScale): ReadonlyArray<number> {
+	return [-6, -12, -18].map((db) => (VECTORSCOPE_FULL_SCALE_RADIUS / 2) * vectorscopeWarpOf(10 ** (db / 20), scale));
 }
 
 export function canvasScaleOf(baseScale: number, visibleSpan: number): number {
@@ -119,7 +139,26 @@ function FullBleedAxes({ xRange, yRange }: ScopeRangeProps) {
 	);
 }
 
-function ScopeDiagonals({ xRange, yRange }: ScopeRangeProps) {
+const SCOPE_LABEL_CLASS = "pointer-events-none absolute font-technical text-xs tracking-[0.06em] text-chrome-text-dim";
+
+function ScopeLabels() {
+	return (
+		<>
+			<span className={`${SCOPE_LABEL_CLASS} top-0 left-1/2 -translate-x-1/2`}>+M</span>
+			<span className={`${SCOPE_LABEL_CLASS} bottom-0 left-1/2 -translate-x-1/2`}>−M</span>
+			<span className={`${SCOPE_LABEL_CLASS} top-1/2 left-0 -translate-y-1/2`}>−S</span>
+			<span className={`${SCOPE_LABEL_CLASS} top-1/2 right-0 -translate-y-1/2`}>+S</span>
+			<span className={`${SCOPE_LABEL_CLASS} top-[8%] left-[8%]`}>L</span>
+			<span className={`${SCOPE_LABEL_CLASS} top-[8%] right-[8%]`}>R</span>
+		</>
+	);
+}
+
+interface ScopeGuidesProps extends ScopeRangeProps {
+	readonly scale: VectorscopeScale;
+}
+
+function ScopeGuides({ xRange, yRange, scale }: ScopeGuidesProps) {
 	return (
 		<svg
 			className="pointer-events-none absolute inset-0 h-full w-full"
@@ -128,6 +167,27 @@ function ScopeDiagonals({ xRange, yRange }: ScopeRangeProps) {
 			aria-hidden="true"
 		>
 			<g transform={rangeTransformOf(xRange, yRange)}>
+				<circle
+					cx={0.5}
+					cy={0.5}
+					r={VECTORSCOPE_FULL_SCALE_RADIUS / 2}
+					fill="none"
+					stroke="var(--color-chrome-border)"
+					strokeWidth={1}
+					vectorEffect="non-scaling-stroke"
+				/>
+				{ringRadiiOf(scale).map((radius, index) => (
+					<circle
+						key={index}
+						cx={0.5}
+						cy={0.5}
+						r={radius}
+						fill="none"
+						stroke="var(--color-chrome-border-subtle)"
+						strokeWidth={1}
+						vectorEffect="non-scaling-stroke"
+					/>
+				))}
 				<line
 					x1={0}
 					y1={0}
@@ -156,9 +216,10 @@ interface SourceCloudProps {
 	readonly audioData: AudioData;
 	readonly onComputeState?: (sourceId: string, state: ComputeState | null) => void;
 	readonly visibleSpan: number;
+	readonly scale: VectorscopeScale;
 }
 
-function SourceCloud({ source, audioData, onComputeState, visibleSpan }: SourceCloudProps) {
+function SourceCloud({ source, audioData, onComputeState, visibleSpan, scale }: SourceCloudProps) {
 	const { computeResult, renderable } = useTraceCompute(
 		audioData,
 		0,
@@ -177,13 +238,30 @@ function SourceCloud({ source, audioData, onComputeState, visibleSpan }: SourceC
 
 	return (
 		<div ref={containerRef} className="absolute inset-0 [&>canvas]:h-full [&>canvas]:w-full">
-			<VectorscopeCanvas canvasScale={canvasScale} computeResult={renderable ?? computeResult} tint={tint} />
+			<VectorscopeCanvas
+				canvasScale={canvasScale}
+				computeResult={renderable ?? computeResult}
+				tint={tint}
+				scale={scale}
+			/>
 		</div>
 	);
 }
 
-export function VectorscopeView({ sources, sourceAudio, onTransportControlChange }: VectorscopeViewProps) {
+export function VectorscopeView({ sources, sourceAudio, settings, onTransportControlChange }: VectorscopeViewProps) {
 	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
+	const scale = settings.vectorscopeScale;
+
+	const stereoPointerReadoutRowsOf = useCallback(
+		(pointer: { readonly x: number; readonly y: number } | null): ReadonlyArray<TransportReadoutRow> => {
+			if (!pointer) return EMPTY_STEREO_ROWS;
+
+			const signal = scopeSignalOf(pointer, scale);
+
+			return stereoReadoutRowsOf(signal.x, signal.mid);
+		},
+		[scale],
+	);
 
 	const { xRange, setXRange, yRange, setYRange, onMouseMove, onMouseLeave } = usePointerReadoutTransport(
 		renderableSources,
@@ -214,6 +292,7 @@ export function VectorscopeView({ sources, sourceAudio, onTransportControlChange
 									onMouseMove={onMouseMove}
 									onMouseLeave={onMouseLeave}
 								>
+									<ScopeLabels />
 									<div
 										className="absolute inset-0"
 										style={{
@@ -229,10 +308,11 @@ export function VectorscopeView({ sources, sourceAudio, onTransportControlChange
 												audioData={audioData}
 												onComputeState={progress.handleComputeState}
 												visibleSpan={Math.min(xRange.end - xRange.start, yRange.end - yRange.start)}
+												scale={scale}
 											/>
 										))}
 									</div>
-									<ScopeDiagonals xRange={xRange} yRange={yRange} />
+									<ScopeGuides xRange={xRange} yRange={yRange} scale={scale} />
 								</div>
 								{progress.firstComputing && <ComputeProgress fraction={progress.fraction} />}
 								<ViewProgressToast />

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createScanContext, finalizeScan, scanSamples, VECTORSCOPE_GRID_SIZE } from "./sample-scan";
+import { VECTORSCOPE_FULL_SCALE_RADIUS, VECTORSCOPE_SCALES, vectorscopeWarpOf } from "./vectorscope-scale";
 
 const POINTS_PER_SECOND = 500;
 const CHUNK_SIZE = 131072;
@@ -174,6 +175,20 @@ describe("scanSamples — stereo products", () => {
 		expect(total).toBe(result.samplesPerChannel);
 	});
 
+	it.each(VECTORSCOPE_SCALES)("plots a left-only sample top-left at its %s radius", (scale) => {
+		const amplitude = 0.5;
+		const result = scanStereo([new Float32Array([amplitude]), new Float32Array([0])], 48000);
+		const cellCount = VECTORSCOPE_GRID_SIZE * VECTORSCOPE_GRID_SIZE;
+		const offset = VECTORSCOPE_SCALES.indexOf(scale) * cellCount;
+		const bin = result.vectorscopeHistogram.subarray(offset, offset + cellCount).indexOf(1);
+		const radius = VECTORSCOPE_FULL_SCALE_RADIUS * vectorscopeWarpOf(amplitude / Math.SQRT2, scale);
+		const coordinate = radius / Math.SQRT2;
+		const half = VECTORSCOPE_GRID_SIZE / 2;
+
+		expect(bin % VECTORSCOPE_GRID_SIZE).toBe(Math.floor((1 - coordinate) * half));
+		expect(Math.floor(bin / VECTORSCOPE_GRID_SIZE)).toBe(Math.floor((1 + coordinate) * half));
+	});
+
 	it("accumulates one histogram increment per sample", () => {
 		const sampleRate = 48000;
 		const samples = sampleRate;
@@ -188,8 +203,10 @@ describe("scanSamples — stereo products", () => {
 			total += result.vectorscopeHistogram[bin]!;
 		}
 
-		expect(total).toBe(result.samplesPerChannel);
-		expect(result.vectorscopeHistogram.length).toBe(VECTORSCOPE_GRID_SIZE * VECTORSCOPE_GRID_SIZE);
+		expect(total).toBe(result.samplesPerChannel * VECTORSCOPE_SCALES.length);
+		expect(result.vectorscopeHistogram.length).toBe(
+			VECTORSCOPE_SCALES.length * VECTORSCOPE_GRID_SIZE * VECTORSCOPE_GRID_SIZE,
+		);
 	});
 
 	it("leaves stereo outputs empty when the stereo flag is off", () => {

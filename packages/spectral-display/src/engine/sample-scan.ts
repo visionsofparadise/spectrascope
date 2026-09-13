@@ -5,6 +5,7 @@ import {
 	type KWeightingCoefficients,
 } from "./k-weighting";
 import { createTruePeakState, truePeakMaxAbs, type TruePeakState } from "./true-peak";
+import { VECTORSCOPE_FULL_SCALE_RADIUS, VECTORSCOPE_SCALES, vectorscopeWarpOf } from "./vectorscope-scale";
 import type { SpectralMetadata } from "./runPipeline";
 import type { ChannelInput } from "./SpectralEngine";
 
@@ -150,7 +151,9 @@ export function createScanContext(
 		peakEnvelope: new Float32Array(pointCount),
 		kWeightedMeanSquare: new Float32Array(pointCount),
 		correlationEnvelope: new Float32Array(computeStereo ? pointCount : 0),
-		vectorscopeHistogram: new Uint32Array(computeStereo ? VECTORSCOPE_GRID_SIZE * VECTORSCOPE_GRID_SIZE : 0),
+		vectorscopeHistogram: new Uint32Array(
+			computeStereo ? VECTORSCOPE_SCALES.length * VECTORSCOPE_GRID_SIZE * VECTORSCOPE_GRID_SIZE : 0,
+		),
 		truePeakEnvelope: new Float32Array(computeTruePeak ? pointCount : 0),
 		truePeakBuffer: new Float32Array(computeTruePeak ? chunkSize : 0),
 		stereoLeftEnergy: new Float32Array(computeStereo ? pointCount : 0),
@@ -230,6 +233,15 @@ function deriveChannelFoldCoefficients(channelCount: number): {
 	return { lCoef, rCoef };
 }
 
+function vectorscopeBinOf(x: number, y: number): number {
+	const gridMax = VECTORSCOPE_GRID_SIZE - 1;
+	const halfGrid = VECTORSCOPE_GRID_SIZE * 0.5;
+	const xBin = Math.max(0, Math.min(gridMax, Math.floor((x + 1) * halfGrid)));
+	const yBin = Math.max(0, Math.min(gridMax, Math.floor((y + 1) * halfGrid)));
+
+	return yBin * VECTORSCOPE_GRID_SIZE + xBin;
+}
+
 export function scanSamples(
 	channelBuffers: ReadonlyArray<Float32Array>,
 	samplesPerChannel: number,
@@ -304,26 +316,24 @@ export function scanSamples(
 	}
 
 	if (computeStereo) {
-		const gridSize = VECTORSCOPE_GRID_SIZE;
-		const gridMax = gridSize - 1;
-		const halfGrid = gridSize * 0.5;
+		const cellCount = VECTORSCOPE_GRID_SIZE * VECTORSCOPE_GRID_SIZE;
 
 		for (let si = 0; si < samplesPerChannel; si++) {
 			const lSample = lBuffer[si]!;
 			const rSample = rBuffer[si]!;
 			const mid = (lSample + rSample) * 0.5;
-			const side = (lSample - rSample) * 0.5;
+			const x = (rSample - lSample) * 0.5;
+			const amplitude = Math.sqrt(x * x + mid * mid);
 
-			let xBin = Math.floor((side + 1) * halfGrid);
-			let yBin = Math.floor((mid + 1) * halfGrid);
+			for (let scaleIndex = 0; scaleIndex < VECTORSCOPE_SCALES.length; scaleIndex++) {
+				const factor =
+					amplitude === 0
+						? 0
+						: (VECTORSCOPE_FULL_SCALE_RADIUS * vectorscopeWarpOf(amplitude, VECTORSCOPE_SCALES[scaleIndex]!)) /
+							amplitude;
 
-			if (xBin < 0) xBin = 0;
-			else if (xBin > gridMax) xBin = gridMax;
-
-			if (yBin < 0) yBin = 0;
-			else if (yBin > gridMax) yBin = gridMax;
-
-			vectorscopeHistogram[yBin * gridSize + xBin]!++;
+				vectorscopeHistogram[scaleIndex * cellCount + vectorscopeBinOf(x * factor, mid * factor)]!++;
+			}
 		}
 	}
 
