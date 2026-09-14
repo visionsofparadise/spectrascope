@@ -579,7 +579,7 @@ export function TimelineView({
 							)}
 						</SelectionSurface>
 						<div className="flex h-14 shrink-0 items-center justify-center border border-dashed border-chrome-border bg-void">
-							<Button variant="primary" onClick={onAddSources}>
+							<Button variant="primary" className="px-1 py-0.5" onClick={onAddSources}>
 								<Icon icon="lucide:plus" width={16} height={16} aria-hidden="true" />
 								Add Source
 							</Button>

@@ -24,7 +24,6 @@ export interface ViewControlSettings {
 	readonly gridOpacity: number;
 	readonly waveformOpacity: number;
 	readonly spectrogramOpacity: number;
-	readonly loudnessOpacity: number;
 	readonly fftSize: number;
 	readonly hopOverlap: number;
 	readonly loudnessMetric: LoudnessMetric;
@@ -40,7 +39,6 @@ export const INITIAL_VIEW_CONTROL_SETTINGS: ViewControlSettings = {
 	gridOpacity: 0.3,
 	waveformOpacity: 0.8,
 	spectrogramOpacity: 0.7,
-	loudnessOpacity: 0.5,
 	fftSize: 4096,
 	hopOverlap: 16,
 	loudnessMetric: "momentary",
@@ -59,7 +57,6 @@ export const ViewControlSettingsSchema = z.object({
 	gridOpacity: z.number().min(0).max(1).default(0.3),
 	waveformOpacity: z.number().min(0).max(1).default(0.8),
 	spectrogramOpacity: z.number().min(0).max(1).default(0.7),
-	loudnessOpacity: z.number().min(0).max(1).default(0.5),
 	fftSize: z
 		.number()
 		.refine((value) => [1024, 2048, 4096, 8192, 16384].includes(value))

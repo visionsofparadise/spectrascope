@@ -77,13 +77,3 @@ export function createComparison(
 export function createTabId(): string {
 	return generateId();
 }
-
-export function isBareAddSource(current: ReadonlyArray<Source>, next: ReadonlyArray<Source>): boolean {
-	if (next.length !== current.length + 1) return false;
-
-	const added = next[next.length - 1];
-
-	if (!added || added.audioFilePath.length > 0) return false;
-
-	return current.every((source, index) => source.id === next[index]?.id);
-}
