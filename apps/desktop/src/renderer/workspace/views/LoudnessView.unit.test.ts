@@ -21,4 +21,14 @@ describe("loudness strips", () => {
 		expect(stripLinePositionOf(-30, -40, { start: 0, end: 0.5 })).toBeNull();
 		expect(stripLinePositionOf(-Infinity, -40, { start: 0, end: 1 })).toBeNull();
 	});
+
+	it("hides a value below the axis floor instead of drawing it at the floor", () => {
+		expect(stripLinePositionOf(-52, -40, { start: 0, end: 1 })).toBeNull();
+		expect(stripLinePositionOf(-40, -40, { start: 0, end: 1 })).toBe(1);
+	});
+
+	it("hides a value above 0 dB instead of pinning it to the top", () => {
+		expect(stripLinePositionOf(0.6, -40, { start: 0, end: 1 })).toBeNull();
+		expect(stripLinePositionOf(0, -40, { start: 0, end: 1 })).toBe(0);
+	});
 });

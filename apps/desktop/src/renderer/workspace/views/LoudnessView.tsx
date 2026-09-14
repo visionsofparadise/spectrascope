@@ -67,7 +67,11 @@ export function loudnessStripValuesOf(data: LoudnessData): LoudnessStripValues {
 export function stripLinePositionOf(value: number, axisMin: number, range: AxisRange): number | null {
 	if (!Number.isFinite(value)) return null;
 
-	const position = axisFractionOf(dbToY(value, axisMin), range);
+	const fraction = (DB_MAX - value) / (DB_MAX - axisMin);
+
+	if (fraction < 0 || fraction > 1) return null;
+
+	const position = axisFractionOf(fraction, range);
 
 	return position >= 0 && position <= 1 ? position : null;
 }

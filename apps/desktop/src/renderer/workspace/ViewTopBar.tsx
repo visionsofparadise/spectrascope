@@ -169,6 +169,7 @@ export function ViewTopBar({
 					<span className={LABEL_CLASS}>Scale</span>
 					<Select
 						variant="chip"
+						size="sm"
 						ariaLabel="Vectorscope scale"
 						className="-mr-1 flex"
 						menuClassName="right-0 left-auto w-40"

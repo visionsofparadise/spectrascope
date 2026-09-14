@@ -14,11 +14,12 @@ export function vectorscopeWarpOf(amplitude: number, scale: VectorscopeScale): n
 		case "sqrt":
 			return Math.sqrt(amplitude);
 		case "log":
-			return Math.max(
-				0,
-				Math.min(1, 1 + (20 * Math.log10(Math.max(amplitude, LOG_FLOOR_AMPLITUDE))) / LOG_RANGE_DB),
-			);
+			return vectorscopeLogWarpOf(Math.log10(Math.max(amplitude, LOG_FLOOR_AMPLITUDE)));
 	}
+}
+
+export function vectorscopeLogWarpOf(log10Amplitude: number): number {
+	return Math.max(0, Math.min(1, 1 + (20 * log10Amplitude) / LOG_RANGE_DB));
 }
 
 export function vectorscopeAmplitudeOf(radius: number, scale: VectorscopeScale): number {

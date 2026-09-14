@@ -101,6 +101,12 @@ export function scopeSignalOf(
 	return { x: x * factor, mid: y * factor };
 }
 
+export function scopeAxisValueOf(axis: "x" | "y", fraction: number, scale: VectorscopeScale): number {
+	return axis === "x"
+		? scopeSignalOf({ x: fraction, y: 0.5 }, scale).x
+		: scopeSignalOf({ x: 0.5, y: fraction }, scale).mid;
+}
+
 export function ringRadiiOf(scale: VectorscopeScale): ReadonlyArray<number> {
 	return [-6, -12, -18].map((db) => (VECTORSCOPE_FULL_SCALE_RADIUS / 2) * vectorscopeWarpOf(10 ** (db / 20), scale));
 }
@@ -325,7 +331,9 @@ export function VectorscopeView({ sources, sourceAudio, settings, onTransportCon
 						range={yRange}
 						minSpan={SCOPE_MIN_SPAN}
 						onRangeChange={setYRange}
-						{...scrollTrackTextsOf("y", "Mid range", yRange, (fraction) => trackValueTextOf(1 - 2 * fraction))}
+						{...scrollTrackTextsOf("y", "Mid range", yRange, (fraction) =>
+							trackValueTextOf(scopeAxisValueOf("y", fraction, scale)),
+						)}
 					/>
 				</div>
 				<div className="flex shrink-0">
@@ -335,7 +343,9 @@ export function VectorscopeView({ sources, sourceAudio, settings, onTransportCon
 						range={xRange}
 						minSpan={SCOPE_MIN_SPAN}
 						onRangeChange={setXRange}
-						{...scrollTrackTextsOf("x", "Side range", xRange, (fraction) => trackValueTextOf(2 * fraction - 1))}
+						{...scrollTrackTextsOf("x", "Side range", xRange, (fraction) =>
+							trackValueTextOf(scopeAxisValueOf("x", fraction, scale)),
+						)}
 					/>
 					<div className="w-2 shrink-0" />
 				</div>

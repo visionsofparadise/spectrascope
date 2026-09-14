@@ -5,7 +5,7 @@ import {
 	type KWeightingCoefficients,
 } from "./k-weighting";
 import { createTruePeakState, truePeakMaxAbs, type TruePeakState } from "./true-peak";
-import { VECTORSCOPE_FULL_SCALE_RADIUS, VECTORSCOPE_SCALES, vectorscopeWarpOf } from "./vectorscope-scale";
+import { VECTORSCOPE_FULL_SCALE_RADIUS, VECTORSCOPE_SCALES, vectorscopeLogWarpOf } from "./vectorscope-scale";
 import type { SpectralMetadata } from "./runPipeline";
 import type { ChannelInput } from "./SpectralEngine";
 
@@ -317,6 +317,10 @@ export function scanSamples(
 
 	if (computeStereo) {
 		const cellCount = VECTORSCOPE_GRID_SIZE * VECTORSCOPE_GRID_SIZE;
+		const sqrtOffset = VECTORSCOPE_SCALES.indexOf("sqrt") * cellCount;
+		const linearOffset = VECTORSCOPE_SCALES.indexOf("linear") * cellCount;
+		const logOffset = VECTORSCOPE_SCALES.indexOf("log") * cellCount;
+		const centreBin = vectorscopeBinOf(0, 0);
 
 		for (let si = 0; si < samplesPerChannel; si++) {
 			const lSample = lBuffer[si]!;
@@ -325,15 +329,21 @@ export function scanSamples(
 			const x = (rSample - lSample) * 0.5;
 			const amplitude = Math.sqrt(x * x + mid * mid);
 
-			for (let scaleIndex = 0; scaleIndex < VECTORSCOPE_SCALES.length; scaleIndex++) {
-				const factor =
-					amplitude === 0
-						? 0
-						: (VECTORSCOPE_FULL_SCALE_RADIUS * vectorscopeWarpOf(amplitude, VECTORSCOPE_SCALES[scaleIndex]!)) /
-							amplitude;
+			if (amplitude === 0) {
+				vectorscopeHistogram[linearOffset + centreBin]!++;
+				vectorscopeHistogram[sqrtOffset + centreBin]!++;
+				vectorscopeHistogram[logOffset + centreBin]!++;
 
-				vectorscopeHistogram[scaleIndex * cellCount + vectorscopeBinOf(x * factor, mid * factor)]!++;
+				continue;
 			}
+
+			const linearFactor = (VECTORSCOPE_FULL_SCALE_RADIUS * amplitude) / amplitude;
+			const sqrtFactor = (VECTORSCOPE_FULL_SCALE_RADIUS * Math.sqrt(amplitude)) / amplitude;
+			const logFactor = (VECTORSCOPE_FULL_SCALE_RADIUS * vectorscopeLogWarpOf(Math.log10(amplitude))) / amplitude;
+
+			vectorscopeHistogram[linearOffset + vectorscopeBinOf(x * linearFactor, mid * linearFactor)]!++;
+			vectorscopeHistogram[sqrtOffset + vectorscopeBinOf(x * sqrtFactor, mid * sqrtFactor)]!++;
+			vectorscopeHistogram[logOffset + vectorscopeBinOf(x * logFactor, mid * logFactor)]!++;
 		}
 	}
 

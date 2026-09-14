@@ -53,6 +53,19 @@ describe("ViewTopBar", () => {
 		expect(onSettingsChange).toHaveBeenCalledExactlyOnceWith({ loudnessMetric: next });
 	});
 
+	it("selects the vectorscope scale", () => {
+		const onSettingsChange = vi.fn();
+		const scale = render("vectorscope", onSettingsChange)("Vectorscope scale")!;
+		expect(scale.value).toBe(INITIAL_VIEW_CONTROL_SETTINGS.vectorscopeScale);
+		expect(scale.size).toBe("sm");
+		(scale.onChange as (value: string) => void)("log");
+		expect(onSettingsChange).toHaveBeenCalledExactlyOnceWith({ vectorscopeScale: "log" });
+	});
+
+	it("keeps the metric chip at the default size", () => {
+		expect(render("loudness")("Loudness metric")!.size).toBeUndefined();
+	});
+
 	it.each(["slider", "sum", "difference"] as const)("keeps the other side when %s changes A or B", (view) => {
 		const onDifferenceChange = vi.fn();
 		const select = render(view, vi.fn(), onDifferenceChange);

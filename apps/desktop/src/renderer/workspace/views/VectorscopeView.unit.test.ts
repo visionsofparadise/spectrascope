@@ -4,6 +4,7 @@ import {
 	cloudTransformOf,
 	crossLinePositionsOf,
 	ringRadiiOf,
+	scopeAxisValueOf,
 	scopeSignalOf,
 	stereoReadoutRowsOf,
 } from "./VectorscopeView";
@@ -55,6 +56,14 @@ describe("vectorscope scale", () => {
 		expect(sqrt.x).toBeCloseTo(0, 10);
 		expect(sqrt.mid).toBeCloseTo(0.25, 10);
 		expect(scopeSignalOf({ x: 0.5, y: 0.5 }, "log")).toEqual({ x: 0, mid: 0 });
+	});
+
+	it("states scroll-track edges as signal values for the active scale", () => {
+		expect(scopeAxisValueOf("x", 0.5 + 0.23, "linear")).toBeCloseTo(0.5, 10);
+		expect(scopeAxisValueOf("x", 0.5 - 0.23, "sqrt")).toBeCloseTo(-0.25, 10);
+		expect(scopeAxisValueOf("y", 0.5 - 0.46, "sqrt")).toBeCloseTo(1, 10);
+		expect(scopeAxisValueOf("y", 0.5 + 0.46 * (2 / 3), "log")).toBeCloseTo(-0.1, 10);
+		expect(scopeAxisValueOf("x", 0.5, "log")).toBe(0);
 	});
 
 	it("places the dB rings on the warped radius", () => {
