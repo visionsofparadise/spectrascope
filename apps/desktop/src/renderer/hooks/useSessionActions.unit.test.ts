@@ -143,7 +143,7 @@ it("applies changed preferences only to newly created comparisons", async () => 
 	app.preferences.fftSize = 8192;
 	app.preferences.sampleRate = 44100;
 	await actions.newComparison();
-	expect(app.comparisons[0]?.volume).toBe(0.8);
+	expect(app.comparisons[0]?.volume).toBe(1);
 	expect(app.comparisons[1]?.volume).toBe(0.2);
 	expect(app.comparisons[1]?.viewSettings.fftSize).toBe(8192);
 	expect(app.comparisons[1]?.canonicalSampleRate).toBe(44100);

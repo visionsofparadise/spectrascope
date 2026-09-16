@@ -57,7 +57,7 @@ const SelectionSchema = z
 
 const PreferencesSchema = z.object({
 	sampleRate: z.number().int().min(8000).max(384000).nullable().default(null),
-	monitorVolume: z.number().min(0).max(1).default(0.8),
+	monitorVolume: z.number().min(0).max(1).default(1),
 	playbackRate: z.number().min(0.25).max(2).default(1),
 	fftSize: ViewControlSettingsSchema.shape.fftSize,
 	hopOverlap: ViewControlSettingsSchema.shape.hopOverlap,
@@ -70,7 +70,7 @@ export const ComparisonSchema = z.object({
 	id: z.string(),
 	name: z.string().trim().min(1).max(200).default("New Session"),
 	viewSettings: ViewControlSettingsSchema.prefault({}),
-	volume: z.number().min(0).max(1).default(0.8),
+	volume: z.number().min(0).max(1).default(1),
 	playbackRate: z.number().min(0.25).max(2).default(1),
 	looping: z.boolean().default(false),
 	syncEnabled: z.boolean().default(false),

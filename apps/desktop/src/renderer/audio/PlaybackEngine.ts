@@ -14,7 +14,7 @@ export class PlaybackEngine implements Player {
 
 	private loopRegion: { readonly startSec: number; readonly endSec: number } | null = null;
 	private looping = false;
-	private volume = 0.8;
+	private volume = 1;
 	private knownDurationSec = 0;
 	private pendingSeek: number | null = null;
 	private generation = 0;
