@@ -2,6 +2,7 @@ import { Icon } from "@iconify/react";
 import { useEffect, useState } from "react";
 import { Button } from "../Button";
 import { TerrainShader } from "../TerrainShader";
+import { homeSessionsOf } from "./utils/homeSessions";
 import { lastOpenedLabelOf } from "./utils/lastOpenedLabel";
 import type { AppContext } from "../../models/Context";
 
@@ -20,6 +21,8 @@ export function HomeScreen({ context }: Props) {
 		return () => clearInterval(interval);
 	}, []);
 
+	const sessions = homeSessionsOf(context.app);
+
 	return (
 		<div className="relative flex flex-1 flex-col overflow-hidden bg-void">
 			<TerrainShader theme={context.app.theme} className="absolute inset-0" />
@@ -30,37 +33,47 @@ export function HomeScreen({ context }: Props) {
 
 				<div className="flex-1" />
 				<div className="flex flex-col gap-6">
-					{context.app.recentSessions.length > 0 && (
+					{sessions.length > 0 && (
 						<section className="flex flex-col gap-4">
 							<h2 className="font-technical text-[length:var(--text-xs)] uppercase tracking-[0.1em] text-chrome-text-dim">
 								Recent Sessions
 							</h2>
 							<div className="flex max-h-64 flex-col gap-2 overflow-y-auto">
-								{context.app.recentSessions.map((session) => (
-									<div key={session.filePath} className="flex min-w-0 items-baseline gap-2">
+								{sessions.map(({ key, name, filePath, lastOpenedAt, tabId }) => (
+									<div key={key} className="flex min-w-0 items-baseline gap-2">
 										<button
 											type="button"
 											disabled={context.busy}
-											onClick={() => void context.openComparison(session.filePath)}
+											onClick={() => {
+												if (tabId !== null) {
+													context.appStore.mutate(context.app, (proxy) => {
+														proxy.activeTabId = tabId;
+													});
+												} else if (filePath !== null) {
+													void context.openComparison(filePath);
+												}
+											}}
 											className="flex w-fit min-w-0 items-baseline gap-5 text-left hover:bg-secondary"
-											title={session.filePath}
+											title={filePath ?? name}
 										>
-											<span className="shrink-0 font-body text-base text-chrome-text">{session.name}</span>
+											<span className="shrink-0 font-body text-base text-chrome-text">{name}</span>
 											<span className="min-w-0 truncate font-technical text-[length:var(--text-xs)] text-chrome-text-dim">
-												{session.filePath}
+												{filePath ?? "Unsaved"}
 											</span>
 											<span className="shrink-0 font-technical text-[length:var(--text-xs)] text-chrome-text-dim">
-												{lastOpenedLabelOf(session.lastOpenedAt, now)}
+												{lastOpenedAt === null ? "Open" : lastOpenedLabelOf(lastOpenedAt, now)}
 											</span>
 										</button>
-										<button
-											type="button"
-											aria-label={`Remove ${session.name} from recent sessions`}
-											onClick={() => context.removeRecentSession(session.filePath)}
-											className="shrink-0 text-chrome-text-dim"
-										>
-											×
-										</button>
+										{tabId === null && filePath !== null && (
+											<button
+												type="button"
+												aria-label={`Remove ${name} from recent sessions`}
+												onClick={() => context.removeRecentSession(filePath)}
+												className="shrink-0 text-chrome-text-dim"
+											>
+												×
+											</button>
+										)}
 									</div>
 								))}
 							</div>

@@ -28,11 +28,13 @@ function texts(node: unknown): Array<string> {
 	return texts((node as ReactElement<{ children?: unknown }>).props.children);
 }
 
-function render() {
+function render(open: ReadonlyArray<{ id: string; name: string; sessionFilePath: string | null }> = []) {
 	runtime.effects = [];
 	const context = {
 		app: {
 			theme: "lava",
+			tabs: open.map((comparison) => ({ id: `tab-${comparison.id}`, comparisonId: comparison.id })),
+			comparisons: open,
 			recentSessions: [
 				{ name: "Mix", filePath: "C:/mix.scope", lastOpenedAt: new Date(NOW - 5 * MINUTE_MS).toISOString() },
 			],
@@ -66,5 +68,13 @@ describe("home recent sessions", () => {
 		cleanup();
 		vi.advanceTimersByTime(5 * MINUTE_MS);
 		expect(runtime.setNow).toHaveBeenCalledTimes(1);
+	});
+
+	it("lists the open unsaved session", () => {
+		const text = render([{ id: "a", name: "Raw.wav", sessionFilePath: null }]);
+		expect(text).toContain("Raw.wav");
+		expect(text).toContain("Unsaved");
+		expect(text).toContain("Open");
+		expect(text).toContain("Mix");
 	});
 });
