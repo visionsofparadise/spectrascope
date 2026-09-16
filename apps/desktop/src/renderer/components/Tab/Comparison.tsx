@@ -221,12 +221,6 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 			return audible.length < 1 ? "No audible sources" : null;
 		}
 
-		if (activeView === "difference") {
-			const withPath = sources.filter((source) => source.audioFilePath.length > 0);
-
-			return withPath.length < 2 ? "Difference needs at least two audible sources" : null;
-		}
-
 		return null;
 	}, [activeView, sources]);
 
