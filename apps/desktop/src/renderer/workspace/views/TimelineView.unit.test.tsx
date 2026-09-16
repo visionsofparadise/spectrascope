@@ -8,6 +8,7 @@ import {
 	droppedAudioFilePathsOf,
 	trackHandleTopOf,
 	trackHeightOf,
+	trackHeightStyleOf,
 	trackStackShareOf,
 	trackStackStyleOf,
 	TimelineView,
@@ -157,7 +158,7 @@ describe("Timeline strip headers", () => {
 
 		expect(html).toContain("Hidden take");
 		expect(html).toContain('aria-label="Show source"');
-		expect(html).toContain("height:80%");
+		expect(html).toContain("height:calc(0.8 * (100% - 3.5rem))");
 		expect(compute).not.toHaveBeenCalled();
 	});
 
@@ -212,6 +213,11 @@ describe("Timeline track range", () => {
 		expect(trackStackShareOf(1)).toBe(0.8);
 		expect(trackStackShareOf(4)).toBe(0.25);
 		expect(trackStackShareOf(20)).toBe(0.05);
+	});
+
+	it("leaves the add source row's height out of the track stack", () => {
+		expect(trackHeightStyleOf(1)).toBe("calc(0.8 * (100% - 3.5rem))");
+		expect(trackHeightStyleOf(4)).toBe("calc(0.25 * (100% - 3.5rem))");
 	});
 
 	it("keeps a track's offset handle at the visible top of the track", () => {

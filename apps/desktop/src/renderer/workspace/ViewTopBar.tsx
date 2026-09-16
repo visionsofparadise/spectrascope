@@ -110,7 +110,7 @@ export function ViewTopBar({
 	const showPair = activeView === "slider" || activeView === "sum" || activeView === "difference";
 
 	return (
-		<div className="flex shrink-0 items-center gap-5 bg-void px-4">
+		<div className="flex shrink-0 items-center gap-5 bg-void px-4 py-2">
 			<div className="flex items-center gap-2">
 				<span className={LABEL_CLASS}>View</span>
 				<Select

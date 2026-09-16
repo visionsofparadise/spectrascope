@@ -38,6 +38,7 @@ const TRACK_MIN_SPAN = 1 / 4;
 const TRACK_EDGE_EPSILON = 1e-9;
 const SINGLE_TRACK_HEIGHT = 0.8;
 const MIN_TRACK_HEIGHT = 0.1;
+const ADD_SOURCE_ROW_HEIGHT = "3.5rem";
 
 export function trackHeightOf(count: number): number {
 	return count <= 1 ? SINGLE_TRACK_HEIGHT : Math.max(1 / count, MIN_TRACK_HEIGHT);
@@ -49,6 +50,10 @@ export function defaultTrackRangeOf(count: number): AxisRange {
 
 export function trackStackShareOf(count: number): number {
 	return count > 0 ? Math.min(trackHeightOf(count), 1 / count) : 1;
+}
+
+export function trackHeightStyleOf(count: number): string {
+	return `calc(${trackStackShareOf(count)} * (100% - ${ADD_SOURCE_ROW_HEIGHT}))`;
 }
 
 export function droppedAudioFilePathsOf<T>(files: ReadonlyArray<T>, pathForFile: (file: T) => string): Array<string> {
@@ -438,7 +443,7 @@ export function TimelineView({
 	const yRange = trackRange.count === trackCount ? trackRange.range : defaultRange;
 	const setYRange = useCallback((range: AxisRange) => setTrackRange({ count: trackCount, range }), [trackCount]);
 	const visibleTracks = visibleTracksOf(yRange, trackCount);
-	const trackHeight = `${trackStackShareOf(trackCount) * 100}%`;
+	const trackHeight = trackHeightStyleOf(trackCount);
 
 	const stripViewportRef = useRef<HTMLDivElement>(null);
 	const wheelStateRef = useRef({ trackCount, defaultRange, minSpan, yRange });
@@ -516,75 +521,75 @@ export function TimelineView({
 							className="relative min-h-0 flex-1 overflow-hidden bg-void"
 						>
 							<div ref={stripViewportRef} className="absolute inset-0 overflow-hidden">
-								{trackCount > 0 && (
-									<div className="absolute inset-x-0 flex flex-col" style={trackStackStyleOf(yRange)}>
-										{sources.map((source, index) => (
-											<TimelineTrack
-												key={source.id}
-												source={source}
-												audioData={sourceAudio.get(source.id)}
-												status={sourceStatus?.get(source.id)}
-												error={sourceErrors?.get(source.id)}
-												height={trackHeight}
-												offsetMs={
-													drag?.id === source.id
-														? Math.max(0, drag.offsetMs)
-														: Math.max(0, source.timelineOffsetMs)
-												}
-												windowStartMs={windowStartMs}
-												windowEndMs={windowEndMs}
-												committedStartMs={viewport.committedStartMs}
-												committedEndMs={viewport.committedEndMs}
-												freezeCompute={
-													drag !== null ||
-													viewport.startMs !== viewport.committedStartMs ||
-													viewport.endMs !== viewport.committedEndMs
-												}
-												extentEndMs={extent.endMs}
-												frequencyScale={settings.frequencyScale}
-												spectrogramSampling={settings.spectrogramSampling}
-												spectrogramColormap={settings.spectrogramColormap}
-												fftSize={settings.fftSize}
-												hopOverlap={settings.hopOverlap}
-												channelInput={channelInput}
-												waveformOpacity={settings.waveformOpacity}
-												spectrogramOpacity={settings.spectrogramOpacity}
-												draggable={onSourceOffsetChange !== undefined}
-												dragging={drag?.id === source.id}
-												handleTop={trackHandleTopOf(yRange, index, trackCount)}
-												onCursorMove={readouts.setCursorReadout}
-												onDisplayedResultChange={readouts.onDisplayedResultChange}
-												onDragMove={(offsetMs) => {
-													setDrag({ id: source.id, offsetMs });
-												}}
-												onCommit={(offsetMs) => {
-													setDrag(null);
-													onSourceOffsetChange?.(source.id, offsetMs);
-												}}
-												onSourceChange={onSourcesChange ? replaceSource : undefined}
-												onRetry={onRetrySource ? () => onRetrySource(source.id) : undefined}
-												onRelink={onRelinkSource ? () => onRelinkSource(source.id) : undefined}
-												onRemove={
-													onSourcesChange
-														? () => onSourcesChange(sources.filter((entry) => entry.id !== source.id))
-														: undefined
-												}
-											/>
-										))}
+								<div className="absolute inset-x-0 flex flex-col" style={trackStackStyleOf(yRange)}>
+									{sources.map((source, index) => (
+										<TimelineTrack
+											key={source.id}
+											source={source}
+											audioData={sourceAudio.get(source.id)}
+											status={sourceStatus?.get(source.id)}
+											error={sourceErrors?.get(source.id)}
+											height={trackHeight}
+											offsetMs={
+												drag?.id === source.id
+													? Math.max(0, drag.offsetMs)
+													: Math.max(0, source.timelineOffsetMs)
+											}
+											windowStartMs={windowStartMs}
+											windowEndMs={windowEndMs}
+											committedStartMs={viewport.committedStartMs}
+											committedEndMs={viewport.committedEndMs}
+											freezeCompute={
+												drag !== null ||
+												viewport.startMs !== viewport.committedStartMs ||
+												viewport.endMs !== viewport.committedEndMs
+											}
+											extentEndMs={extent.endMs}
+											frequencyScale={settings.frequencyScale}
+											spectrogramSampling={settings.spectrogramSampling}
+											spectrogramColormap={settings.spectrogramColormap}
+											fftSize={settings.fftSize}
+											hopOverlap={settings.hopOverlap}
+											channelInput={channelInput}
+											waveformOpacity={settings.waveformOpacity}
+											spectrogramOpacity={settings.spectrogramOpacity}
+											draggable={onSourceOffsetChange !== undefined}
+											dragging={drag?.id === source.id}
+											handleTop={trackHandleTopOf(yRange, index, trackCount)}
+											onCursorMove={readouts.setCursorReadout}
+											onDisplayedResultChange={readouts.onDisplayedResultChange}
+											onDragMove={(offsetMs) => {
+												setDrag({ id: source.id, offsetMs });
+											}}
+											onCommit={(offsetMs) => {
+												setDrag(null);
+												onSourceOffsetChange?.(source.id, offsetMs);
+											}}
+											onSourceChange={onSourcesChange ? replaceSource : undefined}
+											onRetry={onRetrySource ? () => onRetrySource(source.id) : undefined}
+											onRelink={onRelinkSource ? () => onRelinkSource(source.id) : undefined}
+											onRemove={
+												onSourcesChange
+													? () => onSourcesChange(sources.filter((entry) => entry.id !== source.id))
+													: undefined
+											}
+										/>
+									))}
+									<div className="relative z-[3] flex h-14 shrink-0 items-center justify-center border border-dashed border-chrome-border bg-void">
+										<Button variant="primary" className="px-1 py-0.5" onClick={onAddSources}>
+											<Icon icon="lucide:plus" width={16} height={16} aria-hidden="true" />
+											Add Source
+										</Button>
+										<span className="ml-3 font-body text-sm text-chrome-text-dim">
+											or drop audio files here
+										</span>
 									</div>
-								)}
+								</div>
 							</div>
 							{renderableSources.length > 0 && (
 								<GridOverlay startMs={windowStartMs} endMs={windowEndMs} opacity={settings.gridOpacity} />
 							)}
 						</SelectionSurface>
-						<div className="flex h-14 shrink-0 items-center justify-center border border-dashed border-chrome-border bg-void">
-							<Button variant="primary" className="px-1 py-0.5" onClick={onAddSources}>
-								<Icon icon="lucide:plus" width={16} height={16} aria-hidden="true" />
-								Add Source
-							</Button>
-							<span className="ml-3 font-body text-sm text-chrome-text-dim">or drop audio files here</span>
-						</div>
 						<ViewProgressToast />
 					</div>
 
