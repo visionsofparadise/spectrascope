@@ -140,13 +140,13 @@ function KnobControl({
 	return (
 		<div className="flex flex-col items-center gap-0.5">
 			<Knob value={value} label="" size={24} hideValue onChange={onChange} />
-			<Icon icon={icon} width={12} height={12} className="text-chrome-text-dim" />
+			<Icon icon={icon} width={16} height={16} className="text-chrome-text-dim" />
 		</div>
 	);
 }
 
 function Divider() {
-	return <div className="h-10 w-px bg-chrome-border-subtle" />;
+	return <div className="h-11 w-px bg-chrome-border-subtle" />;
 }
 
 function GridModeToggle({
@@ -170,7 +170,7 @@ function GridModeToggle({
 				active ? "text-chrome-text" : "text-chrome-text-secondary hover:text-chrome-text"
 			}`}
 		>
-			<Icon icon={icon} width={12} height={12} aria-hidden="true" />
+			<Icon icon={icon} width={16} height={16} aria-hidden="true" />
 		</button>
 	);
 }

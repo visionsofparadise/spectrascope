@@ -101,7 +101,7 @@ function MediaButton({
 	readonly onClick?: () => void;
 }) {
 	const interactive = !disabled && Boolean(onClick);
-	const iconSize = large ? 24 : 17;
+	const iconSize = large ? 24 : 20;
 
 	return (
 		<button
@@ -120,7 +120,7 @@ function MediaButton({
 			aria-label={label}
 		>
 			<span
-				className={`flex items-center justify-center ${large ? "size-6" : "size-[17px]"} ${
+				className={`flex items-center justify-center ${large ? "size-6" : "size-5"} ${
 					active && !disabled ? "bg-primary" : ""
 				}`}
 			>

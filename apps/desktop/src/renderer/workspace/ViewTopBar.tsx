@@ -69,7 +69,7 @@ function SyncToggle({
 			className="-mr-1 flex shrink-0 items-center px-1 py-0.5 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text-secondary hover:text-chrome-text"
 		>
 			<span className={`flex items-center gap-1.5 ${enabled ? "bg-secondary text-chrome-text" : ""}`}>
-				<Icon icon="lucide:link" width={14} height={14} aria-hidden="true" />
+				<Icon icon="lucide:link" width={16} height={16} aria-hidden="true" />
 				<span>Sync</span>
 			</span>
 		</button>

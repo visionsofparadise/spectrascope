@@ -13,8 +13,8 @@ export function LoadingToast({ label, className }: { readonly label: string; rea
 			<div className="flex items-center gap-2">
 				<Icon
 					icon="lucide:loader-circle"
-					width={14}
-					height={14}
+					width={16}
+					height={16}
 					className="shrink-0 animate-spin text-primary"
 					style={{ animationDuration: "0.9s" }}
 					aria-hidden="true"

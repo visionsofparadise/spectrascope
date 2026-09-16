@@ -69,7 +69,7 @@ function CustomSwatch({ active, value, onApply }: CustomSwatchProps) {
 					active && "ring-1 ring-primary",
 				)}
 			>
-				<Icon icon="lucide:plus" width={10} height={10} aria-hidden="true" />
+				<Icon icon="lucide:plus" width={12} height={12} aria-hidden="true" />
 			</button>
 			{open && (
 				<div className="absolute left-0 top-full z-50 mt-1 flex flex-col gap-2 bg-chrome-raised p-3">

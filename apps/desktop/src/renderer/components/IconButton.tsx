@@ -17,7 +17,7 @@ interface IconButtonProps extends Omit<ButtonProps, "children" | "aria-label"> {
 export function IconButton({
 	icon,
 	label,
-	size = 14,
+	size = 16,
 	variant = "raised",
 	active,
 	activeVariant = "raised",

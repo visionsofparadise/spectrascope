@@ -192,7 +192,7 @@ export function AppBar({ context, historyControl, canExport, exportBusy, onExpor
 								}}
 								className={`flex items-center ${isActive ? "text-void" : "text-chrome-text-dim"}`}
 							>
-								<Icon icon="lucide:x" width={14} height={14} />
+								<Icon icon="lucide:x" width={16} height={16} />
 							</button>
 						</div>
 					);

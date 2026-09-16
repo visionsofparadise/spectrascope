@@ -176,7 +176,7 @@ export function Select({
 			{variant === "field" ? (
 				<>
 					<span>{displayLabel}</span>
-					<Icon icon="lucide:chevron-down" width={14} height={14} className="shrink-0 text-chrome-text-dim" />
+					<Icon icon="lucide:chevron-down" width={16} height={16} className="shrink-0 text-chrome-text-dim" />
 				</>
 			) : (
 				<span
@@ -188,8 +188,8 @@ export function Select({
 					<span className="truncate">{displayLabel}</span>
 					<Icon
 						icon="lucide:chevron-down"
-						width={size === "sm" ? 12 : 10}
-						height={size === "sm" ? 12 : 10}
+						width={size === "sm" ? 14 : 12}
+						height={size === "sm" ? 14 : 12}
 						className="shrink-0"
 					/>
 				</span>
