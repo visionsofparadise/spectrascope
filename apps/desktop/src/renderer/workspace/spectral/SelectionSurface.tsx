@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { cn } from "../../cn";
 import { useWorkspacePlayback } from "../playback";
 import { extendSelection, isNestedSelectionControl, normalizeSelection } from "../utils/selection";
 import { Playhead } from "./Playhead";
@@ -52,6 +53,7 @@ export function SelectionSurface({
 			aria-valuenow={Math.max(startMs, Math.min(endMs, selection?.end ?? playback.positionSec * 1000))}
 			title="Click to seek. Drag to select a loop. Escape clears the selection."
 			{...props}
+			className={cn("outline-none", props.className)}
 			style={{ ...props.style, touchAction: "none", userSelect: "none" }}
 			onPointerDown={(event) => {
 				if (event.defaultPrevented || isNestedSelectionControl(event.target, event.currentTarget)) return;
