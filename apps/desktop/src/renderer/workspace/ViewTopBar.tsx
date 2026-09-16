@@ -182,6 +182,7 @@ export function ViewTopBar({
 					<span className={LABEL_CLASS}>Metric</span>
 					<Select
 						variant="chip"
+						size="sm"
 						ariaLabel="Loudness metric"
 						className="-mr-1 flex"
 						menuClassName="right-0 left-auto w-40"

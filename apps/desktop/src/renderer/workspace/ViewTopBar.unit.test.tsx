@@ -73,8 +73,10 @@ describe("ViewTopBar", () => {
 		expect(onSettingsChange).toHaveBeenCalledExactlyOnceWith({ vectorscopeScale: "log" });
 	});
 
-	it("keeps the metric chip at the default size", () => {
-		expect(render("loudness")("Loudness metric")!.size).toBeUndefined();
+	it("sizes the metric chip as the view and channels chips", () => {
+		const selectOf = render("loudness");
+		expect(selectOf("Loudness metric")!.size).toBe(selectOf("View")!.size);
+		expect(selectOf("Loudness metric")!.size).toBe(selectOf("Channels")!.size);
 	});
 
 	it("shows the sync toggle on timeline alone", () => {
