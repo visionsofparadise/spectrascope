@@ -108,7 +108,6 @@ function TimelineTrack({
 	waveformOpacity,
 	spectrogramOpacity,
 	draggable,
-	dragging,
 	handleTop,
 	onCursorMove,
 	onDisplayedResultChange,
@@ -142,7 +141,6 @@ function TimelineTrack({
 	readonly waveformOpacity: number;
 	readonly spectrogramOpacity: number;
 	readonly draggable: boolean;
-	readonly dragging: boolean;
 	readonly handleTop: string;
 	readonly onCursorMove: (readout: SourceRenderCursorReadout) => void;
 	readonly onDisplayedResultChange: (sourceId: string, displayed: DisplayedWaveform | null) => void;
@@ -270,14 +268,6 @@ function TimelineTrack({
 								waveformOpacity={waveformOpacity}
 								spectrogramOpacity={spectrogramOpacity}
 								onCursorMove={onCursorMove}
-							/>
-						)}
-						{liveWindow.startMs === 0 && (
-							<div
-								aria-hidden
-								className={`pointer-events-none absolute inset-y-0 left-0 w-0.5 ${
-									dragging ? "bg-primary" : "bg-chrome-text/60"
-								}`}
 							/>
 						)}
 					</div>
@@ -558,7 +548,6 @@ export function TimelineView({
 											waveformOpacity={settings.waveformOpacity}
 											spectrogramOpacity={settings.spectrogramOpacity}
 											draggable={onSourceOffsetChange !== undefined}
-											dragging={drag?.id === source.id}
 											handleTop={trackHandleTopOf(yRange, index, trackCount)}
 											onCursorMove={readouts.setCursorReadout}
 											onDisplayedResultChange={readouts.onDisplayedResultChange}
