@@ -350,6 +350,8 @@ export function TimelineView({
 	const readouts = useWaveformReadouts();
 	const viewSync = useViewSync("timeline", EMPTY_SYNC_STATE);
 	const [drag, setDrag] = useState<TimelineDrag | null>(null);
+	const [fileDragActive, setFileDragActive] = useState(false);
+	const fileDragDepth = useRef(0);
 
 	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
@@ -480,10 +482,26 @@ export function TimelineView({
 		<ViewProgressProvider>
 			<div
 				className="flex h-full min-h-0 w-full overflow-hidden bg-void"
+				onDragEnter={(event) => {
+					if (!event.dataTransfer.types.includes("Files")) return;
+
+					fileDragDepth.current += 1;
+					setFileDragActive(true);
+				}}
+				onDragLeave={(event) => {
+					if (!event.dataTransfer.types.includes("Files")) return;
+
+					fileDragDepth.current = Math.max(0, fileDragDepth.current - 1);
+
+					if (fileDragDepth.current === 0) setFileDragActive(false);
+				}}
 				onDragOver={(event) => {
 					if (event.dataTransfer.types.includes("Files")) event.preventDefault();
 				}}
 				onDrop={(event) => {
+					fileDragDepth.current = 0;
+					setFileDragActive(false);
+
 					if (event.dataTransfer.files.length === 0) return;
 
 					event.preventDefault();
@@ -568,7 +586,15 @@ export function TimelineView({
 											}
 										/>
 									))}
-									<div className="relative z-[3] flex h-14 shrink-0 items-center justify-center border border-dashed border-chrome-border bg-void">
+									<div
+										className={`relative z-[3] flex h-14 shrink-0 items-center justify-center border border-dashed bg-void ${fileDragActive ? "border-chrome-text-secondary" : "border-chrome-border"}`}
+									>
+										{fileDragActive && (
+											<div
+												aria-hidden="true"
+												className="pointer-events-none absolute inset-0 bg-data-cursor/15"
+											/>
+										)}
 										<Button variant="primary" className="px-1 py-0.5" onClick={onAddSources}>
 											<Icon icon="lucide:plus" width={16} height={16} aria-hidden="true" />
 											Add Source
