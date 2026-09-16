@@ -443,6 +443,8 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 								differenceA={comparison.differenceA}
 								differenceB={comparison.differenceB}
 								onDifferenceChange={setDifference}
+								syncEnabled={syncEnabled}
+								onSyncEnabledChange={setSyncEnabled}
 							/>
 							<div className="relative min-h-0 flex-1 overflow-hidden px-4">
 								{(preparing || derivedPreparing) && <ViewLoadingToast label="Preparing audio" />}
@@ -493,8 +495,6 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 										activeView={activeView}
 										settings={viewSettings}
 										onSettingsChange={setViewSettings}
-										syncEnabled={syncEnabled}
-										onSyncEnabledChange={setSyncEnabled}
 									/>
 								) : undefined
 							}

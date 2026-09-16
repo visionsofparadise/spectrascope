@@ -5,21 +5,23 @@ import { Button } from "../../components/Button";
 import { main } from "../../models/Main";
 import { SourceRender } from "../SourceRender";
 import { TimeRuler } from "../spectral/Axes";
+import { CursorLine, CursorSurface } from "../spectral/CursorSurface";
 import { GridOverlay } from "../spectral/GridOverlay";
 import { MinimapDisplay, minimapLayersOf } from "../spectral/MinimapDisplay";
 import { trackPointerDrag } from "../spectral/pointerDrag";
 import { ScrollTrack } from "../spectral/ScrollTrack";
-import { SelectionSurface } from "../spectral/SelectionSurface";
 import { useWaveformReadouts } from "../spectral/useWaveformReadouts";
 import { ViewLoadingToast } from "../spectral/ViewLoadingToast";
 import { ViewProgressProvider, ViewProgressToast } from "../spectral/viewProgress";
 import { useTransportPlayback } from "../spectral/viewScaffold";
+import { EMPTY_SYNC_STATE, useViewSync } from "../sync";
 import { TimelineTrackHeader } from "../TimelineTrackHeader";
 import { useTimeViewport } from "../useTimeViewport";
 import { panAxisRange } from "../utils/axisRange";
 import { placeAudioOnTimeline } from "../utils/placeAudioOnTimeline";
 import { clipWindowIntersection, computeTimelineExtent } from "./timelineExtent";
 import { resolveVisibleSourceAudio } from "./viewAudio";
+import { timeToFraction } from "./viewCursor";
 import type { Source } from "../source";
 import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { TimelineDrag } from "./timelineExtent";
@@ -356,6 +358,7 @@ export function TimelineView({
 	onAddSourceFiles,
 }: TimelineViewProps) {
 	const readouts = useWaveformReadouts();
+	const viewSync = useViewSync("timeline", EMPTY_SYNC_STATE);
 	const [drag, setDrag] = useState<TimelineDrag | null>(null);
 
 	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
@@ -513,11 +516,12 @@ export function TimelineView({
 					<TimeRuler startMs={windowStartMs} endMs={windowEndMs} />
 
 					<div className="relative flex min-h-0 flex-col bg-void">
-						<SelectionSurface
-							ref={viewport.wheelHandlers.ref}
+						<CursorSurface
+							surfaceRef={viewport.wheelHandlers.ref}
 							startMs={windowStartMs}
 							endMs={windowEndMs}
-							seekOnClick
+							cursorMs={viewSync.cursor}
+							onCursorChange={viewSync.setCursor}
 							className="relative min-h-0 flex-1 overflow-hidden bg-void"
 						>
 							<div ref={stripViewportRef} className="absolute inset-0 overflow-hidden">
@@ -589,7 +593,8 @@ export function TimelineView({
 							{renderableSources.length > 0 && (
 								<GridOverlay startMs={windowStartMs} endMs={windowEndMs} opacity={settings.gridOpacity} />
 							)}
-						</SelectionSurface>
+							<CursorLine fraction={timeToFraction(viewSync.cursor, windowStartMs, windowEndMs)} />
+						</CursorSurface>
 						<ViewProgressToast />
 					</div>
 

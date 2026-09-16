@@ -23,6 +23,8 @@ export interface SyncContextValue {
 
 const SyncContext = createContext<SyncContextValue | null>(null);
 
+export const EMPTY_SYNC_STATE: SyncState = { cursor: null, selection: null };
+
 interface SyncProviderProps {
 	/**
 	 * Whether cross-view sync is on. Controlled by the host (the desktop

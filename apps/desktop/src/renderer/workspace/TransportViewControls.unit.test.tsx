@@ -23,8 +23,6 @@ function render(activeView: ViewId, onSettingsChange = vi.fn(), settings = INITI
 			activeView,
 			settings,
 			onSettingsChange,
-			syncEnabled: true,
-			onSyncEnabledChange: vi.fn(),
 		}),
 	);
 }
@@ -99,10 +97,10 @@ describe("spectrogram sampling control", () => {
 		},
 	);
 
-	it("keeps Overlay controls limited to sync, grid opacity and waveform opacity", () => {
+	it("keeps Overlay controls limited to grid opacity and waveform opacity", () => {
 		const onSettingsChange = vi.fn();
 		const nodes = render("overlay", onSettingsChange);
-		expect(nodes.some((element) => element.props["aria-label"] === "Disable cross-view sync")).toBe(true);
+		expect(nodes.some((element) => element.props["aria-label"] === "Disable cross-view sync")).toBe(false);
 		expect(nodes.some((element) => element.type === "select" || element.type === "mock-select")).toBe(false);
 		expect(
 			nodes.some(

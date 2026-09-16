@@ -1,3 +1,4 @@
+import { Icon } from "@iconify/react";
 import { useMemo } from "react";
 import { Select } from "../components/Select";
 import { NO_SOURCE, sourcePairOf } from "./views/sourcePair";
@@ -18,6 +19,8 @@ interface ViewTopBarProps {
 	readonly differenceA: string | null;
 	readonly differenceB: string | null;
 	readonly onDifferenceChange: (differenceA: string | null, differenceB: string | null) => void;
+	readonly syncEnabled: boolean;
+	readonly onSyncEnabledChange: (next: boolean) => void;
 }
 
 const VIEW_OPTIONS: ReadonlyArray<{ readonly value: ViewId; readonly label: string }> = [
@@ -47,6 +50,31 @@ const SCALE_OPTIONS: ReadonlyArray<{ readonly value: VectorscopeScale; readonly 
 ];
 
 const LABEL_CLASS = "font-technical text-xs uppercase tracking-[0.08em] text-chrome-text-secondary";
+
+function SyncToggle({
+	enabled,
+	onEnabledChange,
+}: {
+	readonly enabled: boolean;
+	readonly onEnabledChange: (next: boolean) => void;
+}) {
+	return (
+		<button
+			type="button"
+			aria-pressed={enabled}
+			aria-label={enabled ? "Disable cross-view sync" : "Enable cross-view sync"}
+			onClick={() => {
+				onEnabledChange(!enabled);
+			}}
+			className="-mr-1 flex shrink-0 items-center px-1 py-0.5 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text-secondary hover:text-chrome-text"
+		>
+			<span className={`flex items-center gap-1.5 ${enabled ? "bg-secondary text-chrome-text" : ""}`}>
+				<Icon icon="lucide:link" width={14} height={14} aria-hidden="true" />
+				<span>Sync</span>
+			</span>
+		</button>
+	);
+}
 
 function SourcePairSelects({
 	sources,
@@ -106,6 +134,8 @@ export function ViewTopBar({
 	differenceA,
 	differenceB,
 	onDifferenceChange,
+	syncEnabled,
+	onSyncEnabledChange,
 }: ViewTopBarProps) {
 	const showPair = activeView === "slider" || activeView === "sum" || activeView === "difference";
 
@@ -146,6 +176,7 @@ export function ViewTopBar({
 				/>
 			</div>
 			<div className="min-w-0 flex-1" />
+			{activeView === "timeline" && <SyncToggle enabled={syncEnabled} onEnabledChange={onSyncEnabledChange} />}
 			{activeView === "loudness" && (
 				<div className="flex items-center gap-2">
 					<span className={LABEL_CLASS}>Metric</span>

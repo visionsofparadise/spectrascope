@@ -14,6 +14,17 @@ interface CursorSurfaceProps {
 
 const KEYBOARD_STEP_FRACTION = 0.01;
 
+export function CursorLine({ fraction }: { readonly fraction: number | null }) {
+	if (fraction === null || fraction < 0 || fraction > 1) return null;
+
+	return (
+		<div
+			className="pointer-events-none absolute top-0 bottom-0 w-px bg-data-cursor"
+			style={{ left: `${fraction * 100}%` }}
+		/>
+	);
+}
+
 export function CursorSurface({
 	startMs,
 	endMs,

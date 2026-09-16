@@ -1,9 +1,9 @@
 import { useMemo } from "react";
 import { SourceRender } from "../SourceRender";
-import { useViewSync } from "../sync";
+import { EMPTY_SYNC_STATE, useViewSync } from "../sync";
 import { timeToFraction } from "../views/viewCursor";
 import { FrequencyAxis, DbAxis, TimeRuler } from "./Axes";
-import { CursorSurface } from "./CursorSurface";
+import { CursorLine, CursorSurface } from "./CursorSurface";
 import { FrequencyMinimap } from "./FrequencyMinimap";
 import { GridOverlay } from "./GridOverlay";
 import { MinimapDisplay, minimapLayersOf } from "./MinimapDisplay";
@@ -19,11 +19,6 @@ import type { FrequencyScale } from "spectral-display";
 import type { TextureVerticalRange } from "spectral-display";
 import type { ChannelInput } from "spectral-display";
 
-const EMPTY_VIEW_SYNC = {
-	cursor: null,
-	selection: null,
-} as const;
-
 type StripView = ReturnType<typeof useStripView>;
 
 export function useStripView(
@@ -36,7 +31,7 @@ export function useStripView(
 ) {
 	const readouts = useWaveformReadouts();
 
-	const viewSync = useViewSync(viewId, EMPTY_VIEW_SYNC);
+	const viewSync = useViewSync(viewId, EMPTY_SYNC_STATE);
 
 	const scrub = useViewportScrub(chromeAudio);
 	const startMs = scrub.viewport.committedStartMs;
@@ -86,12 +81,7 @@ export function StripOverlays({ view, settings, spectrogram = true }: StripOverl
 				frequencyScale={view.frequencyScale}
 				opacity={settings.gridOpacity}
 			/>
-			{view.cursorFrac !== null && view.cursorFrac >= 0 && view.cursorFrac <= 1 && (
-				<div
-					className="pointer-events-none absolute top-0 bottom-0 w-px bg-data-cursor"
-					style={{ left: `${view.cursorFrac * 100}%` }}
-				/>
-			)}
+			<CursorLine fraction={view.cursorFrac} />
 		</>
 	);
 }

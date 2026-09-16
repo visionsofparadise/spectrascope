@@ -50,6 +50,19 @@ vi.mock("../useTimeViewport", async (importOriginal) => ({
 
 vi.mock("../../models/Main", () => ({ main: { pathForFile: () => "" } }));
 
+const syncCursorMs = vi.hoisted(() => ({ current: null as number | null }));
+
+vi.mock("../sync", async (importOriginal) => ({
+	...(await importOriginal<typeof import("../sync")>()),
+	useViewSync: () => ({
+		synced: true,
+		cursor: syncCursorMs.current,
+		selection: null,
+		setCursor: () => {},
+		setSelection: () => {},
+	}),
+}));
+
 vi.mock("../playback", () => ({
 	useWorkspacePlayback: () => ({
 		positionSec: 0,
@@ -129,6 +142,31 @@ describe("Timeline viewport rendering", () => {
 		expect(clipQuery?.query).toEqual({ startMs: 0, endMs: 5, width: 800, height: 400 });
 		expect(clipQuery?.config?.channelInput).toBe("side");
 		expect(html).toContain("left:50%;width:50%");
+	});
+});
+
+describe("Timeline sync cursor", () => {
+	it("draws the synced cursor across the tracks", () => {
+		const source = createDefaultSource(0, { id: "only" });
+		const audio = new Map([["only", { ...EMPTY_AUDIO_DATA, durationMs: 3600000, totalSamples: 172800000 }]]);
+		const props = {
+			sources: [source],
+			sourceAudio: audio,
+			channelInput: "mono" as const,
+			settings: INITIAL_VIEW_CONTROL_SETTINGS,
+		};
+
+		syncCursorMs.current = 1800005;
+
+		const withCursor = renderToStaticMarkup(createElement(TimelineView, props));
+
+		syncCursorMs.current = null;
+
+		const withoutCursor = renderToStaticMarkup(createElement(TimelineView, props));
+
+		expect(withCursor).toContain("bg-data-cursor");
+		expect(withCursor).toContain("left:50%");
+		expect(withoutCursor).not.toContain("bg-data-cursor");
 	});
 });
 

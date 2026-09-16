@@ -9,8 +9,6 @@ interface TransportViewControlsProps {
 	readonly activeView: ViewId;
 	readonly settings: ViewControlSettings;
 	readonly onSettingsChange: (next: ViewControlSettings) => void;
-	readonly syncEnabled: boolean;
-	readonly onSyncEnabledChange: (next: boolean) => void;
 }
 
 const VIEW_CONTROL_VIEWS: ReadonlySet<ViewId> = new Set(["timeline", "overlay", "slider", "difference", "sum"]);
@@ -177,31 +175,6 @@ function GridModeToggle({
 	);
 }
 
-function SyncToggle({
-	enabled,
-	onEnabledChange,
-}: {
-	readonly enabled: boolean;
-	readonly onEnabledChange: (next: boolean) => void;
-}) {
-	return (
-		<button
-			type="button"
-			aria-pressed={enabled}
-			aria-label={enabled ? "Disable cross-view sync" : "Enable cross-view sync"}
-			onClick={() => {
-				onEnabledChange(!enabled);
-			}}
-			className="flex shrink-0 items-center px-2 py-1 font-technical text-[length:var(--text-sm)] uppercase tracking-[0.06em] text-chrome-text-secondary hover:text-chrome-text"
-		>
-			<span className={`flex items-center gap-1 ${enabled ? "bg-secondary text-chrome-text" : ""}`}>
-				<Icon icon="lucide:link" width={14} height={14} aria-hidden="true" />
-				<span>Sync</span>
-			</span>
-		</button>
-	);
-}
-
 interface LayerOpacityKnobsProps {
 	readonly settings: ViewControlSettings;
 	readonly onSettingsChange: (next: ViewControlSettings) => void;
@@ -235,13 +208,7 @@ function LayerOpacityKnobs({ settings, onSettingsChange, showSpectrogram = true 
 	);
 }
 
-export function TransportViewControls({
-	activeView,
-	settings,
-	onSettingsChange,
-	syncEnabled,
-	onSyncEnabledChange,
-}: TransportViewControlsProps) {
+export function TransportViewControls({ activeView, settings, onSettingsChange }: TransportViewControlsProps) {
 	const isLayerGroup =
 		activeView === "overlay" || activeView === "slider" || activeView === "difference" || activeView === "sum";
 	const showSpectrogram = activeView !== "overlay";
@@ -249,7 +216,6 @@ export function TransportViewControls({
 	if (isLayerGroup) {
 		return (
 			<div className="flex items-center gap-2.5">
-				<SyncToggle enabled={syncEnabled} onEnabledChange={onSyncEnabledChange} />
 				<KnobControl
 					value={settings.gridOpacity}
 					icon="lucide:grid-3x3"
