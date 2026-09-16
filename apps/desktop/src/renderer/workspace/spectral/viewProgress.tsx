@@ -7,9 +7,10 @@ const ViewProgressContext = createContext<ReportViewProgress | null>(null);
 
 export interface ViewProgress {
 	readonly active: boolean;
+	readonly fraction: number;
 }
 
-const ViewProgressStateContext = createContext<ViewProgress>({ active: false });
+const ViewProgressStateContext = createContext<ViewProgress>({ active: false, fraction: 0 });
 
 export const PreparingAudioContext = createContext(false);
 
@@ -17,20 +18,27 @@ export function clampedFractionOf(fraction: number): number {
 	return Number.isFinite(fraction) ? Math.max(0, Math.min(1, fraction)) : 0;
 }
 
+export function viewProgressOf(fractions: ReadonlyArray<number>): ViewProgress {
+	return {
+		active: fractions.length > 0,
+		fraction: fractions.length > 0 ? fractions.reduce((sum, value) => sum + value, 0) / fractions.length : 0,
+	};
+}
+
 function useViewProgressState(): { readonly report: ReportViewProgress; readonly progress: ViewProgress } {
 	const reportToParent = useContext(ViewProgressContext);
-	const [activeKeys, setActiveKeys] = useState<ReadonlySet<string>>(() => new Set());
+	const [fractions, setFractions] = useState<ReadonlyMap<string, number>>(() => new Map());
 
 	const report = useCallback<ReportViewProgress>(
 		(key, fraction) => {
 			reportToParent?.(key, fraction);
-			setActiveKeys((previous) => {
-				if (previous.has(key) === (fraction !== null)) return previous;
+			setFractions((previous) => {
+				if (fraction === null ? !previous.has(key) : previous.get(key) === fraction) return previous;
 
-				const next = new Set(previous);
+				const next = new Map(previous);
 
 				if (fraction === null) next.delete(key);
-				else next.add(key);
+				else next.set(key, fraction);
 
 				return next;
 			});
@@ -38,7 +46,7 @@ function useViewProgressState(): { readonly report: ReportViewProgress; readonly
 		[reportToParent],
 	);
 
-	const progress = useMemo<ViewProgress>(() => ({ active: activeKeys.size > 0 }), [activeKeys]);
+	const progress = useMemo<ViewProgress>(() => viewProgressOf([...fractions.values()]), [fractions]);
 
 	return { report, progress };
 }
@@ -57,7 +65,9 @@ export function ViewProgressToast({ color }: { readonly color?: string }) {
 	const progress = useContext(ViewProgressStateContext);
 	const preparingAudio = useContext(PreparingAudioContext);
 
-	return progress.active && !preparingAudio ? <ViewLoadingToast label="Rendering" color={color} /> : null;
+	return progress.active && !preparingAudio ? (
+		<ViewLoadingToast label="Rendering" color={color} fraction={progress.fraction} />
+	) : null;
 }
 
 export function useReportViewProgress(fraction: number): void {

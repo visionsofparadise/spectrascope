@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { clampedFractionOf, useReportViewProgress, ViewProgressProvider } from "./viewProgress";
+import { clampedFractionOf, useReportViewProgress, viewProgressOf, ViewProgressProvider } from "./viewProgress";
 import type { ViewProgress } from "./viewProgress";
 import type { ReactElement, ReactNode } from "react";
 
@@ -70,20 +70,26 @@ it.each([
 	expect(clampedFractionOf(fraction)).toBe(expected);
 });
 
+it("averages the reported fractions", () => {
+	expect(viewProgressOf([])).toEqual({ active: false, fraction: 0 });
+	expect(viewProgressOf([0.25])).toEqual({ active: true, fraction: 0.25 });
+	expect(viewProgressOf([0.2, 0.6])).toEqual({ active: true, fraction: 0.4 });
+});
+
 it("is active while any reporter is computing and inactive once all clear", () => {
 	const provider = mountProvider(null);
 
-	expect(provider.render().progress).toEqual({ active: false });
+	expect(provider.render().progress).toEqual({ active: false, fraction: 0 });
 
 	provider.render().report("a", 0.2);
 	provider.render().report("b", 0.6);
 	provider.render().report("a", null);
 
-	expect(provider.render().progress).toEqual({ active: true });
+	expect(provider.render().progress).toEqual({ active: true, fraction: 0.6 });
 
 	provider.render().report("b", null);
 
-	expect(provider.render().progress).toEqual({ active: false });
+	expect(provider.render().progress).toEqual({ active: false, fraction: 0 });
 });
 
 it("forwards a nested provider's reports to the enclosing provider", () => {
@@ -92,13 +98,13 @@ it("forwards a nested provider's reports to the enclosing provider", () => {
 
 	inner.render().report("strip", 0.5);
 
-	expect(inner.render().progress).toEqual({ active: true });
-	expect(outer.render().progress).toEqual({ active: true });
+	expect(inner.render().progress).toEqual({ active: true, fraction: 0.5 });
+	expect(outer.render().progress).toEqual({ active: true, fraction: 0.5 });
 
 	inner.render().report("strip", null);
 
-	expect(inner.render().progress).toEqual({ active: false });
-	expect(outer.render().progress).toEqual({ active: false });
+	expect(inner.render().progress).toEqual({ active: false, fraction: 0 });
+	expect(outer.render().progress).toEqual({ active: false, fraction: 0 });
 });
 
 it("clears a reporter's progress from nested providers when it unmounts", () => {
@@ -111,10 +117,10 @@ it("clears a reporter's progress from nested providers when it unmounts", () => 
 
 	const cleanups = hooks.effects.map((effect) => effect());
 
-	expect(outer.render().progress).toEqual({ active: true });
+	expect(outer.render().progress).toEqual({ active: true, fraction: 0.25 });
 
 	cleanups.forEach((cleanup) => cleanup?.());
 
-	expect(inner.render().progress).toEqual({ active: false });
-	expect(outer.render().progress).toEqual({ active: false });
+	expect(inner.render().progress).toEqual({ active: false, fraction: 0 });
+	expect(outer.render().progress).toEqual({ active: false, fraction: 0 });
 });
