@@ -276,7 +276,7 @@ describe("Timeline track range", () => {
 		);
 
 		expect(html).not.toContain('aria-label="Track range"');
-		expect(html).toContain('<div class="w-2 shrink-0"></div>');
+		expect(html).toContain('<div class="w-3 shrink-0"></div>');
 	});
 
 	it("renders the full-range stack beside a track scroll track", () => {

@@ -259,7 +259,7 @@ export function FrequencyDistributionView({
 						<div className="min-w-0 flex-1">
 							<HorizontalFrequencyAxis range={xRange} />
 						</div>
-						<div className="w-2 shrink-0" />
+						<div className="w-3 shrink-0" />
 					</div>
 					<div className="flex min-h-0 flex-1">
 						<LinearDbAxis
@@ -321,7 +321,7 @@ export function FrequencyDistributionView({
 								"Hz",
 							)}
 						/>
-						<div className="w-2 shrink-0" />
+						<div className="w-3 shrink-0" />
 					</div>
 				</div>
 			</div>

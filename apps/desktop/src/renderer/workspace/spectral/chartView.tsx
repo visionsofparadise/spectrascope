@@ -121,7 +121,7 @@ export function ChartLayout({
 						<div className="min-w-0 flex-1">
 							<TimeRuler startMs={chart.viewport.startMs} endMs={chart.viewport.endMs} />
 						</div>
-						<div className="w-2 shrink-0" />
+						<div className="w-3 shrink-0" />
 					</div>
 					<div className="flex min-h-0 flex-1">
 						<LinearDbAxis min={min} max={max} tickCount={tickCount} range={chart.yRange} sample={widestLabel} />
@@ -172,7 +172,7 @@ export function ChartLayout({
 								onScrubToFraction={chart.setViewportToFraction}
 							/>
 						</div>
-						<div className="w-2 shrink-0" />
+						<div className="w-3 shrink-0" />
 					</div>
 				</div>
 			</div>

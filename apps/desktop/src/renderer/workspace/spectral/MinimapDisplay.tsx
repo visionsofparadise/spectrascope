@@ -115,7 +115,7 @@ export function MinimapDisplay({
 	return (
 		<div
 			ref={minimapRef}
-			className={`relative h-8 touch-none select-none overflow-hidden bg-void outline-none focus-visible:ring-1 focus-visible:ring-primary${onScrubToFraction ? " cursor-ew-resize" : ""}`}
+			className={`relative h-10 touch-none select-none overflow-hidden bg-void outline-none focus-visible:ring-1 focus-visible:ring-primary${onScrubToFraction ? " cursor-ew-resize" : ""}`}
 			role="slider"
 			tabIndex={onScrubToFraction ? 0 : -1}
 			aria-label="Time viewport"

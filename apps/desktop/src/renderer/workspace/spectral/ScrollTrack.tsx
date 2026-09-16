@@ -194,7 +194,7 @@ export function ScrollTrack({
 			ref={containerRef}
 			className={cn(
 				"relative touch-none select-none overflow-hidden bg-void",
-				horizontal ? "h-2" : "w-2",
+				horizontal ? "h-3" : "w-3",
 				className,
 			)}
 		>

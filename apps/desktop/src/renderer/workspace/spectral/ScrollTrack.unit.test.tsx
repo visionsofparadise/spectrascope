@@ -95,7 +95,7 @@ beforeEach(() => {
 describe("scroll track", () => {
 	it("renders an 8px void track with a raised thumb spanning the range", () => {
 		const vertical = render("y", vi.fn());
-		expect(vertical.tree.props.className).toContain("w-2");
+		expect(vertical.tree.props.className).toContain("w-3");
 		expect(vertical.tree.props.className).toContain("bg-void");
 		expect(vertical.thumb.props.className).toContain("bg-chrome-raised");
 		expect(vertical.thumb.props.style).toEqual({
@@ -106,7 +106,7 @@ describe("scroll track", () => {
 		expect(vertical.upper.props.className).toContain("cursor-ns-resize");
 		expect(vertical.lower.props.style).toEqual({ top: "75%", transform: "translateY(-100%)" });
 		const horizontal = render("x", vi.fn());
-		expect(horizontal.tree.props.className).toContain("h-2");
+		expect(horizontal.tree.props.className).toContain("h-3");
 		expect(horizontal.thumb.props.style).toEqual({
 			left: "clamp(0px, calc(50% - max(50%, 6px) / 2), calc(100% - max(50%, 6px)))",
 			width: "max(50%, 6px)",

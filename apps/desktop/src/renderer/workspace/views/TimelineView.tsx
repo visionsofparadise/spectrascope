@@ -607,7 +607,7 @@ export function TimelineView({
 					/>
 				</div>
 				{trackCount === 0 ? (
-					<div className="w-2 shrink-0" />
+					<div className="w-3 shrink-0" />
 				) : (
 					<div className="flex shrink-0 flex-col">
 						<div className="h-8" />
@@ -622,7 +622,7 @@ export function TimelineView({
 							edgeLabels={["Upper track range", "Lower track range"]}
 							edgeValueTexts={[`track ${visibleTracks.first}`, `track ${visibleTracks.last}`]}
 						/>
-						<div className="h-8" />
+						<div className="h-10" />
 					</div>
 				)}
 			</div>

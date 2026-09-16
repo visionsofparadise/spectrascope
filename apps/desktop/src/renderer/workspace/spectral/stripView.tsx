@@ -103,7 +103,7 @@ export function StripLayout({ view, children, channelInput, minimapSources, spec
 					style={{
 						display: "grid",
 						gridTemplateColumns: `${spectrogram ? "auto" : "0"} minmax(0, 1fr) auto auto`,
-						gridTemplateRows: "2rem minmax(0, 1fr) 2rem",
+						gridTemplateRows: "2rem minmax(0, 1fr) 2.5rem",
 					}}
 				>
 					<div className="bg-void" />

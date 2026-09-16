@@ -347,7 +347,7 @@ export function VectorscopeView({ sources, sourceAudio, settings, onTransportCon
 							trackValueTextOf(scopeAxisValueOf("x", fraction, scale)),
 						)}
 					/>
-					<div className="w-2 shrink-0" />
+					<div className="w-3 shrink-0" />
 				</div>
 			</div>
 		</ViewProgressProvider>
