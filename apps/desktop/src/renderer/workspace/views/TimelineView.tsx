@@ -30,7 +30,6 @@ import type { Source } from "../source";
 import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { TimelineDrag } from "./timelineExtent";
 import type { SourceStreamStatus } from "../../audio/useSourceStreams";
-import type { SourceState } from "../../models/State/App";
 import type { TimelineOffsetHandle } from "../TimelineTrackHeader";
 import type { SourceManagementProps, SourceViewProps } from "./viewProps";
 import type { AudioData } from "../spectral/types";
@@ -146,7 +145,7 @@ function TimelineTrack({
 	readonly onDisplayedResultChange: (sourceId: string, displayed: DisplayedWaveform | null) => void;
 	readonly onDragMove: (offsetMs: number) => void;
 	readonly onCommit: (offsetMs: number) => void;
-	readonly onSourceChange?: (changes: Partial<SourceState>) => void;
+	readonly onSourceChange?: (changes: Partial<Source>) => void;
 	readonly onRetry?: () => void;
 	readonly onRelink?: () => void;
 	readonly onRemove?: () => void;

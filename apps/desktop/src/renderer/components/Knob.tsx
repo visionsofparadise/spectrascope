@@ -19,7 +19,6 @@ export const Knob = ({
 	readonly hideValue?: boolean;
 	readonly disabled?: boolean;
 }) => {
-	const svgRef = useRef<SVGSVGElement>(null);
 	const [dragging, setDragging] = useState(false);
 	const startY = useRef(0);
 	const startValue = useRef(0);
@@ -91,7 +90,6 @@ export const Knob = ({
 				</span>
 			)}
 			<svg
-				ref={svgRef}
 				width={size}
 				height={size}
 				style={{ display: "block", width: size, height: size }}
