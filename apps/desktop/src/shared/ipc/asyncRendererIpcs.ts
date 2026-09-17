@@ -20,7 +20,6 @@ import { ReleaseStreamRendererIpc } from "./Stream/releaseStream/Renderer";
 import { GetAllDisplaysRendererIpc } from "./System/getAllDisplays/Renderer";
 import { GetAppVersionRendererIpc } from "./System/getAppVersion/Renderer";
 import { GetUserDataPathRendererIpc } from "./System/getUserDataPath/Renderer";
-import { GetWindowIdRendererIpc } from "./System/getWindowId/Renderer";
 import { QuitAppRendererIpc } from "./System/quitApp/Renderer";
 import { SetBoundsRendererIpc } from "./System/setBounds/Renderer";
 import type { IpcHandlerAction, IpcHandlerParameters, IpcHandlerReturn } from "../models/AsyncRendererIpc";
@@ -43,7 +42,6 @@ export const ASYNC_RENDERER_IPCS = [
 	ShowSaveDialogRendererIpc,
 	GetAllDisplaysRendererIpc,
 	GetUserDataPathRendererIpc,
-	GetWindowIdRendererIpc,
 	GetAppVersionRendererIpc,
 	QuitAppRendererIpc,
 	SetBoundsRendererIpc,

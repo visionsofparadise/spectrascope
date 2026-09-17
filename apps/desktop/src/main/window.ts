@@ -39,7 +39,6 @@ export const createWindow = (
 		},
 	});
 
-	const windowId = crypto.randomUUID();
 	const fileWatcherManager = new FileWatcherManager(browserWindow);
 
 	for (const AsyncMainIpc of ASYNC_MAIN_IPCS) {
@@ -49,7 +48,6 @@ export const createWindow = (
 			sourceCacheManager,
 			streamManager,
 			logger,
-			windowId,
 		});
 	}
 

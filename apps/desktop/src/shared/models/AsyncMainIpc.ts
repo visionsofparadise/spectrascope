@@ -10,7 +10,6 @@ export interface IpcHandlerDependencies {
 	readonly sourceCacheManager: SourceCacheManager;
 	readonly streamManager: StreamManager;
 	readonly logger: Logger;
-	readonly windowId: string;
 }
 
 export abstract class AsyncMainIpc<P extends Array<unknown>, R> {

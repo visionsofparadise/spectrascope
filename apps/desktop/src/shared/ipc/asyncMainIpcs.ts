@@ -20,7 +20,6 @@ import { ReleaseStreamMainIpc } from "./Stream/releaseStream/Main";
 import { GetAllDisplaysMainIpc } from "./System/getAllDisplays/Main";
 import { GetAppVersionMainIpc } from "./System/getAppVersion/Main";
 import { GetUserDataPathMainIpc } from "./System/getUserDataPath/Main";
-import { GetWindowIdMainIpc } from "./System/getWindowId/Main";
 import { QuitAppMainIpc } from "./System/quitApp/Main";
 import { SetBoundsMainIpc } from "./System/setBounds/Main";
 
@@ -42,7 +41,6 @@ export const ASYNC_MAIN_IPCS = [
 	ShowSaveDialogMainIpc,
 	GetAllDisplaysMainIpc,
 	GetUserDataPathMainIpc,
-	GetWindowIdMainIpc,
 	GetAppVersionMainIpc,
 	QuitAppMainIpc,
 	SetBoundsMainIpc,
