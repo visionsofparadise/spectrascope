@@ -14,7 +14,7 @@ afterAll(() => {
 const fmtChunk = (channelCount: number, sampleRate: number): Buffer => {
 	const body = Buffer.alloc(16);
 
-	body.writeUInt16LE(3, 0); // IEEE float
+	body.writeUInt16LE(3, 0);
 	body.writeUInt16LE(channelCount, 2);
 	body.writeUInt32LE(sampleRate, 4);
 	body.writeUInt32LE(sampleRate * channelCount * 4, 8);
@@ -33,7 +33,6 @@ const chunk = (id: string, body: Buffer): Buffer => {
 	return Buffer.concat([header, body]);
 };
 
-/** Writes an interleaved float32 WAV fixture and returns its path. */
 const writeFloatWav = (
 	name: string,
 	channelCount: number,
@@ -219,7 +218,6 @@ describe("streamDsp", () => {
 		await expect(handle.stat()).rejects.toThrow();
 	});
 	it("sums two mono inputs at different offsets, folding each into both stereo channels", async () => {
-		// 1000 Hz sample rate → offsetMs 1 = exactly one frame.
 		const a = writeFloatWav("sum-a.wav", 1, 1000, [1, 2, 3]);
 		const b = writeFloatWav("sum-b.wav", 1, 1000, [10, 20]);
 
@@ -236,7 +234,6 @@ describe("streamDsp", () => {
 
 				const rendered = await renderRange(resolved, 0, 3);
 
-				// frame0: a=1; frame1: a=2 + b=10 = 12; frame2: a=3 + b=20 = 23 — mono duplicated to L and R.
 				expect(Array.from(rendered)).toEqual([1, 1, 12, 12, 23, 23]);
 			},
 		);
@@ -290,7 +287,6 @@ describe("streamDsp", () => {
 
 				const rendered = await renderRange(resolved, 0, 1);
 
-				// mono 1 → L=1,R=1; stereo → L=2,R=3; sum L=3,R=4.
 				expect(Array.from(rendered)).toEqual([3, 4]);
 			},
 		);

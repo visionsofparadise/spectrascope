@@ -126,8 +126,6 @@ function TimelineTrack({
 	readonly status: SourceStreamStatus | undefined;
 	readonly error: string | undefined;
 	readonly height: string;
-	/** This source's effective placement on the shared timeline, in ms (≥ 0) —
-	 *  the stored offset between drags, the live drag offset during one. */
 	readonly offsetMs: number;
 	readonly windowStartMs: number;
 	readonly windowEndMs: number;
@@ -147,8 +145,6 @@ function TimelineTrack({
 	readonly onCursorMove: (readout: SourceRenderCursorReadout) => void;
 	readonly onDisplayedResultChange: (sourceId: string, displayed: DisplayedWaveform | null) => void;
 	readonly onDragMove: (offsetMs: number) => void;
-	/** Emits the final (floored ≥ 0) offset — once per drag (pointer-up) and once
-	 *  per arrow-key nudge. */
 	readonly onCommit: (offsetMs: number) => void;
 	readonly onSourceChange?: (changes: Partial<SourceState>) => void;
 	readonly onRetry?: () => void;

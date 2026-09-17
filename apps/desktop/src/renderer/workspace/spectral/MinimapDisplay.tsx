@@ -30,11 +30,6 @@ interface MinimapDisplayProps {
 	readonly viewStartFrac: number;
 	readonly viewEndFrac: number;
 	readonly channelInput?: ChannelInput;
-	/**
-	 * Click / drag on the strip reports the pointer's `[0, 1]` fraction of the
-	 * full duration. The view recentres its viewport window on that fraction.
-	 * Omitted by the trace views that render a whole-clip minimap.
-	 */
 	readonly onScrubToFraction?: (fraction: number) => void;
 }
 

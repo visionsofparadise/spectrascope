@@ -25,19 +25,7 @@ export type ViewId =
 	| "vectorscope";
 
 interface WorkspaceProps extends SourceManagementProps {
-	/**
-	 * Per-source PCM readers, keyed by `Source.id`. Each source carries its own
-	 * decoded audio rather than the whole workspace sharing one buffer — the
-	 * source/chart views look up each source's `AudioData` here and hand it to
-	 * that source's `SourceStrip` / trace. A source absent from the map has no
-	 * audio yet (still decoding, or import failed) and is skipped by the views.
-	 * An empty map renders an empty workspace.
-	 */
 	readonly sourceAudio: ReadonlyMap<string, AudioData>;
-	/**
-	 * The active derived (Sum / Difference) signal as a single PCM reader, backed
-	 * by the registered `media://` stream for whichever derived view is active.
-	 */
 	readonly derivedAudio: AudioData;
 	readonly onTransportControlChange?: (control: TransportControl) => void;
 	readonly context: SessionContext;

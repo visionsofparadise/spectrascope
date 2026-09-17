@@ -23,11 +23,6 @@ interface ResolvedInput {
 	readonly releasePreparedSource?: () => void;
 	readonly offsetFrames: number;
 	readonly gain: 1 | -1;
-	/**
-	 * Interleaved `[L0, R0, L1, R1, …]` per-channel fold coefficients mapping this
-	 * input's native channels to a stereo pair, or `null` for a single-input stream
-	 * (which keeps the native channel count and copies directly).
-	 */
 	readonly foldCoefficients: Float32Array | null;
 }
 

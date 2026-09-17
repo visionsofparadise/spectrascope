@@ -78,11 +78,6 @@ export const SavedSessionSchema = z.object({
 	channelInput: ChannelInputSchema.default("mono"),
 	positionSec: z.number().default(0),
 	selection: SelectionSchema.default(null),
-	/**
-	 * The comparison's canonical sample rate — every source is streamed at this
-	 * rate. `null` until the first imported source captures its native rate;
-	 * sticky thereafter and user-settable from the sidebar Rate dropdown.
-	 */
 	canonicalSampleRate: z.number().int().positive().max(768000).nullable().default(null),
 	differenceA: z.string().nullable().default(null),
 	differenceB: z.string().nullable().default(null),

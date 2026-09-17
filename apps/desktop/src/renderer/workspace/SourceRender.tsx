@@ -48,14 +48,6 @@ export interface SourceRenderProps {
 	readonly channelInput: ChannelInput;
 	readonly opacity?: number;
 	readonly clipPath?: string;
-	/**
-	 * Per-layer opacity for the two stacked canvas layers — the waveform drawn
-	 * on top and the spectrogram underneath. `0..1`, default `1`. This is the
-	 * compositing hook the per-view right-column layer-opacity knobs drive; it
-	 * is distinct from the render-level `opacity` above (the Overlay view's
-	 * per-render blend opacity). The render has no loudness layer, so there is no
-	 * loudness-opacity prop.
-	 */
 	readonly waveformOpacity?: number;
 	readonly spectrogramOpacity?: number;
 	readonly onCursorMove?: (readout: SourceRenderCursorReadout) => void;

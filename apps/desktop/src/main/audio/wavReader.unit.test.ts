@@ -19,7 +19,6 @@ const writeFixture = (name: string, buffer: Buffer): string => {
 	return filePath;
 };
 
-/** Builds a RIFF chunk: 4-byte id + 4-byte little-endian size + body + a pad byte when the body length is odd. */
 const chunk = (id: string, body: Buffer): Buffer => {
 	const header = Buffer.alloc(8);
 
@@ -57,7 +56,6 @@ const riff = (formId: string, chunks: Buffer): Buffer => {
 describe("parseWavHeader + readFrames", () => {
 	it("parses a plain int16 stereo WAV and converts samples to f32", async () => {
 		const data = Buffer.alloc(8);
-		// frame 0: L = 16384 (0.5), R = -16384 (-0.5); frame 1: L = 32767 (~1), R = 0
 		data.writeInt16LE(16384, 0);
 		data.writeInt16LE(-16384, 2);
 		data.writeInt16LE(32767, 4);
@@ -118,7 +116,6 @@ describe("parseWavHeader + readFrames", () => {
 		data.writeInt16LE(8192, 0);
 		data.writeInt16LE(-8192, 2);
 
-		// A 1-byte (odd) ancillary chunk before data forces a pad-byte skip.
 		const oddChunk = chunk("junk", Buffer.from([0x7f]));
 		const filePath = writeFixture(
 			"oddchunk.wav",
@@ -147,12 +144,11 @@ describe("parseWavHeader + readFrames", () => {
 		values.forEach((value, index) => data.writeFloatLE(value, index * 4));
 
 		const ds64Body = Buffer.alloc(28);
-		ds64Body.writeBigUInt64LE(0n, 0); // riffSize (unused by parser)
-		ds64Body.writeBigUInt64LE(BigInt(data.length), 8); // dataSize
-		ds64Body.writeBigUInt64LE(BigInt(values.length), 16); // sampleCount
-		ds64Body.writeUInt32LE(0, 24); // tableLength
+		ds64Body.writeBigUInt64LE(0n, 0);
+		ds64Body.writeBigUInt64LE(BigInt(data.length), 8);
+		ds64Body.writeBigUInt64LE(BigInt(values.length), 16);
+		ds64Body.writeUInt32LE(0, 24);
 
-		// data chunk with the 32-bit size sentinel; real size comes from ds64.
 		const dataChunk = Buffer.concat([
 			Buffer.from("data", "ascii"),
 			(() => {
@@ -195,16 +191,16 @@ describe("parseWavHeader + readFrames", () => {
 		data.writeInt16LE(-16384, 2);
 
 		const body = Buffer.alloc(40);
-		body.writeUInt16LE(0xfffe, 0); // WAVE_FORMAT_EXTENSIBLE
-		body.writeUInt16LE(1, 2); // channels
-		body.writeUInt32LE(48000, 4); // sampleRate
-		body.writeUInt32LE(96000, 8); // byteRate
-		body.writeUInt16LE(2, 12); // blockAlign
-		body.writeUInt16LE(16, 14); // bitsPerSample
-		body.writeUInt16LE(22, 16); // cbSize
-		body.writeUInt16LE(16, 18); // validBitsPerSample
-		body.writeUInt32LE(0, 20); // channelMask
-		body.writeUInt16LE(1, 24); // SubFormat first two bytes = PCM int
+		body.writeUInt16LE(0xfffe, 0);
+		body.writeUInt16LE(1, 2);
+		body.writeUInt32LE(48000, 4);
+		body.writeUInt32LE(96000, 8);
+		body.writeUInt16LE(2, 12);
+		body.writeUInt16LE(16, 14);
+		body.writeUInt16LE(22, 16);
+		body.writeUInt16LE(16, 18);
+		body.writeUInt32LE(0, 20);
+		body.writeUInt16LE(1, 24);
 
 		const filePath = writeFixture(
 			"extensible.wav",
