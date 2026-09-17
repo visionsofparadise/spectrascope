@@ -1,11 +1,11 @@
 import { markSessionSaved, parseSession, serializeSession } from "./sessionDocument";
 import type { Main } from "../../models/Main";
-import type { Comparison } from "../../models/State/App";
+import type { SavedSession } from "../../models/State/App";
 import type { Snapshot } from "valtio/vanilla";
 
 type SessionIO = Pick<Main, "readFile" | "writeFile" | "mapFilePaths">;
 
-export async function openSessionFile(main: SessionIO, filePath: string): Promise<Comparison> {
+export async function openSessionFile(main: SessionIO, filePath: string): Promise<SavedSession> {
 	const comparison = parseSession(await main.readFile(filePath));
 	const paths = await main.mapFilePaths({
 		baseFilePath: filePath,
@@ -23,7 +23,7 @@ export async function openSessionFile(main: SessionIO, filePath: string): Promis
 
 export async function saveSessionFile(
 	main: SessionIO,
-	comparison: Snapshot<Comparison>,
+	comparison: Snapshot<SavedSession>,
 	filePath: string,
 ): Promise<void> {
 	const paths = await main.mapFilePaths({

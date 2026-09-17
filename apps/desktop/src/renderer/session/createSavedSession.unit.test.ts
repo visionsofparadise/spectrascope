@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createComparison, createSourceFromFile } from "./createComparison";
+import { createSavedSession, createSourceFromFile } from "./createSavedSession";
 
 describe("createSourceFromFile", () => {
 	it("derives the source name from the file's trailing path segment", () => {
@@ -22,7 +22,7 @@ describe("createComparison", () => {
 		// Five files exercises the round-robin past the 4-entry default palette.
 		const files = ["a.wav", "b.wav", "c.wav", "d.wav", "e.wav"];
 
-		const comparison = createComparison(files);
+		const comparison = createSavedSession(files);
 
 		expect(comparison.sources).toHaveLength(5);
 		expect(new Set(comparison.sources.map((source) => source.id)).size).toBe(5);
@@ -34,7 +34,7 @@ describe("createComparison", () => {
 	});
 
 	it("creates an empty, source-less comparison for the New flow", () => {
-		const comparison = createComparison([]);
+		const comparison = createSavedSession([]);
 
 		expect(comparison.sources).toEqual([]);
 		expect(comparison.id.length).toBeGreaterThan(0);

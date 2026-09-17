@@ -1,8 +1,8 @@
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AUDIO_FILE_EXTENSIONS } from "../../comparison/createComparison";
 import { Button } from "../../components/Button";
 import { main } from "../../models/Main";
+import { AUDIO_FILE_EXTENSIONS } from "../../session/createSavedSession";
 import { SourceRender } from "../SourceRender";
 import { TimeRuler } from "../spectral/Axes";
 import { CursorLine, CursorSurface } from "../spectral/CursorSurface";

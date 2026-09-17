@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { ComparisonSchema, type Comparison } from "../../models/State/App";
-import { createTabId } from "../createComparison";
-import { comparisonContent, comparisonFingerprint } from "./comparisonFingerprint";
+import { SavedSessionSchema, type SavedSession } from "../../models/State/App";
+import { createTabId } from "../createSavedSession";
+import { sessionContent, sessionFingerprint } from "./sessionFingerprint";
 import type { Snapshot } from "valtio/vanilla";
 
-const SessionComparisonSchema = ComparisonSchema.omit({
+const SessionFileContentSchema = SavedSessionSchema.omit({
 	id: true,
 	sessionFilePath: true,
 	savedFingerprint: true,
@@ -29,24 +29,24 @@ const SessionComparisonSchema = ComparisonSchema.omit({
 		context.addIssue({ code: "custom", message: "Invalid source offset" });
 });
 
-const SessionDocumentSchema = z.object({
+const SessionFileSchema = z.object({
 	format: z.literal("spectrascope"),
 	version: z.literal(1),
 	savedAt: z.iso.datetime(),
-	comparison: SessionComparisonSchema,
+	comparison: SessionFileContentSchema,
 });
 
-export function serializeSession(comparison: Snapshot<Comparison>, paths: ReadonlyArray<string>): string {
+export function serializeSession(comparison: Snapshot<SavedSession>, paths: ReadonlyArray<string>): string {
 	if (paths.length !== comparison.sources.length) throw new Error("Source path count does not match session");
 
 	const content = {
-		...comparisonContent(comparison),
+		...sessionContent(comparison),
 		positionSec: comparison.positionSec,
 		sources: comparison.sources.map((source, index) => ({ ...source, audioFilePath: paths[index] })),
 	};
 
 	return JSON.stringify(
-		SessionDocumentSchema.parse({
+		SessionFileSchema.parse({
 			format: "spectrascope",
 			version: 1,
 			savedAt: new Date().toISOString(),
@@ -57,7 +57,7 @@ export function serializeSession(comparison: Snapshot<Comparison>, paths: Readon
 	);
 }
 
-export function parseSession(content: string): Comparison {
+export function parseSession(content: string): SavedSession {
 	let raw: unknown;
 
 	try {
@@ -66,7 +66,7 @@ export function parseSession(content: string): Comparison {
 		throw new Error("This file is not valid session JSON");
 	}
 
-	const parsed = SessionDocumentSchema.safeParse(raw);
+	const parsed = SessionFileSchema.safeParse(raw);
 
 	if (!parsed.success)
 		throw new Error(
@@ -76,6 +76,6 @@ export function parseSession(content: string): Comparison {
 	return { ...parsed.data.comparison, id: createTabId(), sessionFilePath: null, savedFingerprint: null };
 }
 
-export function markSessionSaved(comparison: Comparison, filePath: string): Comparison {
-	return { ...comparison, sessionFilePath: filePath, savedFingerprint: comparisonFingerprint(comparison) };
+export function markSessionSaved(comparison: SavedSession, filePath: string): SavedSession {
+	return { ...comparison, sessionFilePath: filePath, savedFingerprint: sessionFingerprint(comparison) };
 }

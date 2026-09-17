@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
-import { comparisonContent, isComparisonDirty } from "../../comparison/utils/comparisonFingerprint";
-import { ComparisonSchema, loadAppState } from "./App";
+import { sessionContent, isSessionDirty } from "../../session/utils/sessionFingerprint";
+import { SavedSessionSchema, loadAppState } from "./App";
 
 it("migrates old recovery state with persistent names and new defaults", async () => {
 	const old = {
@@ -37,9 +37,9 @@ it("migrates old recovery state with persistent names and new defaults", async (
 
 it("keeps a restored comparison clean when its fingerprint was recorded with syncEnabled", async () => {
 	const stored = (id: string, syncEnabled: boolean) => {
-		const comparison = ComparisonSchema.parse({ id, name: "Stored" });
+		const comparison = SavedSessionSchema.parse({ id, name: "Stored" });
 
-		return { ...comparison, savedFingerprint: JSON.stringify({ ...comparisonContent(comparison), syncEnabled }) };
+		return { ...comparison, savedFingerprint: JSON.stringify({ ...sessionContent(comparison), syncEnabled }) };
 	};
 	const clean = stored("clean", true);
 	const edited = { ...stored("edited", false), name: "Edited" };
@@ -48,6 +48,6 @@ it("keeps a restored comparison clean when its fingerprint was recorded with syn
 		readFile: vi.fn().mockResolvedValue(JSON.stringify({ comparisons: [clean, edited] })),
 	});
 	expect(clean.savedFingerprint).toContain('"syncEnabled":true}');
-	expect(state.comparisons[0] && isComparisonDirty(state.comparisons[0])).toBe(false);
-	expect(state.comparisons[1] && isComparisonDirty(state.comparisons[1])).toBe(true);
+	expect(state.comparisons[0] && isSessionDirty(state.comparisons[0])).toBe(false);
+	expect(state.comparisons[1] && isSessionDirty(state.comparisons[1])).toBe(true);
 });

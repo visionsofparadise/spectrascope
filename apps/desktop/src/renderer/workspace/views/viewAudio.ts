@@ -35,7 +35,7 @@ export function resolveVisibleSourceAudio(
 	return resolved;
 }
 
-export function comparisonDurationOf(sources: ReadonlyArray<SourceWithAudio>): number {
+export function sessionDurationOf(sources: ReadonlyArray<SourceWithAudio>): number {
 	return sources.reduce(
 		(duration, { source, audioData }) =>
 			Math.max(duration, Math.max(0, source.timelineOffsetMs) + audioData.durationMs),
@@ -45,7 +45,7 @@ export function comparisonDurationOf(sources: ReadonlyArray<SourceWithAudio>): n
 
 export function useTimelineChromeSources(sources: ReadonlyArray<Source>, sourceAudio: ReadonlyMap<string, AudioData>) {
 	const rawSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
-	const durationMs = comparisonDurationOf(rawSources);
+	const durationMs = sessionDurationOf(rawSources);
 	const renderableSources = useMemo(
 		() =>
 			rawSources.map(({ source, audioData }) => ({

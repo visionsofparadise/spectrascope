@@ -3,10 +3,10 @@ import { streamUrl } from "../../audio/streamAudioData";
 import { resolveAudibleSources, useDerivedStreams } from "../../audio/useDerivedStreams";
 import { usePlayer } from "../../audio/usePlayer";
 import { useSourceStreams } from "../../audio/useSourceStreams";
-import { createSourceFromFile, toSourceState } from "../../comparison/createComparison";
-import { AUDIO_FILE_EXTENSIONS } from "../../comparison/createComparison";
-import { pickAudioFiles } from "../../comparison/pickAudioFiles";
-import { relinkSource } from "../../comparison/utils/relinkSource";
+import { createSourceFromFile, toSourceState } from "../../session/createSavedSession";
+import { AUDIO_FILE_EXTENSIONS } from "../../session/createSavedSession";
+import { pickAudioFiles } from "../../session/pickAudioFiles";
+import { relinkSource } from "../../session/utils/relinkSource";
 import { useComparisonHistory } from "../../state/useComparisonHistory";
 import { AppShell } from "../../workspace/AppShell";
 import { WorkspacePlaybackProvider } from "../../workspace/playback";
@@ -20,7 +20,7 @@ import { ViewTopBar } from "../../workspace/ViewTopBar";
 import { Workspace } from "../../workspace/Workspace";
 import type { ExportControl } from "../../export/ExportControl";
 import type { AppContext } from "../../models/Context";
-import type { Comparison } from "../../models/State/App";
+import type { SavedSession } from "../../models/State/App";
 import type { HistoryControl } from "../../state/useComparisonHistory";
 import type { Source } from "../../workspace/source";
 import type { TransportControl } from "../../workspace/Transport";
@@ -31,7 +31,7 @@ import type { Snapshot } from "valtio/vanilla";
 
 interface Props {
 	readonly context: AppContext;
-	readonly comparison: Snapshot<Comparison>;
+	readonly comparison: Snapshot<SavedSession>;
 	/**
 	 * Publish this comparison's undo/redo control up to the layout (which feeds
 	 * the app bar). Called with the current `{ undo, redo, canUndo, canRedo }` on
@@ -51,7 +51,7 @@ const INITIAL_TRANSPORT_CONTROL: TransportControl = {
 	readoutRows: [],
 };
 
-export function ComparisonTab({ context, comparison, onHistoryControlChange, onExportControlChange }: Props) {
+export function SessionTab({ context, comparison, onHistoryControlChange, onExportControlChange }: Props) {
 	const { app, appStore } = context;
 
 	const [transportControl, setTransportControl] = useState<TransportControl>(INITIAL_TRANSPORT_CONTROL);
@@ -59,7 +59,7 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 	const { volume, playbackRate, looping, viewSettings } = comparison;
 	const [relinkError, setRelinkError] = useState<string | null>(null);
 	const updateSettings = useCallback(
-		(changes: Partial<Comparison>): void => {
+		(changes: Partial<SavedSession>): void => {
 			appStore.mutate(app, (proxy) => {
 				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
 

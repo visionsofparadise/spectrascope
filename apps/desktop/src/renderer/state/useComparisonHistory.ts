@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toSourceState } from "../comparison/createComparison";
+import { toSourceState } from "../session/createSavedSession";
 import { ComparisonHistory, classifyEdit, toHistoryState } from "./comparisonHistory";
 import type { ProxyStore } from "../models/ProxyStore/ProxyStore";
-import type { AppState, Comparison } from "../models/State/App";
+import type { AppState, SavedSession } from "../models/State/App";
 import type { Snapshot } from "valtio/vanilla";
 
 export interface HistoryControl {
@@ -13,7 +13,7 @@ export interface HistoryControl {
 }
 
 export function useComparisonHistory(
-	comparison: Snapshot<Comparison>,
+	comparison: Snapshot<SavedSession>,
 	app: Snapshot<AppState>,
 	appStore: ProxyStore,
 ): HistoryControl {

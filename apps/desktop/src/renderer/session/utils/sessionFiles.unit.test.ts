@@ -1,8 +1,8 @@
 import { expect, it, vi } from "vitest";
 import { mapFilePaths } from "../../../main/utils/mapFilePaths";
-import { createComparison } from "../createComparison";
+import { createSavedSession } from "../createSavedSession";
 import { openSessionFile, saveSessionFile } from "./sessionFiles";
-import { isComparisonDirty } from "./comparisonFingerprint";
+import { isSessionDirty } from "./sessionFingerprint";
 
 it("opens a moved session with missing media references intact and clean saved content", async () => {
 	let content = "";
@@ -16,8 +16,8 @@ it("opens a moved session with missing media references intact and clean saved c
 		}),
 		readFile: vi.fn().mockImplementation(() => Promise.resolve(content)),
 	};
-	await saveSessionFile(io, createComparison(["C:/original/audio/missing.wav"]), "C:/original/project.spectra");
+	await saveSessionFile(io, createSavedSession(["C:/original/audio/missing.wav"]), "C:/original/project.spectra");
 	const restored = await openSessionFile(io, "D:/moved/project.spectra");
 	expect(restored.sources[0]?.audioFilePath).toBe("D:\\moved\\audio\\missing.wav");
-	expect(isComparisonDirty(restored)).toBe(false);
+	expect(isSessionDirty(restored)).toBe(false);
 });

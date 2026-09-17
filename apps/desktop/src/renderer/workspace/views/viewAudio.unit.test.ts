@@ -1,11 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createDefaultSource } from "../source";
-import {
-	comparisonDurationOf,
-	EMPTY_AUDIO_DATA,
-	resolveVisibleSourceAudio,
-	useTimelineChromeSources,
-} from "./viewAudio";
+import { sessionDurationOf, EMPTY_AUDIO_DATA, resolveVisibleSourceAudio, useTimelineChromeSources } from "./viewAudio";
 
 vi.mock("react", () => ({ useMemo: (compute: () => unknown) => compute() }));
 
@@ -46,7 +41,7 @@ describe("comparison source extent", () => {
 			]),
 		);
 
-		expect(comparisonDurationOf(resolved)).toBe(15000);
+		expect(sessionDurationOf(resolved)).toBe(15000);
 	});
 
 	it("excludes hidden or unprepared sources", () => {
@@ -54,7 +49,7 @@ describe("comparison source extent", () => {
 		const absent = createDefaultSource(1, { id: "absent" });
 
 		expect(
-			comparisonDurationOf(
+			sessionDurationOf(
 				resolveVisibleSourceAudio(
 					[hidden, absent],
 					new Map([["hidden", { ...EMPTY_AUDIO_DATA, durationMs: 10000 }]]),

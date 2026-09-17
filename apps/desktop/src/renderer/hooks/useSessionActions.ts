@@ -1,18 +1,18 @@
 import { useMemo, useRef, useState } from "react";
 import { snapshot, type Snapshot } from "valtio/vanilla";
-import { AUDIO_FILE_EXTENSIONS, createComparison, createTabId } from "../comparison/createComparison";
-import { comparisonFingerprint, isComparisonDirty } from "../comparison/utils/comparisonFingerprint";
-import { addRecentSession, sessionPathKey } from "../comparison/utils/recentSessions";
-import { openSessionFile, saveSessionFile } from "../comparison/utils/sessionFiles";
+import { AUDIO_FILE_EXTENSIONS, createSavedSession, createTabId } from "../session/createSavedSession";
+import { addRecentSession, sessionPathKey } from "../session/utils/recentSessions";
+import { openSessionFile, saveSessionFile } from "../session/utils/sessionFiles";
+import { sessionFingerprint, isSessionDirty } from "../session/utils/sessionFingerprint";
 import type { Main } from "../models/Main";
 import type { ProxyStore } from "../models/ProxyStore/ProxyStore";
-import type { AppState, Comparison } from "../models/State/App";
+import type { AppState, SavedSession } from "../models/State/App";
 
 export interface SessionActions {
-	openComparison: (filePath?: string) => Promise<void>;
-	newComparison: () => Promise<void>;
-	saveComparison: (saveAs?: boolean) => Promise<boolean>;
-	closeComparison: (tabId: string) => Promise<void>;
+	openSession: (filePath?: string) => Promise<void>;
+	newSession: () => Promise<void>;
+	saveSession: (saveAs?: boolean) => Promise<boolean>;
+	closeSession: (tabId: string) => Promise<void>;
 	renameTab: (tabId: string, name: string) => void;
 	removeRecentSession: (filePath: string) => void;
 	busy: boolean;
@@ -53,7 +53,7 @@ export function useSessionActions(app: Snapshot<AppState>, store: ProxyStore, ma
 				setBusy(false);
 			}
 		};
-		const openTab = (comparison: Comparison): void => {
+		const openTab = (comparison: SavedSession): void => {
 			const state = current();
 			const id = createTabId();
 
@@ -117,7 +117,7 @@ export function useSessionActions(app: Snapshot<AppState>, store: ProxyStore, ma
 
 			await saveSessionFile(main, saved, filePath);
 			comparison.sessionFilePath = filePath;
-			comparison.savedFingerprint = comparisonFingerprint(saved);
+			comparison.savedFingerprint = sessionFingerprint(saved);
 			remember(filePath, saved.name);
 
 			return true;
@@ -127,13 +127,13 @@ export function useSessionActions(app: Snapshot<AppState>, store: ProxyStore, ma
 			busy,
 			error,
 			clearError: () => setError(null),
-			newComparison: () =>
+			newSession: () =>
 				run(() => {
-					openTab(createComparison([], current().preferences, current().theme));
+					openTab(createSavedSession([], current().preferences, current().theme));
 
 					return Promise.resolve();
 				}, undefined),
-			openComparison: (requested) =>
+			openSession: (requested) =>
 				run(async () => {
 					const paths = requested
 						? [requested]
@@ -147,7 +147,7 @@ export function useSessionActions(app: Snapshot<AppState>, store: ProxyStore, ma
 					if (!chosen) return;
 
 					if (AUDIO_FILE_EXTENSIONS.some((extension) => chosen.toLowerCase().endsWith(`.${extension}`))) {
-						openTab(createComparison([chosen], current().preferences, current().theme));
+						openTab(createSavedSession([chosen], current().preferences, current().theme));
 
 						return;
 					}
@@ -173,14 +173,14 @@ export function useSessionActions(app: Snapshot<AppState>, store: ProxyStore, ma
 					openTab(comparison);
 					remember(filePath, comparison.name);
 				}, undefined),
-			saveComparison: (saveAs) =>
+			saveSession: (saveAs) =>
 				run(async () => {
 					const state = current();
 					const id = state.tabs.find((entry) => entry.id === state.activeTabId)?.comparisonId;
 
 					return id ? save(id, saveAs) : false;
 				}, false),
-			closeComparison: (tabId) =>
+			closeSession: (tabId) =>
 				run(async () => {
 					const state = current();
 					const tab = state.tabs.find((entry) => entry.id === tabId);
@@ -189,7 +189,7 @@ export function useSessionActions(app: Snapshot<AppState>, store: ProxyStore, ma
 
 					const comparison = state.comparisons.find((entry) => entry.id === tab.comparisonId);
 
-					if (comparison && isComparisonDirty(comparison)) {
+					if (comparison && isSessionDirty(comparison)) {
 						const response = await main.showMessageBox({
 							type: "question",
 							title: "Close Session",
@@ -201,7 +201,7 @@ export function useSessionActions(app: Snapshot<AppState>, store: ProxyStore, ma
 
 						if (response === 2) return;
 
-						if (response === 0 && (!(await save(comparison.id)) || isComparisonDirty(comparison))) return;
+						if (response === 0 && (!(await save(comparison.id)) || isSessionDirty(comparison))) return;
 
 						if (response !== 0 && response !== 1) return;
 					}

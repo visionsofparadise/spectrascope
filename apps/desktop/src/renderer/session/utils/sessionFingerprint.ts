@@ -1,7 +1,7 @@
-import type { Comparison } from "../../models/State/App";
+import type { SavedSession } from "../../models/State/App";
 import type { Snapshot } from "valtio/vanilla";
 
-export function comparisonContent(comparison: Snapshot<Comparison>) {
+export function sessionContent(comparison: Snapshot<SavedSession>) {
 	return {
 		name: comparison.name,
 		sources: comparison.sources,
@@ -18,10 +18,10 @@ export function comparisonContent(comparison: Snapshot<Comparison>) {
 	};
 }
 
-export function comparisonFingerprint(comparison: Snapshot<Comparison>): string {
-	return JSON.stringify(comparisonContent(comparison));
+export function sessionFingerprint(comparison: Snapshot<SavedSession>): string {
+	return JSON.stringify(sessionContent(comparison));
 }
 
-export function isComparisonDirty(comparison: Snapshot<Comparison>): boolean {
-	return comparison.savedFingerprint !== comparisonFingerprint(comparison);
+export function isSessionDirty(comparison: Snapshot<SavedSession>): boolean {
+	return comparison.savedFingerprint !== sessionFingerprint(comparison);
 }

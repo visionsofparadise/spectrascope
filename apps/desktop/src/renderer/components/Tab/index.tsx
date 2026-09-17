@@ -1,5 +1,5 @@
 import { HomeScreen } from "../HomeScreen";
-import { ComparisonTab } from "./Comparison";
+import { SessionTab } from "./Session";
 import type { ExportControl } from "../../export/ExportControl";
 import type { AppContext } from "../../models/Context";
 import type { HistoryControl } from "../../state/useComparisonHistory";
@@ -32,7 +32,7 @@ export function TabContent({ context, onHistoryControlChange, onExportControlCha
 	}
 
 	return (
-		<ComparisonTab
+		<SessionTab
 			key={comparison.id}
 			context={context}
 			comparison={comparison}

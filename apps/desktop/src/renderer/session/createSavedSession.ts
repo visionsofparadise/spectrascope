@@ -1,7 +1,7 @@
-import { ComparisonSchema, INITIAL_PREFERENCES, type Preferences } from "../models/State/App";
+import { SavedSessionSchema, INITIAL_PREFERENCES, type Preferences } from "../models/State/App";
 import { createDefaultSource } from "../workspace/source";
-import { comparisonFingerprint } from "./utils/comparisonFingerprint";
-import type { Comparison, SourceState } from "../models/State/App";
+import { sessionFingerprint } from "./utils/sessionFingerprint";
+import type { SavedSession, SourceState } from "../models/State/App";
 import type { ThemeId } from "../utils/themePalettes";
 import type { Source } from "../workspace/source";
 
@@ -48,12 +48,12 @@ export function createSourceFromFile(filePath: string, index: number): SourceSta
 	);
 }
 
-export function createComparison(
+export function createSavedSession(
 	filePaths: ReadonlyArray<string>,
 	preferences: Preferences = INITIAL_PREFERENCES,
 	theme: ThemeId = "lava",
-): Comparison {
-	const comparison = ComparisonSchema.parse({
+): SavedSession {
+	const comparison = SavedSessionSchema.parse({
 		id: generateId(),
 		name: filePaths[0] ? fileNameOf(filePaths[0]).slice(0, 200) : "New Session",
 		volume: preferences.monitorVolume,
@@ -69,7 +69,7 @@ export function createComparison(
 		differenceB: null,
 	});
 
-	if (filePaths.length === 0) comparison.savedFingerprint = comparisonFingerprint(comparison);
+	if (filePaths.length === 0) comparison.savedFingerprint = sessionFingerprint(comparison);
 
 	return comparison;
 }

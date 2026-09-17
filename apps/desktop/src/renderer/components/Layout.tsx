@@ -114,12 +114,12 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 
 			if (key === "s") {
 				event.preventDefault();
-				void sessions.saveComparison(event.shiftKey);
+				void sessions.saveSession(event.shiftKey);
 			}
 
 			if (key === "o") {
 				event.preventDefault();
-				void sessions.openComparison();
+				void sessions.openSession();
 			}
 		};
 

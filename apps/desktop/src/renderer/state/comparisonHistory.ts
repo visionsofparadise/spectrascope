@@ -1,8 +1,8 @@
-import type { Comparison } from "../models/State/App";
+import type { SavedSession } from "../models/State/App";
 import type { Snapshot } from "valtio/vanilla";
 
 export type ComparisonHistoryState = Pick<
-	Snapshot<Comparison>,
+	Snapshot<SavedSession>,
 	| "id"
 	| "name"
 	| "sources"
@@ -147,7 +147,7 @@ export function classifyEdit(previous: ComparisonHistoryState, next: ComparisonH
 	return "selection";
 }
 
-export function toHistoryState(comparison: Snapshot<Comparison>): ComparisonHistoryState {
+export function toHistoryState(comparison: Snapshot<SavedSession>): ComparisonHistoryState {
 	const { id, name, sources, activeView, channelInput, selection, canonicalSampleRate, differenceA, differenceB } =
 		comparison;
 

@@ -1,9 +1,9 @@
 import { proxy, snapshot } from "valtio/vanilla";
 import { expect, it, vi } from "vitest";
 import { mapFilePaths } from "../../main/utils/mapFilePaths";
-import { createComparison } from "../comparison/createComparison";
-import { isComparisonDirty } from "../comparison/utils/comparisonFingerprint";
-import { serializeSession } from "../comparison/utils/sessionDocument";
+import { createSavedSession } from "../session/createSavedSession";
+import { isSessionDirty } from "../session/utils/sessionFingerprint";
+import { serializeSession } from "../session/utils/sessionDocument";
 import { ProxyStore } from "../models/ProxyStore/ProxyStore";
 import { INITIAL_PREFERENCES, type AppState } from "../models/State/App";
 import { useSessionActions } from "./useSessionActions";
@@ -17,7 +17,7 @@ vi.mock("react", async (importOriginal) => ({
 }));
 
 function setup() {
-	const comparison = createComparison(["C:/audio/a.wav"]);
+	const comparison = createSavedSession(["C:/audio/a.wav"]);
 	const app = proxy<AppState>({
 		_key: Symbol(),
 		tabs: [{ id: "tab", comparisonId: comparison.id }],
@@ -52,12 +52,12 @@ it("saves a snapshot baseline and preserves edits arriving during the write", as
 				finish = resolve;
 			}),
 	);
-	const saving = actions.saveComparison();
+	const saving = actions.saveSession();
 	await vi.waitFor(() => expect(main.writeFile).toHaveBeenCalled());
 	app.comparisons[0]!.name = "Changed while saving";
 	finish();
 	expect(await saving).toBe(true);
-	expect(isComparisonDirty(app.comparisons[0]!)).toBe(true);
+	expect(isSessionDirty(app.comparisons[0]!)).toBe(true);
 	expect(app.recentSessions).toHaveLength(1);
 	expect(JSON.parse(main.writeFile.mock.calls[0]![1] as string).comparison.name).toBe("a.wav");
 });
@@ -65,27 +65,27 @@ it("saves a snapshot baseline and preserves edits arriving during the write", as
 it("cancel and failed save retain the dirty tab; Discard closes and removes its comparison", async () => {
 	const { app, main, actions } = setup();
 	main.showSaveDialog.mockResolvedValueOnce(undefined);
-	await actions.closeComparison("tab");
+	await actions.closeSession("tab");
 	expect(app.tabs).toHaveLength(1);
 	main.writeFile.mockRejectedValueOnce(new Error("disk full"));
-	await actions.closeComparison("tab");
+	await actions.closeSession("tab");
 	expect(app.tabs).toHaveLength(1);
 	expect(app.comparisons[0]?.savedFingerprint).toBeNull();
 	main.showMessageBox.mockResolvedValueOnce(2);
-	await actions.closeComparison("tab");
+	await actions.closeSession("tab");
 	expect(app.tabs).toHaveLength(1);
 	main.showMessageBox.mockResolvedValueOnce(1);
-	await actions.closeComparison("tab");
+	await actions.closeSession("tab");
 	expect(app.tabs).toHaveLength(0);
 	expect(app.comparisons).toHaveLength(0);
 });
 
 it("activates an already-open path without replacing its unsaved edits", async () => {
 	const { app, main, actions } = setup();
-	await actions.saveComparison();
+	await actions.saveSession();
 	app.comparisons[0]!.name = "Unsaved name";
 	app.activeTabId = null;
-	await actions.openComparison("c:/sessions/test.spectra");
+	await actions.openSession("c:/sessions/test.spectra");
 	expect(app.activeTabId).toBe("tab");
 	expect(app.comparisons).toHaveLength(1);
 	expect(app.comparisons[0]?.name).toBe("Unsaved name");
@@ -95,7 +95,7 @@ it("activates an already-open path without replacing its unsaved edits", async (
 it("rejects malformed open without mutating current tabs and serializes manual operations", async () => {
 	const { app, main, actions } = setup();
 	main.readFile.mockResolvedValueOnce("bad");
-	await actions.openComparison("C:/sessions/bad.spectra");
+	await actions.openSession("C:/sessions/bad.spectra");
 	expect(app.tabs).toHaveLength(1);
 	let finish = (): void => undefined;
 	main.writeFile.mockImplementationOnce(
@@ -104,9 +104,9 @@ it("rejects malformed open without mutating current tabs and serializes manual o
 				finish = resolve;
 			}),
 	);
-	const saving = actions.saveComparison();
+	const saving = actions.saveSession();
 	await vi.waitFor(() => expect(main.writeFile).toHaveBeenCalled());
-	expect(await actions.saveComparison()).toBe(false);
+	expect(await actions.saveSession()).toBe(false);
 	expect(main.writeFile).toHaveBeenCalledTimes(1);
 	finish();
 	await saving;
@@ -121,19 +121,19 @@ it("keeps edits that arrive while a close-triggered save is writing", async () =
 				finish = resolve;
 			}),
 	);
-	const closing = actions.closeComparison("tab");
+	const closing = actions.closeSession("tab");
 	await vi.waitFor(() => expect(main.writeFile).toHaveBeenCalled());
 	app.comparisons[0]!.volume = 0.3;
 	finish();
 	await closing;
 	expect(app.tabs).toHaveLength(1);
-	expect(isComparisonDirty(app.comparisons[0]!)).toBe(true);
+	expect(isSessionDirty(app.comparisons[0]!)).toBe(true);
 });
 
 it("protects source audio against accidental session overwrite", async () => {
 	const { main, actions } = setup();
 	main.showSaveDialog.mockResolvedValueOnce("C:/audio/a.wav");
-	expect(await actions.saveComparison()).toBe(false);
+	expect(await actions.saveSession()).toBe(false);
 	expect(main.writeFile).not.toHaveBeenCalled();
 });
 
@@ -142,7 +142,7 @@ it("applies changed preferences only to newly created comparisons", async () => 
 	app.preferences.monitorVolume = 0.2;
 	app.preferences.fftSize = 8192;
 	app.preferences.sampleRate = 44100;
-	await actions.newComparison();
+	await actions.newSession();
 	expect(app.comparisons[0]?.volume).toBe(1);
 	expect(app.comparisons[1]?.volume).toBe(0.2);
 	expect(app.comparisons[1]?.viewSettings.fftSize).toBe(8192);

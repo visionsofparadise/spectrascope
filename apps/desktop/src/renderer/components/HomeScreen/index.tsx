@@ -50,7 +50,7 @@ export function HomeScreen({ context }: Props) {
 														proxy.activeTabId = tabId;
 													});
 												} else if (filePath !== null) {
-													void context.openComparison(filePath);
+													void context.openSession(filePath);
 												}
 											}}
 											className="flex w-fit min-w-0 items-baseline gap-5 text-left hover:bg-secondary"
@@ -81,11 +81,11 @@ export function HomeScreen({ context }: Props) {
 					)}
 
 					<div className="flex flex-col items-start gap-2">
-						<Button variant="primary" onClick={() => void context.newComparison()}>
+						<Button variant="primary" onClick={() => void context.newSession()}>
 							<Icon icon="lucide:plus" width={16} height={16} aria-hidden="true" />
 							New Session
 						</Button>
-						<Button variant="secondary" onClick={() => void context.openComparison()}>
+						<Button variant="secondary" onClick={() => void context.openSession()}>
 							<Icon icon="lucide:folder-open" width={16} height={16} aria-hidden="true" />
 							Open Session
 						</Button>

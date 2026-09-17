@@ -1,4 +1,4 @@
-import { sessionPathKey } from "../../../comparison/utils/recentSessions";
+import { sessionPathKey } from "../../../session/utils/recentSessions";
 import type { AppState } from "../../../models/State/App";
 import type { Snapshot } from "valtio/vanilla";
 

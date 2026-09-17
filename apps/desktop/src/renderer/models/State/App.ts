@@ -66,7 +66,7 @@ const PreferencesSchema = z.object({
 export type Preferences = z.infer<typeof PreferencesSchema>;
 export const INITIAL_PREFERENCES: Preferences = PreferencesSchema.parse({});
 
-export const ComparisonSchema = z.object({
+export const SavedSessionSchema = z.object({
 	id: z.string(),
 	name: z.string().trim().min(1).max(200).default("New Session"),
 	viewSettings: ViewControlSettingsSchema.prefault({}),
@@ -100,12 +100,12 @@ const AppStateSchema = z.object({
 	activeTabId: z.string().nullable().default(null),
 	theme: z.enum(THEME_IDS).default("lava"),
 	windowBounds: WindowBoundsSchema.optional(),
-	comparisons: z.array(ComparisonSchema).default([]),
+	comparisons: z.array(SavedSessionSchema).default([]),
 });
 
 export type WindowBounds = z.infer<typeof WindowBoundsSchema>;
 export type SourceState = z.infer<typeof SourceSchema>;
-export type Comparison = z.infer<typeof ComparisonSchema>;
+export type SavedSession = z.infer<typeof SavedSessionSchema>;
 export type AppState = z.infer<typeof AppStateSchema> & State;
 
 const SavedStateSchema = AppStateSchema.pick({

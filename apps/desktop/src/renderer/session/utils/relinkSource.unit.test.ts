@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { createSourceFromFile } from "../createComparison";
+import { createSourceFromFile } from "../createSavedSession";
 import { relinkSource } from "./relinkSource";
 
 it("validates at the native rate, releases preparation, and retains placement and identity", async () => {

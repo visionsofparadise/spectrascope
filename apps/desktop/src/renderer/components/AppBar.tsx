@@ -46,7 +46,7 @@ export function AppBar({ context, historyControl, canExport, exportBusy, onExpor
 
 	const closeTab = useCallback(
 		(id: string): void => {
-			void context.closeComparison(id);
+			void context.closeSession(id);
 		},
 		[context],
 	);
@@ -91,18 +91,18 @@ export function AppBar({ context, historyControl, canExport, exportBusy, onExpor
 						<IconButton icon="lucide:menu" label="Menu" size={20} />
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="start" className="w-[200px]">
-						<DropdownMenuItem onSelect={() => void context.newComparison()}>New Session</DropdownMenuItem>
-						<DropdownMenuItem onSelect={() => void context.openComparison()}>Open Session…</DropdownMenuItem>
+						<DropdownMenuItem onSelect={() => void context.newSession()}>New Session</DropdownMenuItem>
+						<DropdownMenuItem onSelect={() => void context.openSession()}>Open Session…</DropdownMenuItem>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem
 							disabled={!hasActiveTab || context.busy}
-							onSelect={() => void context.saveComparison()}
+							onSelect={() => void context.saveSession()}
 						>
 							Save Session
 						</DropdownMenuItem>
 						<DropdownMenuItem
 							disabled={!hasActiveTab || context.busy}
-							onSelect={() => void context.saveComparison(true)}
+							onSelect={() => void context.saveSession(true)}
 						>
 							Save Session As…
 						</DropdownMenuItem>

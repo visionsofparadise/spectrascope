@@ -1,5 +1,5 @@
 import { main } from "../models/Main";
-import { AUDIO_FILE_EXTENSIONS } from "./createComparison";
+import { AUDIO_FILE_EXTENSIONS } from "./createSavedSession";
 
 export async function pickAudioFiles(): Promise<ReadonlyArray<string> | null> {
 	const filePaths = await main.showOpenDialog({

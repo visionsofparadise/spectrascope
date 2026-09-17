@@ -1,10 +1,10 @@
 import { expect, it } from "vitest";
-import { createComparison } from "../createComparison";
+import { createSavedSession } from "../createSavedSession";
 import { parseSession, serializeSession } from "./sessionDocument";
 import { ViewControlSettingsSchema } from "../../workspace/viewSettings";
 
 it("roundtrips settings and references while regenerating only the comparison identity", () => {
-	const original = createComparison(["/audio/a.wav", "/audio/b.wav"]);
+	const original = createSavedSession(["/audio/a.wav", "/audio/b.wav"]);
 	original.name = "A/B";
 	original.differenceA = original.sources[0]?.id ?? null;
 	original.differenceB = original.sources[1]?.id ?? null;
@@ -30,7 +30,7 @@ it("roundtrips frequency navigation at its minimum span across floating-point bo
 });
 
 it("loads older session settings as Mel and validates all supported frequency scales", () => {
-	const session = JSON.parse(serializeSession(createComparison(["/a.wav"]), ["a.wav"]));
+	const session = JSON.parse(serializeSession(createSavedSession(["/a.wav"]), ["a.wav"]));
 	delete session.comparison.viewSettings.frequencyScale;
 	expect(parseSession(JSON.stringify(session)).viewSettings.frequencyScale).toBe("mel");
 	for (const frequencyScale of ["linear", "log", "mel", "erb"]) {
@@ -42,14 +42,14 @@ it("loads older session settings as Mel and validates all supported frequency sc
 });
 
 it.each([1, 2, 4, 8, "full"] as const)("persists spectrogram sampling %s in session files", (sampling) => {
-	const original = createComparison(["/audio/a.wav"]);
+	const original = createSavedSession(["/audio/a.wav"]);
 	original.viewSettings.spectrogramSampling = sampling;
 	const parsed = parseSession(serializeSession(original, ["a.wav"]));
 	expect(parsed.viewSettings.spectrogramSampling).toBe(sampling);
 });
 
 it("defaults new and older sessions to 4× sampling and rejects unsupported modes", () => {
-	const original = createComparison(["/audio/a.wav"]);
+	const original = createSavedSession(["/audio/a.wav"]);
 	expect(original.viewSettings.spectrogramSampling).toBe(4);
 	const session = JSON.parse(serializeSession(original, ["a.wav"]));
 	delete session.comparison.viewSettings.spectrogramSampling;
@@ -61,14 +61,14 @@ it("defaults new and older sessions to 4× sampling and rejects unsupported mode
 });
 
 it.each(["lava", "viridis"] as const)("persists the standard %s spectrogram colour map", (colormap) => {
-	const original = createComparison(["/audio/a.wav"]);
+	const original = createSavedSession(["/audio/a.wav"]);
 	original.viewSettings.spectrogramColormap = colormap;
 	const parsed = parseSession(serializeSession(original, ["a.wav"]));
 	expect(parsed.viewSettings.spectrogramColormap).toBe(colormap);
 });
 
 it("defaults new and older sessions to Lava and rejects unsupported colour maps", () => {
-	const original = createComparison(["/audio/a.wav"]);
+	const original = createSavedSession(["/audio/a.wav"]);
 	expect(original.viewSettings.spectrogramColormap).toBe("lava");
 	const session = JSON.parse(serializeSession(original, ["a.wav"]));
 	delete session.comparison.viewSettings.spectrogramColormap;
@@ -80,7 +80,7 @@ it("defaults new and older sessions to Lava and rejects unsupported colour maps"
 });
 
 it("rejects unsupported versions, invalid settings and broken source identities", () => {
-	const session = JSON.parse(serializeSession(createComparison(["/a.wav"]), ["a.wav"])) as {
+	const session = JSON.parse(serializeSession(createSavedSession(["/a.wav"]), ["a.wav"])) as {
 		version: number;
 		comparison: Record<string, unknown>;
 	};

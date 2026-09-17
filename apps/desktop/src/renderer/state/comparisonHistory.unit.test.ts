@@ -1,7 +1,7 @@
 import type { Snapshot } from "valtio/vanilla";
 import { describe, expect, it } from "vitest";
-import { createComparison } from "../comparison/createComparison";
-import type { Comparison } from "../models/State/App";
+import { createSavedSession } from "../session/createSavedSession";
+import type { SavedSession } from "../models/State/App";
 import type { ComparisonHistoryState } from "./comparisonHistory";
 import { ComparisonHistory, classifyEdit, historyStatesEqual, toHistoryState } from "./comparisonHistory";
 
@@ -56,9 +56,9 @@ function makeSource(
  * the input shape `toHistoryState` projects from. Used to prove a
  * `positionSec`-only change projects to a value-equal history state.
  */
-function makeComparison(overrides: Partial<Comparison> = {}): Snapshot<Comparison> {
+function makeComparison(overrides: Partial<SavedSession> = {}): Snapshot<SavedSession> {
 	return {
-		...createComparison([]),
+		...createSavedSession([]),
 		id: "comparison-1",
 		sources: [],
 		activeView: "overlay",
