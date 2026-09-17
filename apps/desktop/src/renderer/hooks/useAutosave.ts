@@ -1,17 +1,12 @@
+import { identify, subscribe } from "opshot";
 import { useEffect } from "react";
-import { subscribe, type Snapshot } from "valtio/vanilla";
+import { savedStateOf, type AppState } from "../models/State/App";
 import type { Main } from "../models/Main";
-import type { ProxyStore } from "../models/ProxyStore/ProxyStore";
-import type { AppState } from "../models/State/App";
 
 const DEBOUNCE_MS = 500;
 
-export function useAutosave(app: Snapshot<AppState>, store: ProxyStore, main: Main, userDataPath: string): void {
+export function useAutosave(app: AppState, main: Main, userDataPath: string): void {
 	useEffect(() => {
-		const proxy = store.dangerouslyGetProxy<AppState>(app._key);
-
-		if (!proxy) return;
-
 		let timer: ReturnType<typeof setTimeout> | null = null;
 		let pendingData: string | null = null;
 
@@ -24,8 +19,8 @@ export function useAutosave(app: Snapshot<AppState>, store: ProxyStore, main: Ma
 			}
 		}
 
-		const unsubscribe = subscribe(proxy, () => {
-			pendingData = JSON.stringify(proxy, null, 2);
+		const unsubscribe = subscribe(app, () => {
+			pendingData = JSON.stringify(savedStateOf(app), null, 2);
 
 			if (timer !== null) clearTimeout(timer);
 
@@ -52,5 +47,5 @@ export function useAutosave(app: Snapshot<AppState>, store: ProxyStore, main: Ma
 
 			flush();
 		};
-	}, [app._key, store, main, userDataPath]);
+	}, [identify(app), main, userDataPath]);
 }

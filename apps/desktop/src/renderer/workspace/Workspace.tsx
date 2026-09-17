@@ -64,7 +64,8 @@ export function Workspace({
 	sourceErrors,
 	onRetrySource,
 	onRelinkSource,
-	onSourcesChange,
+	onSourceChange,
+	onSourceRemove,
 	onAddSources,
 	onAddSourceFiles,
 }: WorkspaceProps) {
@@ -82,7 +83,8 @@ export function Workspace({
 					sourceErrors={sourceErrors}
 					onRetrySource={onRetrySource}
 					onRelinkSource={onRelinkSource}
-					onSourcesChange={onSourcesChange}
+					onSourceChange={onSourceChange}
+					onSourceRemove={onSourceRemove}
 					onAddSources={onAddSources}
 					onAddSourceFiles={onAddSourceFiles}
 				/>

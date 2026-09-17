@@ -1,6 +1,5 @@
 import { sessionPathKey } from "../../../session/utils/recentSessions";
 import type { AppState } from "../../../models/State/App";
-import type { Snapshot } from "valtio/vanilla";
 
 export interface HomeSession {
 	readonly key: string;
@@ -11,21 +10,21 @@ export interface HomeSession {
 }
 
 export function homeSessionsOf(
-	app: Pick<Snapshot<AppState>, "tabs" | "comparisons" | "recentSessions">,
+	app: Pick<AppState, "tabs" | "sessions" | "recentSessions">,
 ): ReadonlyArray<HomeSession> {
 	const recentKeys = new Set(app.recentSessions.map((entry) => sessionPathKey(entry.filePath)));
 	const openSessions = app.tabs.flatMap((tab): Array<HomeSession> => {
-		const comparison = app.comparisons.find((entry) => entry.id === tab.comparisonId);
+		const session = app.sessions.find((entry) => entry.id === tab.sessionId);
 
-		if (!comparison) return [];
+		if (!session) return [];
 
-		if (comparison.sessionFilePath !== null && recentKeys.has(sessionPathKey(comparison.sessionFilePath))) return [];
+		if (session.file.path !== null && recentKeys.has(sessionPathKey(session.file.path))) return [];
 
 		return [
 			{
 				key: `tab:${tab.id}`,
-				name: comparison.name,
-				filePath: comparison.sessionFilePath,
+				name: session.document.name,
+				filePath: session.file.path,
 				lastOpenedAt: null,
 				tabId: tab.id,
 			},

@@ -1,14 +1,24 @@
 import { Icon } from "@iconify/react";
+import { batch } from "opshot";
+import { scope } from "opshot/react";
+import { useState } from "react";
 import { Knob } from "../components/Knob";
 import { Select } from "../components/Select";
+import { createGestureKey } from "../utils/gestureKey";
 import { FFT_OPTIONS, HOP_LABELS, HOP_OPTIONS } from "./viewSettings";
-import type { ViewControlSettings } from "./viewSettings";
 import type { ViewId } from "./Workspace";
+import type { SessionContext } from "../models/Context";
+import type { RenderSettings } from "../models/State/Session";
 
 interface TransportViewControlsProps {
-	readonly activeView: ViewId;
-	readonly settings: ViewControlSettings;
-	readonly onSettingsChange: (next: ViewControlSettings) => void;
+	readonly context: SessionContext;
+}
+
+type OpacityLayer = "gridOpacity" | "waveformOpacity" | "spectrogramOpacity";
+
+interface SettingsControlProps {
+	readonly settings: RenderSettings;
+	readonly onSettingsChange: (changes: Partial<RenderSettings>) => void;
 }
 
 const VIEW_CONTROL_VIEWS: ReadonlySet<ViewId> = new Set(["timeline", "overlay", "slider", "difference", "sum"]);
@@ -44,10 +54,7 @@ const SAMPLING_SELECT_OPTIONS = SAMPLING_OPTIONS.map((option) => ({ ...option, v
 const SAMPLING_HELP =
 	"Approximate overview: 1×, 2×, 4× and 8× choose the highest-RMS FFT window in each time subdivision of a pixel. Full uses every FFT window.";
 
-function SamplingControl({
-	settings,
-	onSettingsChange,
-}: Pick<TransportViewControlsProps, "settings" | "onSettingsChange">) {
+function SamplingControl({ settings, onSettingsChange }: SettingsControlProps) {
 	return (
 		<div className="flex" title={SAMPLING_HELP}>
 			<Select
@@ -59,7 +66,7 @@ function SamplingControl({
 				onChange={(value) => {
 					const selected = SAMPLING_OPTIONS.find((option) => String(option.value) === value);
 
-					if (selected) onSettingsChange({ ...settings, spectrogramSampling: selected.value });
+					if (selected) onSettingsChange({ spectrogramSampling: selected.value });
 				}}
 			/>
 		</div>
@@ -69,7 +76,8 @@ function SamplingControl({
 function SpectrogramSelectors({
 	settings,
 	onSettingsChange,
-}: Pick<TransportViewControlsProps, "settings" | "onSettingsChange">) {
+	onFrequencyScaleChange,
+}: SettingsControlProps & { readonly onFrequencyScaleChange: (next: RenderSettings["frequencyScale"]) => void }) {
 	return (
 		<div className="flex items-center gap-1">
 			<Select
@@ -81,7 +89,7 @@ function SpectrogramSelectors({
 				onChange={(value) => {
 					const selected = COLORMAP_OPTIONS.find((option) => option.value === value);
 
-					if (selected) onSettingsChange({ ...settings, spectrogramColormap: selected.value });
+					if (selected) onSettingsChange({ spectrogramColormap: selected.value });
 				}}
 			/>
 			<SamplingControl settings={settings} onSettingsChange={onSettingsChange} />
@@ -95,12 +103,7 @@ function SpectrogramSelectors({
 					onChange={(value) => {
 						const selected = FREQUENCY_SCALE_OPTIONS.find((option) => option.value === value);
 
-						if (selected)
-							onSettingsChange({
-								...settings,
-								frequencyScale: selected.value,
-								frequencyRange: { top: 0, bottom: 1 },
-							});
+						if (selected) onFrequencyScaleChange(selected.value);
 					}}
 				/>
 				<Select
@@ -110,7 +113,7 @@ function SpectrogramSelectors({
 					ariaLabel="FFT size"
 					options={FFT_SELECT_OPTIONS}
 					onChange={(value) => {
-						onSettingsChange({ ...settings, fftSize: Number(value) });
+						onSettingsChange({ fftSize: Number(value) });
 					}}
 				/>
 				<Select
@@ -120,7 +123,7 @@ function SpectrogramSelectors({
 					ariaLabel="FFT hop"
 					options={HOP_SELECT_OPTIONS}
 					onChange={(value) => {
-						onSettingsChange({ ...settings, hopOverlap: Number(value) });
+						onSettingsChange({ hopOverlap: Number(value) });
 					}}
 				/>
 			</div>
@@ -132,14 +135,16 @@ function KnobControl({
 	value,
 	icon,
 	onChange,
+	onChangeEnd,
 }: {
 	readonly value: number;
 	readonly icon: string;
 	readonly onChange: (next: number) => void;
+	readonly onChangeEnd: () => void;
 }) {
 	return (
 		<div className="flex flex-col items-center gap-0.5">
-			<Knob value={value} label="" size={24} hideValue onChange={onChange} />
+			<Knob value={value} label="" size={24} hideValue onChange={onChange} onChangeEnd={onChangeEnd} />
 			<Icon icon={icon} width={16} height={16} className="text-chrome-text-dim" />
 		</div>
 	);
@@ -176,21 +181,26 @@ function GridModeToggle({
 }
 
 interface LayerOpacityKnobsProps {
-	readonly settings: ViewControlSettings;
-	readonly onSettingsChange: (next: ViewControlSettings) => void;
+	readonly settings: RenderSettings;
+	readonly onOpacityChange: (layer: OpacityLayer, value: number) => void;
+	readonly onOpacityEnd: (layer: OpacityLayer) => void;
 	readonly showSpectrogram?: boolean;
 }
 
-function LayerOpacityKnobs({ settings, onSettingsChange, showSpectrogram = true }: LayerOpacityKnobsProps) {
+function LayerOpacityKnobs({
+	settings,
+	onOpacityChange,
+	onOpacityEnd,
+	showSpectrogram = true,
+}: LayerOpacityKnobsProps) {
 	return (
 		<>
 			<Divider />
 			<KnobControl
 				value={settings.waveformOpacity}
 				icon="lucide:audio-waveform"
-				onChange={(waveformOpacity) => {
-					onSettingsChange({ ...settings, waveformOpacity });
-				}}
+				onChange={(value) => onOpacityChange("waveformOpacity", value)}
+				onChangeEnd={() => onOpacityEnd("waveformOpacity")}
 			/>
 			{showSpectrogram && (
 				<>
@@ -198,9 +208,8 @@ function LayerOpacityKnobs({ settings, onSettingsChange, showSpectrogram = true 
 					<KnobControl
 						value={settings.spectrogramOpacity}
 						icon="lucide:flame"
-						onChange={(spectrogramOpacity) => {
-							onSettingsChange({ ...settings, spectrogramOpacity });
-						}}
+						onChange={(value) => onOpacityChange("spectrogramOpacity", value)}
+						onChangeEnd={() => onOpacityEnd("spectrogramOpacity")}
 					/>
 				</>
 			)}
@@ -208,7 +217,46 @@ function LayerOpacityKnobs({ settings, onSettingsChange, showSpectrogram = true 
 	);
 }
 
-export function TransportViewControls({ activeView, settings, onSettingsChange }: TransportViewControlsProps) {
+export const TransportViewControls = scope<TransportViewControlsProps>(({ context }: TransportViewControlsProps) => {
+	const { document, navigation } = context.session;
+	const { activeView } = navigation;
+	const settings = document.renderSettings;
+	const [opacityGestureKeys] = useState(() => ({
+		gridOpacity: createGestureKey(),
+		waveformOpacity: createGestureKey(),
+		spectrogramOpacity: createGestureKey(),
+	}));
+
+	const onSettingsChange = (changes: Partial<RenderSettings>): void => {
+		Object.assign(document.renderSettings, changes);
+	};
+	const onFrequencyScaleChange = (frequencyScale: RenderSettings["frequencyScale"]): void => {
+		document.renderSettings.frequencyScale = frequencyScale;
+		navigation.frequencyRange = { top: 0, bottom: 1 };
+	};
+	const onOpacityChange = (layer: OpacityLayer, value: number): void => {
+		batch(() => {
+			document.renderSettings[layer] = value;
+		}, opacityGestureKeys[layer].current());
+	};
+	const onOpacityEnd = (layer: OpacityLayer): void => {
+		opacityGestureKeys[layer].end();
+	};
+	const gridOpacityKnob = (
+		<KnobControl
+			value={settings.gridOpacity}
+			icon="lucide:grid-3x3"
+			onChange={(value) => onOpacityChange("gridOpacity", value)}
+			onChangeEnd={() => onOpacityEnd("gridOpacity")}
+		/>
+	);
+	const spectrogramSelectors = (
+		<SpectrogramSelectors
+			settings={settings}
+			onSettingsChange={onSettingsChange}
+			onFrequencyScaleChange={onFrequencyScaleChange}
+		/>
+	);
 	const isLayerGroup =
 		activeView === "overlay" || activeView === "slider" || activeView === "difference" || activeView === "sum";
 	const showSpectrogram = activeView !== "overlay";
@@ -216,13 +264,7 @@ export function TransportViewControls({ activeView, settings, onSettingsChange }
 	if (isLayerGroup) {
 		return (
 			<div className="flex items-center gap-2.5">
-				<KnobControl
-					value={settings.gridOpacity}
-					icon="lucide:grid-3x3"
-					onChange={(gridOpacity) => {
-						onSettingsChange({ ...settings, gridOpacity });
-					}}
-				/>
+				{gridOpacityKnob}
 				{showSpectrogram && (
 					<div className="flex items-center">
 						<GridModeToggle
@@ -230,7 +272,7 @@ export function TransportViewControls({ activeView, settings, onSettingsChange }
 							label="Frequency grid"
 							active={settings.gridMode === "freq"}
 							onClick={() => {
-								onSettingsChange({ ...settings, gridMode: "freq" });
+								onSettingsChange({ gridMode: "freq" });
 							}}
 						/>
 						<GridModeToggle
@@ -238,7 +280,7 @@ export function TransportViewControls({ activeView, settings, onSettingsChange }
 							label="Amplitude grid"
 							active={settings.gridMode === "amp"}
 							onClick={() => {
-								onSettingsChange({ ...settings, gridMode: "amp" });
+								onSettingsChange({ gridMode: "amp" });
 							}}
 						/>
 					</div>
@@ -246,10 +288,11 @@ export function TransportViewControls({ activeView, settings, onSettingsChange }
 
 				<LayerOpacityKnobs
 					settings={settings}
-					onSettingsChange={onSettingsChange}
+					onOpacityChange={onOpacityChange}
+					onOpacityEnd={onOpacityEnd}
 					showSpectrogram={showSpectrogram}
 				/>
-				{showSpectrogram && <SpectrogramSelectors settings={settings} onSettingsChange={onSettingsChange} />}
+				{showSpectrogram && spectrogramSelectors}
 			</div>
 		);
 	}
@@ -257,18 +300,12 @@ export function TransportViewControls({ activeView, settings, onSettingsChange }
 	if (activeView === "timeline") {
 		return (
 			<div className="flex items-center gap-2.5">
-				<KnobControl
-					value={settings.gridOpacity}
-					icon="lucide:grid-3x3"
-					onChange={(gridOpacity) => {
-						onSettingsChange({ ...settings, gridOpacity });
-					}}
-				/>
-				<LayerOpacityKnobs settings={settings} onSettingsChange={onSettingsChange} />
-				<SpectrogramSelectors settings={settings} onSettingsChange={onSettingsChange} />
+				{gridOpacityKnob}
+				<LayerOpacityKnobs settings={settings} onOpacityChange={onOpacityChange} onOpacityEnd={onOpacityEnd} />
+				{spectrogramSelectors}
 			</div>
 		);
 	}
 
 	return null;
-}
+});

@@ -1,19 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { homeSessionsOf } from "./homeSessions";
 import type { AppState } from "../../../models/State/App";
-import type { Snapshot } from "valtio/vanilla";
 
 const LAST_OPENED_AT = "2026-09-13T12:00:00.000Z";
 
 function appOf(
-	comparisons: ReadonlyArray<{ id: string; name: string; sessionFilePath: string | null }>,
-	recentSessions: Snapshot<AppState>["recentSessions"],
+	open: ReadonlyArray<{ id: string; name: string; sessionFilePath: string | null }>,
+	recentSessions: AppState["recentSessions"],
 ) {
 	return {
-		tabs: comparisons.map((comparison) => ({ id: `tab-${comparison.id}`, comparisonId: comparison.id })),
-		comparisons,
+		tabs: open.map((session) => ({ id: `tab-${session.id}`, sessionId: session.id })),
+		sessions: open.map((session) => ({
+			id: session.id,
+			document: { name: session.name },
+			file: { path: session.sessionFilePath },
+		})),
 		recentSessions,
-	} as unknown as Snapshot<AppState>;
+	} as unknown as AppState;
 }
 
 describe("homeSessionsOf", () => {

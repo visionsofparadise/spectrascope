@@ -1,7 +1,11 @@
 import { Icon } from "@iconify/react";
-import { useCallback, useId, useRef } from "react";
+import { batch } from "opshot";
+import { scope } from "opshot/react";
+import { useCallback, useId, useRef, useState } from "react";
 import { IconButton } from "../components/IconButton";
 import { Select } from "../components/Select";
+import { createGestureKey } from "../utils/gestureKey";
+import type { SessionContext } from "../models/Context";
 import type { ReactNode } from "react";
 
 export interface TransportReadoutRow {
@@ -23,24 +27,10 @@ export interface TransportControl {
 
 interface TransportProps {
 	readonly control: TransportControl;
-	readonly playbackRate: number;
-	readonly onPlaybackRateChange: (rate: number) => void;
-	readonly looping: boolean;
-	readonly onLoopingChange: (looping: boolean) => void;
 	readonly sampleRate: number;
-	/**
-	 * Monitor volume — `0` silent, `1` unity. A *controlled* value: the
-	 * Transport renders the `VolumeSlider` from this prop and emits changes via
-	 * `onVolumeChange`; it owns no volume state.
-	 *
-	 * Volume is a separate `Transport`-level prop pair rather than a field on
-	 * `TransportControl` because `TransportControl` is published per *view* and
-	 * volume is a monitor-level, comparison-wide concern — not a view concern.
-	 * This mirrors `Workspace`'s controlled `activeView` / `onActiveViewChange`.
-	 */
-	readonly volume: number;
-	readonly onVolumeChange: (volume: number) => void;
+	readonly onMonitorVolumeChange: (volume: number) => void;
 	readonly viewControls?: ReactNode;
+	readonly context: SessionContext;
 }
 
 const PLAYBACK_RATE_OPTIONS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => ({
@@ -209,9 +199,11 @@ function ReadoutPanel({
 function VolumeSlider({
 	volume,
 	onVolumeChange,
+	onGestureEnd,
 }: {
 	readonly volume: number;
 	readonly onVolumeChange: (volume: number) => void;
+	readonly onGestureEnd: () => void;
 }) {
 	const trackRef = useRef<HTMLDivElement>(null);
 
@@ -286,7 +278,10 @@ function VolumeSlider({
 				aria-valuenow={Math.round(pct)}
 				onPointerDown={handlePointerDown}
 				onPointerMove={handlePointerMove}
+				onPointerUp={onGestureEnd}
+				onLostPointerCapture={onGestureEnd}
 				onKeyDown={handleKeyDown}
+				onKeyUp={onGestureEnd}
 				className="relative h-1 w-24 shrink-0 cursor-pointer bg-chrome-raised outline-none focus-visible:ring-1 focus-visible:ring-primary"
 			>
 				<div
@@ -302,133 +297,142 @@ function VolumeSlider({
 	);
 }
 
-export function Transport({
-	control,
-	volume,
-	onVolumeChange,
-	viewControls,
-	playbackRate,
-	onPlaybackRateChange,
-	looping,
-	onLoopingChange,
-	sampleRate,
-}: TransportProps) {
-	const { disabled, playing, positionSec, durationSec, onPlayToggle, onSeek, readoutRows } = control;
+export const Transport = scope<TransportProps>(
+	({ control, sampleRate, onMonitorVolumeChange, viewControls, context }: TransportProps) => {
+		const { document, transport } = context.session;
+		const { disabled, playing, positionSec, durationSec, onPlayToggle, onSeek, readoutRows } = control;
+		const [volumeGestureKey] = useState(createGestureKey);
 
-	const timecodeMainClass = disabled ? "text-chrome-text-dim" : "text-chrome-text";
-	const timecodeSecondaryClass = disabled ? "text-chrome-text-dim" : "text-chrome-text-secondary";
+		const handleVolumeChange = (volume: number): void => {
+			batch(() => {
+				document.volume = volume;
+			}, volumeGestureKey.current());
+			onMonitorVolumeChange(volume);
+		};
 
-	return (
-		<div role="region" aria-label="Transport" className="@container h-[92px] w-full bg-void">
-			<div className="flex h-full min-w-0 items-center px-4">
-				<div className="flex min-w-0 flex-1 basis-0 items-center overflow-x-clip">
-					{viewControls && (
-						<TransportCluster
-							label="View"
-							icon="lucide:sliders-horizontal"
-							inlineClassName="hidden min-w-0 @[1360px]:block"
-							compactClassName="shrink-0 @[1360px]:hidden"
-						>
-							<div className="[&_[role=listbox]]:bottom-full [&_[role=listbox]]:top-auto">{viewControls}</div>
-						</TransportCluster>
-					)}
-				</div>
+		const timecodeMainClass = disabled ? "text-chrome-text-dim" : "text-chrome-text";
+		const timecodeSecondaryClass = disabled ? "text-chrome-text-dim" : "text-chrome-text-secondary";
 
-				<div className="mx-4 flex shrink-0 flex-col items-center justify-center gap-1.5">
-					<div className="flex items-center gap-2">
-						<div className="flex items-center">
-							<MediaButton
-								icon="lucide:skip-back"
-								label="Skip to start"
+		return (
+			<div role="region" aria-label="Transport" className="@container h-[92px] w-full bg-void">
+				<div className="flex h-full min-w-0 items-center px-4">
+					<div className="flex min-w-0 flex-1 basis-0 items-center overflow-x-clip">
+						{viewControls && (
+							<TransportCluster
+								label="View"
+								icon="lucide:sliders-horizontal"
+								inlineClassName="hidden min-w-0 @[1360px]:block"
+								compactClassName="shrink-0 @[1360px]:hidden"
+							>
+								<div className="[&_[role=listbox]]:bottom-full [&_[role=listbox]]:top-auto">{viewControls}</div>
+							</TransportCluster>
+						)}
+					</div>
+
+					<div className="mx-4 flex shrink-0 flex-col items-center justify-center gap-1.5">
+						<div className="flex items-center gap-2">
+							<div className="flex items-center">
+								<MediaButton
+									icon="lucide:skip-back"
+									label="Skip to start"
+									disabled={disabled}
+									onClick={() => onSeek(0)}
+								/>
+								<MediaButton
+									icon="lucide:chevrons-left"
+									label="Jump back five seconds"
+									disabled={disabled}
+									onClick={() => onSeek(Math.max(0, positionSec - 5))}
+								/>
+								<MediaButton
+									icon="lucide:chevron-left"
+									label="Sample back"
+									disabled={disabled}
+									onClick={() => onSeek(Math.max(0, positionSec - 1 / sampleRate))}
+								/>
+								<MediaButton
+									icon={<PlaybackGlyph playing={playing} />}
+									label={playing ? "Pause" : "Play"}
+									large
+									active={playing}
+									disabled={disabled}
+									onClick={onPlayToggle}
+								/>
+								<MediaButton
+									icon="lucide:chevron-right"
+									label="Sample forward"
+									disabled={disabled}
+									onClick={() => onSeek(Math.min(durationSec, positionSec + 1 / sampleRate))}
+								/>
+								<MediaButton
+									icon="lucide:chevrons-right"
+									label="Jump forward five seconds"
+									disabled={disabled}
+									onClick={() => onSeek(Math.min(durationSec, positionSec + 5))}
+								/>
+								<MediaButton
+									icon="lucide:skip-forward"
+									label="Skip to end"
+									disabled={disabled}
+									onClick={() => onSeek(durationSec)}
+								/>
+							</div>
+							<IconButton
+								icon="lucide:repeat"
+								label={transport.looping ? "Disable loop" : "Loop selection or full stream"}
+								size={16}
+								variant="ghost"
+								dim={!transport.looping}
 								disabled={disabled}
-								onClick={() => onSeek(0)}
-							/>
-							<MediaButton
-								icon="lucide:chevrons-left"
-								label="Jump back five seconds"
-								disabled={disabled}
-								onClick={() => onSeek(Math.max(0, positionSec - 5))}
-							/>
-							<MediaButton
-								icon="lucide:chevron-left"
-								label="Sample back"
-								disabled={disabled}
-								onClick={() => onSeek(Math.max(0, positionSec - 1 / sampleRate))}
-							/>
-							<MediaButton
-								icon={<PlaybackGlyph playing={playing} />}
-								label={playing ? "Pause" : "Play"}
-								large
-								active={playing}
-								disabled={disabled}
-								onClick={onPlayToggle}
-							/>
-							<MediaButton
-								icon="lucide:chevron-right"
-								label="Sample forward"
-								disabled={disabled}
-								onClick={() => onSeek(Math.min(durationSec, positionSec + 1 / sampleRate))}
-							/>
-							<MediaButton
-								icon="lucide:chevrons-right"
-								label="Jump forward five seconds"
-								disabled={disabled}
-								onClick={() => onSeek(Math.min(durationSec, positionSec + 5))}
-							/>
-							<MediaButton
-								icon="lucide:skip-forward"
-								label="Skip to end"
-								disabled={disabled}
-								onClick={() => onSeek(durationSec)}
+								onClick={() => {
+									transport.looping = !transport.looping;
+								}}
 							/>
 						</div>
-						<IconButton
-							icon="lucide:repeat"
-							label={looping ? "Disable loop" : "Loop selection or full stream"}
-							size={16}
-							variant="ghost"
-							dim={!looping}
-							disabled={disabled}
-							onClick={() => onLoopingChange(!looping)}
-						/>
+
+						<div className="flex items-center gap-3">
+							<Select
+								variant="chip"
+								size="sm"
+								direction="up"
+								ariaLabel="Playback speed"
+								className="shrink-0 italic [&_button]:normal-case [&_button]:tracking-normal"
+								disabled={disabled}
+								value={String(transport.playbackRate)}
+								options={PLAYBACK_RATE_OPTIONS}
+								onChange={(value) => {
+									transport.playbackRate = Number(value);
+								}}
+							/>
+							<span
+								className={`shrink-0 font-technical text-[length:var(--text-sm)] tabular-nums ${timecodeMainClass}`}
+							>
+								{formatTimecode(positionSec)}
+								<span className={timecodeSecondaryClass}> / </span>
+								<span className={timecodeSecondaryClass}>{formatTimecode(durationSec)}</span>
+							</span>
+						</div>
 					</div>
 
-					<div className="flex items-center gap-3">
-						<Select
-							variant="chip"
-							size="sm"
-							direction="up"
-							ariaLabel="Playback speed"
-							className="shrink-0 italic [&_button]:normal-case [&_button]:tracking-normal"
-							disabled={disabled}
-							value={String(playbackRate)}
-							options={PLAYBACK_RATE_OPTIONS}
-							onChange={(value) => onPlaybackRateChange(Number(value))}
-						/>
-						<span
-							className={`shrink-0 font-technical text-[length:var(--text-sm)] tabular-nums ${timecodeMainClass}`}
+					<div className="flex min-w-0 flex-1 basis-0 items-center">
+						<div className="min-w-4 flex-1" />
+						<ReadoutPanel rows={readoutRows} disabled={disabled} />
+						<div className="min-w-0 flex-1 @[700px]:min-w-4" />
+						<TransportCluster
+							label="Volume"
+							icon="lucide:volume-2"
+							inlineClassName="hidden shrink-0 @[700px]:block"
+							compactClassName="shrink-0 @[700px]:hidden"
 						>
-							{formatTimecode(positionSec)}
-							<span className={timecodeSecondaryClass}> / </span>
-							<span className={timecodeSecondaryClass}>{formatTimecode(durationSec)}</span>
-						</span>
+							<VolumeSlider
+								volume={document.volume}
+								onVolumeChange={handleVolumeChange}
+								onGestureEnd={volumeGestureKey.end}
+							/>
+						</TransportCluster>
 					</div>
-				</div>
-
-				<div className="flex min-w-0 flex-1 basis-0 items-center">
-					<div className="min-w-4 flex-1" />
-					<ReadoutPanel rows={readoutRows} disabled={disabled} />
-					<div className="min-w-0 flex-1 @[700px]:min-w-4" />
-					<TransportCluster
-						label="Volume"
-						icon="lucide:volume-2"
-						inlineClassName="hidden shrink-0 @[700px]:block"
-						compactClassName="shrink-0 @[700px]:hidden"
-					>
-						<VolumeSlider volume={volume} onVolumeChange={onVolumeChange} />
-					</TransportCluster>
 				</div>
 			</div>
-		</div>
-	);
-}
+		);
+	},
+);

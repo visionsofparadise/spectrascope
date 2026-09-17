@@ -2,30 +2,26 @@ import { z } from "zod";
 import { SavedSessionSchema, type SavedSession } from "../../models/State/App";
 import { createTabId } from "../createSavedSession";
 import { sessionContent, sessionFingerprint } from "./sessionFingerprint";
-import type { Snapshot } from "valtio/vanilla";
 
 const SessionFileContentSchema = SavedSessionSchema.omit({
 	id: true,
 	sessionFilePath: true,
 	savedFingerprint: true,
-}).superRefine((comparison, context) => {
-	const ids = new Set(comparison.sources.map((source) => source.id));
+}).superRefine((session, context) => {
+	const ids = new Set(session.sources.map((source) => source.id));
 
-	if (ids.size !== comparison.sources.length)
+	if (ids.size !== session.sources.length)
 		context.addIssue({ code: "custom", message: "Duplicate source identities" });
 
-	for (const id of [comparison.differenceA, comparison.differenceB]) {
+	for (const id of [session.differenceA, session.differenceB]) {
 		if (id !== null && !ids.has(id)) context.addIssue({ code: "custom", message: "Unknown difference source" });
 	}
 
-	if (
-		comparison.selection &&
-		(comparison.selection.start < 0 || comparison.selection.end < comparison.selection.start)
-	) {
+	if (session.selection && (session.selection.start < 0 || session.selection.end < session.selection.start)) {
 		context.addIssue({ code: "custom", message: "Invalid selection" });
 	}
 
-	if (comparison.sources.some((source) => source.timelineOffsetMs < 0))
+	if (session.sources.some((source) => source.timelineOffsetMs < 0))
 		context.addIssue({ code: "custom", message: "Invalid source offset" });
 });
 
@@ -36,13 +32,13 @@ const SessionFileSchema = z.object({
 	comparison: SessionFileContentSchema,
 });
 
-export function serializeSession(comparison: Snapshot<SavedSession>, paths: ReadonlyArray<string>): string {
-	if (paths.length !== comparison.sources.length) throw new Error("Source path count does not match session");
+export function serializeSession(session: SavedSession, paths: ReadonlyArray<string>): string {
+	if (paths.length !== session.sources.length) throw new Error("Source path count does not match session");
 
 	const content = {
-		...sessionContent(comparison),
-		positionSec: comparison.positionSec,
-		sources: comparison.sources.map((source, index) => ({ ...source, audioFilePath: paths[index] })),
+		...sessionContent(session),
+		positionSec: session.positionSec,
+		sources: session.sources.map((source, index) => ({ ...source, audioFilePath: paths[index] })),
 	};
 
 	return JSON.stringify(
@@ -76,6 +72,6 @@ export function parseSession(content: string): SavedSession {
 	return { ...parsed.data.comparison, id: createTabId(), sessionFilePath: null, savedFingerprint: null };
 }
 
-export function markSessionSaved(comparison: SavedSession, filePath: string): SavedSession {
-	return { ...comparison, sessionFilePath: filePath, savedFingerprint: sessionFingerprint(comparison) };
+export function markSessionSaved(session: SavedSession, filePath: string): SavedSession {
+	return { ...session, sessionFilePath: filePath, savedFingerprint: sessionFingerprint(session) };
 }

@@ -1,13 +1,15 @@
+import { identify } from "opshot";
+import { scope } from "opshot/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { streamUrl } from "../../audio/streamAudioData";
 import { resolveAudibleSources, useDerivedStreams } from "../../audio/useDerivedStreams";
 import { usePlayer } from "../../audio/usePlayer";
 import { useSourceStreams } from "../../audio/useSourceStreams";
-import { createSourceFromFile, toSourceState } from "../../session/createSavedSession";
+import { automaticMeta } from "../../models/History";
 import { AUDIO_FILE_EXTENSIONS } from "../../session/createSavedSession";
 import { pickAudioFiles } from "../../session/pickAudioFiles";
+import { appendSources, removeSource, selectRange, setDifference } from "../../session/utils/documentWrites";
 import { relinkSource } from "../../session/utils/relinkSource";
-import { useComparisonHistory } from "../../state/useComparisonHistory";
 import { AppShell } from "../../workspace/AppShell";
 import { WorkspacePlaybackProvider } from "../../workspace/playback";
 import { MeasurementSessionProvider } from "../../workspace/spectral/MeasurementSession";
@@ -19,26 +21,17 @@ import { normalizeSelection } from "../../workspace/utils/selection";
 import { ViewTopBar } from "../../workspace/ViewTopBar";
 import { Workspace } from "../../workspace/Workspace";
 import type { ExportControl } from "../../export/ExportControl";
-import type { AppContext } from "../../models/Context";
-import type { SavedSession } from "../../models/State/App";
-import type { HistoryControl } from "../../state/useComparisonHistory";
-import type { Source } from "../../workspace/source";
+import type { AppContext, SessionContext } from "../../models/Context";
+import type { SourceState } from "../../models/State/App";
+import type { Session } from "../../models/State/Session";
 import type { TransportControl } from "../../workspace/Transport";
 import type { ViewControlSettings } from "../../workspace/viewSettings";
-import type { ViewId } from "../../workspace/Workspace";
-import type { ChannelInput } from "spectral-display";
-import type { Snapshot } from "valtio/vanilla";
+import type { TextureVerticalRange } from "spectral-display";
 
 interface Props {
-	readonly context: AppContext;
-	readonly comparison: Snapshot<SavedSession>;
-	/**
-	 * Publish this comparison's undo/redo control up to the layout (which feeds
-	 * the app bar). Called with the current `{ undo, redo, canUndo, canRedo }` on
-	 * every change and with `null` on unmount.
-	 */
-	readonly onHistoryControlChange: (control: HistoryControl | null) => void;
+	readonly session: Session;
 	readonly onExportControlChange: (control: ExportControl | null) => void;
+	readonly context: AppContext;
 }
 
 const INITIAL_TRANSPORT_CONTROL: TransportControl = {
@@ -51,47 +44,45 @@ const INITIAL_TRANSPORT_CONTROL: TransportControl = {
 	readoutRows: [],
 };
 
-export function SessionTab({ context, comparison, onHistoryControlChange, onExportControlChange }: Props) {
-	const { app, appStore } = context;
+export const SessionTab = scope<Props>(({ session, onExportControlChange, context: appContext }: Props) => {
+	const context = useMemo(
+		(): SessionContext => ({ ...appContext, session }),
+		[
+			identify(appContext.app),
+			identify(appContext.sessionStatus),
+			appContext.logger,
+			appContext.main,
+			appContext.mainEvents,
+			appContext.queryClient,
+			appContext.userDataPath,
+			appContext.openSession,
+			appContext.newSession,
+			appContext.saveSession,
+			appContext.closeSession,
+			appContext.renameTab,
+			appContext.removeRecentSession,
+			identify(session),
+		],
+	);
+	const { document, transport, navigation, file, history } = session;
 
 	const [transportControl, setTransportControl] = useState<TransportControl>(INITIAL_TRANSPORT_CONTROL);
 
-	const { volume, playbackRate, looping, viewSettings } = comparison;
 	const [relinkError, setRelinkError] = useState<string | null>(null);
-	const updateSettings = useCallback(
-		(changes: Partial<SavedSession>): void => {
-			appStore.mutate(app, (proxy) => {
-				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
-
-				if (target) Object.assign(target, changes);
-			});
-		},
-		[app, appStore, comparison.id],
-	);
-	const setVolume = useCallback((value: number) => updateSettings({ volume: value }), [updateSettings]);
-	const setPlaybackRate = useCallback((value: number) => updateSettings({ playbackRate: value }), [updateSettings]);
-	const setLooping = useCallback((value: boolean) => updateSettings({ looping: value }), [updateSettings]);
-	const setViewSettings = useCallback(
-		(value: ViewControlSettings) => updateSettings({ viewSettings: value }),
-		[updateSettings],
-	);
-	const changeViewSettings = useCallback(
-		(changes: Partial<ViewControlSettings>) => setViewSettings({ ...viewSettings, ...changes }),
-		[setViewSettings, viewSettings],
-	);
 	const onRelinkSource = useCallback(
 		(sourceId: string): void => {
 			void (async () => {
 				setRelinkError(null);
 
 				try {
-					const source = comparison.sources.find((entry) => entry.id === sourceId);
+					const source = document.sources.find((entry) => entry.id === sourceId);
 
 					if (!source) return;
 
+					const previousPath = source.audioFilePath;
 					const paths = await context.main.showOpenDialog({
 						title: "Locate Audio",
-						defaultPath: source.audioFilePath,
+						defaultPath: previousPath,
 						filters: [{ name: "Audio", extensions: [...AUDIO_FILE_EXTENSIONS] }],
 						properties: ["openFile"],
 					});
@@ -99,40 +90,27 @@ export function SessionTab({ context, comparison, onHistoryControlChange, onExpo
 					if (!paths?.[0]) return;
 
 					const replacement = await relinkSource(context.main, source, paths[0]);
+					const target = document.sources.find((entry) => entry.id === sourceId);
 
-					appStore.mutate(app, (proxy) => {
-						const targetComparison = proxy.comparisons.find((entry) => entry.id === comparison.id);
-						const target = targetComparison?.sources.find((entry) => entry.id === sourceId);
-
-						if (target?.audioFilePath === source.audioFilePath) {
-							target.audioFilePath = replacement.audioFilePath;
-							target.name = replacement.name;
-						}
-					});
+					if (target?.audioFilePath === previousPath) {
+						target.audioFilePath = replacement.audioFilePath;
+						target.name = replacement.name;
+					}
 				} catch (cause) {
 					setRelinkError(cause instanceof Error ? cause.message : String(cause));
 				}
 			})();
 		},
-		[comparison, context.main, appStore, app],
+		[context.main, identify(document)],
 	);
 
-	const sources: ReadonlyArray<Source> = comparison.sources;
+	const sources = document.sources;
 
-	const activeView = comparison.activeView;
+	const activeView = navigation.activeView;
 
-	const setDifference = useCallback(
-		(differenceA: string | null, differenceB: string | null) => {
-			appStore.mutate(app, (proxy) => {
-				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
-
-				if (!target) return;
-
-				target.differenceA = differenceA;
-				target.differenceB = differenceB;
-			});
-		},
-		[app, appStore, comparison.id],
+	const onDefaultDifference = useCallback(
+		(differenceA: string, differenceB: string) => setDifference(differenceA, differenceB, automaticMeta, context),
+		[identify(document)],
 	);
 
 	const { sourceAudio, prepared, status, errors: sourceErrors, retrySource } = useSourceStreams(sources);
@@ -145,7 +123,7 @@ export function SessionTab({ context, comparison, onHistoryControlChange, onExpo
 		preparing: derivedPreparing,
 		error: derivedError,
 		retry: retryDerived,
-	} = useDerivedStreams(sources, prepared, comparison.differenceA, comparison.differenceB, setDifference);
+	} = useDerivedStreams(sources, prepared, document.differenceA, document.differenceB, onDefaultDifference);
 
 	const derivedAudio = activeView === "difference" ? diffAudio : sumAudio;
 
@@ -153,57 +131,38 @@ export function SessionTab({ context, comparison, onHistoryControlChange, onExpo
 
 	const playbackStreamUrl = activeStreamInfo ? streamUrl(activeStreamInfo.key, "wav") : null;
 	const playbackDurationSec = activeStreamInfo ? activeStreamInfo.durationMs / 1000 : 0;
-	const comparisonDurationMs = sources.reduce(
+	const sessionDurationMs = sources.reduce(
 		(duration, source) => Math.max(duration, source.timelineOffsetMs + (sourceAudio.get(source.id)?.durationMs ?? 0)),
 		playbackDurationSec * 1000,
 	);
 	const selection = useMemo(
 		() =>
-			comparison.selection
-				? normalizeSelection(comparison.selection.start, comparison.selection.end, comparisonDurationMs)
+			document.selection
+				? normalizeSelection(document.selection.start, document.selection.end, sessionDurationMs)
 				: null,
-		[comparison.selection, comparisonDurationMs],
+		[document.selection, sessionDurationMs],
 	);
 	const exportStream = activeView === "difference" ? diffInfo : sumInfo;
 
 	useEffect(() => {
 		onExportControlChange({
-			name: comparison.name,
+			name: document.name,
 			streamKey: exportStream?.key ?? null,
 			streamLabel: activeView === "difference" ? "Difference of the selected A/B sources" : "Sum of audible sources",
 			selection,
 			protectedPaths: [
 				...sources.map((source) => source.audioFilePath),
 				...Array.from(prepared.values(), (source) => source.pcmPath),
-				...(comparison.sessionFilePath ? [comparison.sessionFilePath] : []),
+				...(file.path ? [file.path] : []),
 			],
 		});
 
 		return () => onExportControlChange(null);
-	}, [
-		comparison.name,
-		comparison.sessionFilePath,
-		sources,
-		prepared,
-		exportStream?.key,
-		activeView,
-		selection,
-		onExportControlChange,
-	]);
+	}, [document.name, file.path, sources, prepared, exportStream?.key, activeView, selection, onExportControlChange]);
 
 	const handleSelectionChange = useCallback(
-		(next: { start: number; end: number } | null) => {
-			appStore.mutate(app, (proxy) => {
-				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
-
-				if (target) {
-					target.selection = next ? normalizeSelection(next.start, next.end, comparisonDurationMs) : null;
-
-					if (target.selection) target.looping = true;
-				}
-			});
-		},
-		[app, appStore, comparison.id, comparisonDurationMs],
+		(next: { start: number; end: number } | null) => selectRange(next, sessionDurationMs, context),
+		[identify(document), identify(transport), sessionDurationMs],
 	);
 
 	const derivedOverlayMessage = useMemo(() => {
@@ -218,19 +177,13 @@ export function SessionTab({ context, comparison, onHistoryControlChange, onExpo
 
 	const preparing = useMemo(() => sources.some((source) => status.get(source.id) === "preparing"), [sources, status]);
 
-	const initialPositionRef = useRef(comparison.positionSec);
+	const initialPositionRef = useRef(transport.positionSec);
 
 	const persistPosition = useCallback(
 		(positionSec: number) => {
-			appStore.mutate(app, (proxy) => {
-				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
-
-				if (!target) return;
-
-				target.positionSec = positionSec;
-			});
+			transport.positionSec = positionSec;
 		},
-		[app, appStore, comparison.id],
+		[identify(transport)],
 	);
 
 	const player = usePlayer(
@@ -238,13 +191,18 @@ export function SessionTab({ context, comparison, onHistoryControlChange, onExpo
 		playbackDurationSec,
 		initialPositionRef.current,
 		persistPosition,
-		volume,
-		{ playbackRate, looping, selection, preparing: preparing || derivedPreparing },
+		document.volume,
+		{
+			playbackRate: transport.playbackRate,
+			looping: transport.looping,
+			selection,
+			preparing: preparing || derivedPreparing,
+		},
 	);
 	const workspacePlayback = useMemo(
 		() => ({
 			positionSec: player.positionSec,
-			durationSec: Math.max(player.durationSec, comparisonDurationMs / 1000),
+			durationSec: Math.max(player.durationSec, sessionDurationMs / 1000),
 			playing: player.playing,
 			onPlayToggle: player.onPlayToggle,
 			onSeek: player.onSeek,
@@ -257,18 +215,10 @@ export function SessionTab({ context, comparison, onHistoryControlChange, onExpo
 			player.playing,
 			player.onPlayToggle,
 			player.onSeek,
-			comparisonDurationMs,
+			sessionDurationMs,
 			selection,
 			handleSelectionChange,
 		],
-	);
-
-	const handleVolumeChange = useCallback(
-		(next: number) => {
-			setVolume(next);
-			player.onVolumeChange(next);
-		},
-		[player, setVolume],
 	);
 
 	const boundTransportControl = useMemo<TransportControl>(
@@ -284,100 +234,48 @@ export function SessionTab({ context, comparison, onHistoryControlChange, onExpo
 		[transportControl, playbackStreamUrl, player],
 	);
 
-	const appendSources = useCallback(
-		(filePaths: ReadonlyArray<string>) => {
-			if (filePaths.length === 0) return;
-
-			appStore.mutate(app, (proxy) => {
-				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
-
-				if (!target) return;
-
-				const base = target.sources.length;
-
-				for (const [offset, filePath] of filePaths.entries()) {
-					target.sources.push(createSourceFromFile(filePath, base + offset));
-				}
-			});
-		},
-		[app, appStore, comparison.id],
+	const handleAddSourceFiles = useCallback(
+		(filePaths: ReadonlyArray<string>) => appendSources(filePaths, context),
+		[identify(document)],
 	);
 
 	const addSourcesFromDialog = useCallback(async () => {
 		const filePaths = await pickAudioFiles();
 
-		if (filePaths) appendSources(filePaths);
-	}, [appendSources]);
+		if (filePaths) appendSources(filePaths, context);
+	}, [identify(document)]);
 
 	const handleSourceOffsetChange = useCallback(
 		(sourceId: string, offsetMs: number) => {
-			appStore.mutate(app, (proxy) => {
-				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
+			const source = document.sources.find((entry) => entry.id === sourceId);
 
-				if (!target) return;
-
-				const source = target.sources.find((entry) => entry.id === sourceId);
-
-				if (!source) return;
-
-				source.timelineOffsetMs = Math.max(0, offsetMs);
-			});
+			if (source) source.timelineOffsetMs = Math.max(0, offsetMs);
 		},
-		[app, appStore, comparison.id],
+		[identify(document)],
 	);
 
-	const handleSourcesChange = useCallback(
-		(next: ReadonlyArray<Source>) => {
-			appStore.mutate(app, (proxy) => {
-				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
+	const handleSourceChange = useCallback(
+		(sourceId: string, changes: Partial<SourceState>) => {
+			const source = document.sources.find((entry) => entry.id === sourceId);
 
-				if (!target) return;
-
-				target.sources = next.map(toSourceState);
-
-				if (!target.sources.some((source) => source.id === target.differenceA)) target.differenceA = null;
-
-				if (!target.sources.some((source) => source.id === target.differenceB)) target.differenceB = null;
-			});
+			if (source) Object.assign(source, changes);
 		},
-		[app, appStore, comparison.id],
+		[identify(document)],
 	);
 
-	const handleActiveViewChange = useCallback(
-		(view: ViewId) => {
-			appStore.mutate(app, (proxy) => {
-				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
+	const handleSourceRemove = useCallback((sourceId: string) => removeSource(sourceId, context), [identify(document)]);
 
-				if (!target) return;
-
-				target.activeView = view;
-			});
-		},
-		[app, appStore, comparison.id],
+	const settings = useMemo(
+		(): ViewControlSettings => ({ ...document.renderSettings, frequencyRange: navigation.frequencyRange }),
+		[document.renderSettings, navigation.frequencyRange],
 	);
 
-	const handleChannelInputChange = useCallback(
-		(next: ChannelInput) => {
-			appStore.mutate(app, (proxy) => {
-				const target = proxy.comparisons.find((entry) => entry.id === comparison.id);
-
-				if (!target) return;
-
-				target.channelInput = next;
-			});
+	const handleFrequencyRangeChange = useCallback(
+		(frequencyRange: TextureVerticalRange) => {
+			navigation.frequencyRange = { top: frequencyRange.top, bottom: frequencyRange.bottom };
 		},
-		[app, appStore, comparison.id],
+		[identify(navigation)],
 	);
-
-	const { undo, redo, canUndo, canRedo } = useComparisonHistory(comparison, app, appStore);
-
-	useEffect(() => {
-		onHistoryControlChange({ undo, redo, canUndo, canRedo });
-
-		return () => {
-			onHistoryControlChange(null);
-		};
-	}, [undo, redo, canUndo, canRedo, onHistoryControlChange]);
 
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
@@ -399,9 +297,9 @@ export function SessionTab({ context, comparison, onHistoryControlChange, onExpo
 			event.preventDefault();
 
 			if (isRedo) {
-				redo();
+				history.redo();
 			} else {
-				undo();
+				history.undo();
 			}
 		};
 
@@ -410,7 +308,7 @@ export function SessionTab({ context, comparison, onHistoryControlChange, onExpo
 		return () => {
 			window.removeEventListener("keydown", onKeyDown);
 		};
-	}, [undo, redo]);
+	}, [identify(history)]);
 
 	return (
 		<WorkspacePlaybackProvider value={workspacePlayback}>
@@ -418,43 +316,31 @@ export function SessionTab({ context, comparison, onHistoryControlChange, onExpo
 				<AppShell
 					workspace={
 						<div className="relative flex h-full min-h-0 flex-col bg-void">
-							<ViewTopBar
-								activeView={activeView}
-								onActiveViewChange={handleActiveViewChange}
-								channelInput={comparison.channelInput}
-								onChannelInputChange={handleChannelInputChange}
-								settings={viewSettings}
-								onSettingsChange={changeViewSettings}
-								sources={sources}
-								differenceA={comparison.differenceA}
-								differenceB={comparison.differenceB}
-								onDifferenceChange={setDifference}
-							/>
+							<ViewTopBar context={context} />
 							<div className="relative min-h-0 flex-1 overflow-hidden px-4">
 								{(preparing || derivedPreparing) && <ViewLoadingToast label="Preparing audio" />}
 								<PreparingAudioContext.Provider value={preparing || derivedPreparing}>
-									<MeasurementSessionProvider sessionId={comparison.id} sourceAudio={sourceAudio}>
+									<MeasurementSessionProvider sessionId={session.id} sourceAudio={sourceAudio}>
 										<Workspace
 											sources={sources}
 											sourceAudio={sourceAudio}
 											derivedAudio={derivedAudio}
 											activeView={activeView}
-											channelInput={comparison.channelInput}
-											settings={viewSettings}
-											onFrequencyRangeChange={(frequencyRange) =>
-												setViewSettings({ ...viewSettings, frequencyRange })
-											}
-											differenceA={comparison.differenceA}
-											differenceB={comparison.differenceB}
+											channelInput={document.channelInput}
+											settings={settings}
+											onFrequencyRangeChange={handleFrequencyRangeChange}
+											differenceA={document.differenceA}
+											differenceB={document.differenceB}
 											onSourceOffsetChange={handleSourceOffsetChange}
 											onTransportControlChange={setTransportControl}
 											sourceStatus={status}
 											sourceErrors={sourceErrors}
 											onRetrySource={retrySource}
 											onRelinkSource={onRelinkSource}
-											onSourcesChange={handleSourcesChange}
+											onSourceChange={handleSourceChange}
+											onSourceRemove={handleSourceRemove}
 											onAddSources={addSourcesFromDialog}
-											onAddSourceFiles={appendSources}
+											onAddSourceFiles={handleAddSourceFiles}
 										/>
 									</MeasurementSessionProvider>
 								</PreparingAudioContext.Provider>
@@ -464,22 +350,12 @@ export function SessionTab({ context, comparison, onHistoryControlChange, onExpo
 					transport={
 						<Transport
 							control={boundTransportControl}
-							playbackRate={playbackRate}
-							onPlaybackRateChange={setPlaybackRate}
-							looping={looping}
-							onLoopingChange={setLooping}
 							sampleRate={activeStreamInfo?.sampleRate ?? 48000}
-							volume={volume}
-							onVolumeChange={handleVolumeChange}
+							onMonitorVolumeChange={player.onVolumeChange}
 							viewControls={
-								hasTransportViewControls(activeView) ? (
-									<TransportViewControls
-										activeView={activeView}
-										settings={viewSettings}
-										onSettingsChange={setViewSettings}
-									/>
-								) : undefined
+								hasTransportViewControls(activeView) ? <TransportViewControls context={context} /> : undefined
 							}
+							context={context}
 						/>
 					}
 				/>
@@ -519,4 +395,4 @@ export function SessionTab({ context, comparison, onHistoryControlChange, onExpo
 			</div>
 		</WorkspacePlaybackProvider>
 	);
-}
+});

@@ -12,11 +12,11 @@ function combineStreams(results: Array<UseQueryResult<StreamQueryEntry>>) {
 }
 
 export function MeasurementSessionsProvider({
-	comparisons,
+	sessions,
 	activeSessionId,
 	children,
 }: {
-	readonly comparisons: ReadonlyArray<SessionSources>;
+	readonly sessions: ReadonlyArray<SessionSources>;
 	readonly activeSessionId: string | null;
 	readonly children: ReactNode;
 }) {
@@ -25,10 +25,7 @@ export function MeasurementSessionsProvider({
 	initializeStreamQueries(client);
 
 	const registry = useMemo(() => new MeasurementSessions(), []);
-	const paths = useMemo(
-		() => registry.sourcePaths(comparisons, activeSessionId),
-		[registry, comparisons, activeSessionId],
-	);
+	const paths = useMemo(() => registry.sourcePaths(sessions, activeSessionId), [registry, sessions, activeSessionId]);
 	const streams = useQueries({
 		queries: paths.map((path) => sourceStreamQueryOptions(path, null)),
 		combine: combineStreams,
@@ -44,8 +41,8 @@ export function MeasurementSessionsProvider({
 			if (entry) audioByPath.set(path, entry.audioData);
 		}
 
-		registry.retain(comparisons, audioByPath);
-	}, [registry, comparisons, paths, streams]);
+		registry.retain(sessions, audioByPath);
+	}, [registry, sessions, paths, streams]);
 	useEffect(() => {
 		if (disposeTimer.current !== null) clearTimeout(disposeTimer.current);
 

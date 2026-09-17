@@ -1,3 +1,4 @@
+import { createMutableState } from "opshot";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HomeScreen } from "./index";
 import type { AppContext } from "../../models/Context";
@@ -15,6 +16,7 @@ vi.mock("react", async (importOriginal) => ({
 		runtime.effects.push(effect);
 	},
 }));
+vi.mock("opshot/react", () => ({ scope: (component: unknown) => component }));
 vi.mock("@iconify/react", () => ({ Icon: "mock-icon" }));
 vi.mock("../TerrainShader", () => ({ TerrainShader: "mock-terrain" }));
 
@@ -31,15 +33,19 @@ function texts(node: unknown): Array<string> {
 function render(open: ReadonlyArray<{ id: string; name: string; sessionFilePath: string | null }> = []) {
 	runtime.effects = [];
 	const context = {
-		app: {
+		app: createMutableState({
 			theme: "lava",
-			tabs: open.map((comparison) => ({ id: `tab-${comparison.id}`, comparisonId: comparison.id })),
-			comparisons: open,
+			tabs: open.map((session) => ({ id: `tab-${session.id}`, sessionId: session.id })),
+			sessions: open.map((session) => ({
+				id: session.id,
+				document: { name: session.name },
+				file: { path: session.sessionFilePath },
+			})),
 			recentSessions: [
 				{ name: "Mix", filePath: "C:/mix.scope", lastOpenedAt: new Date(NOW - 5 * MINUTE_MS).toISOString() },
 			],
-		},
-		busy: false,
+		}),
+		sessionStatus: createMutableState({ busy: false, error: null }),
 	} as unknown as AppContext;
 	return texts(HomeScreen({ context }));
 }

@@ -1,12 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { main } from "../models/Main";
-import { ProxyStore } from "../models/ProxyStore/ProxyStore";
 import { loadAppState } from "../models/State/App";
 import { AppLayout } from "./Layout";
 import type { Logger } from "../../shared/models/Logger";
 import type { QueryClient } from "@tanstack/react-query";
-
-const appStore = new ProxyStore();
 
 interface Props {
 	readonly queryClient: QueryClient;
@@ -19,17 +16,12 @@ export function AppLoader({ queryClient, logger }: Props) {
 		queryFn: () => loadAppState(main),
 	});
 
-	const { data: windowId } = useQuery({
-		queryKey: ["windowId"],
-		queryFn: () => main.getWindowId(),
-	});
-
 	const { data: userDataPath } = useQuery({
 		queryKey: ["userDataPath"],
 		queryFn: () => main.getUserDataPath(),
 	});
 
-	if (!initialState || !windowId || !userDataPath) {
+	if (!initialState || !userDataPath) {
 		return (
 			<div className="flex h-screen items-center justify-center bg-chrome-base">
 				<div className="text-chrome-text-secondary font-technical uppercase tracking-[0.06em]">Loading...</div>
@@ -38,13 +30,6 @@ export function AppLoader({ queryClient, logger }: Props) {
 	}
 
 	return (
-		<AppLayout
-			initialState={initialState}
-			windowId={windowId}
-			userDataPath={userDataPath}
-			appStore={appStore}
-			queryClient={queryClient}
-			logger={logger}
-		/>
+		<AppLayout initialState={initialState} userDataPath={userDataPath} queryClient={queryClient} logger={logger} />
 	);
 }

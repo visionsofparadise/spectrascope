@@ -1,9 +1,19 @@
+import { flush } from "opshot";
 import { describe, expect, it, vi } from "vitest";
+import { createSession } from "../models/State/Session";
+import { createSavedSession } from "../session/createSavedSession";
 import { hasTransportViewControls, TransportViewControls } from "./TransportViewControls";
 import { INITIAL_VIEW_CONTROL_SETTINGS } from "./viewSettings";
+import type { SessionContext } from "../models/Context";
+import type { Session } from "../models/State/Session";
 import type { ReactElement } from "react";
 import type { ViewId } from "./Workspace";
 
+vi.mock("react", async (importOriginal) => ({
+	...(await importOriginal<typeof import("react")>()),
+	useState: (initial: unknown) => [typeof initial === "function" ? (initial as () => unknown)() : initial, vi.fn()],
+}));
+vi.mock("opshot/react", () => ({ scope: (component: unknown) => component }));
 vi.mock("@iconify/react", () => ({ Icon: "mock-icon" }));
 vi.mock("../components/Knob", () => ({ Knob: "mock-knob" }));
 vi.mock("../components/Select", () => ({ Select: "mock-select" }));
@@ -17,14 +27,14 @@ function elements(node: unknown): Array<ReactElement<Record<string, unknown>>> {
 	return [element, ...elements(element.props?.children)];
 }
 
-function render(activeView: ViewId, onSettingsChange = vi.fn(), settings = INITIAL_VIEW_CONTROL_SETTINGS) {
-	return elements(
-		TransportViewControls({
-			activeView,
-			settings,
-			onSettingsChange,
-		}),
-	);
+function sessionOf(activeView: ViewId, frequencyRange = { top: 0, bottom: 1 }) {
+	const saved = createSavedSession([]);
+
+	return createSession({ ...saved, activeView, viewSettings: { ...saved.viewSettings, frequencyRange } });
+}
+
+function render(activeView: ViewId, session: Session = sessionOf(activeView)) {
+	return elements(TransportViewControls({ context: { session } as unknown as SessionContext }));
 }
 
 describe("spectrogram sampling control", () => {
@@ -53,54 +63,47 @@ describe("spectrogram sampling control", () => {
 	});
 
 	it.each([1, 2, 4, 8, "full"] as const)("commits %s while preserving other display settings", (sampling) => {
-		const onSettingsChange = vi.fn();
-		const selector = render("slider", onSettingsChange).find(
-			(element) => element.props.ariaLabel === "Spectrogram sampling",
-		)!;
+		const session = sessionOf("slider");
+		const before = { ...session.document.renderSettings };
+		const selector = render("slider", session).find((element) => element.props.ariaLabel === "Spectrogram sampling")!;
 		(selector.props.onChange as (value: string) => void)(String(sampling));
-		expect(onSettingsChange).toHaveBeenCalledExactlyOnceWith({
-			...INITIAL_VIEW_CONTROL_SETTINGS,
-			spectrogramSampling: sampling,
-		});
+		expect({ ...session.document.renderSettings }).toEqual({ ...before, spectrogramSampling: sampling });
 	});
 
 	it.each([
-		["Colour map", "viridis", { spectrogramColormap: "viridis" }],
-		["Frequency scale", "erb", { frequencyScale: "erb", frequencyRange: { top: 0, bottom: 1 } }],
-		["FFT size", "4096", { fftSize: 4096 }],
-		["FFT hop", "8", { hopOverlap: 8 }],
-	] as const)("updates Timeline %s using the shared selector", (label, value, changed) => {
-		const onSettingsChange = vi.fn();
-		const settings = { ...INITIAL_VIEW_CONTROL_SETTINGS, frequencyRange: { top: 0.2, bottom: 0.6 } };
-		const selector = render("timeline", onSettingsChange, settings).find(
-			(element) => element.props.ariaLabel === label,
-		)!;
+		["Colour map", "viridis", { spectrogramColormap: "viridis" }, { top: 0.2, bottom: 0.6 }],
+		["Frequency scale", "erb", { frequencyScale: "erb" }, { top: 0, bottom: 1 }],
+		["FFT size", "8192", { fftSize: 8192 }, { top: 0.2, bottom: 0.6 }],
+		["FFT hop", "8", { hopOverlap: 8 }, { top: 0.2, bottom: 0.6 }],
+	] as const)("updates Timeline %s using the shared selector", (label, value, changed, frequencyRange) => {
+		const session = sessionOf("timeline", { top: 0.2, bottom: 0.6 });
+		const before = { ...session.document.renderSettings };
+		const selector = render("timeline", session).find((element) => element.props.ariaLabel === label)!;
 		(selector.props.onChange as (value: string) => void)(value);
-		expect(onSettingsChange).toHaveBeenCalledExactlyOnceWith({ ...settings, ...changed });
+		expect({ ...session.document.renderSettings }).toEqual({ ...before, ...changed });
+		expect(session.navigation.frequencyRange).toEqual(frequencyRange);
 	});
 
 	it.each(["lava", "viridis"] as const)(
 		"selects the standard %s colour map without changing analysis settings",
 		(spectrogramColormap) => {
-			const onSettingsChange = vi.fn();
-			const settings = { ...INITIAL_VIEW_CONTROL_SETTINGS, frequencyRange: { top: 0.2, bottom: 0.6 } };
-			const selector = render("slider", onSettingsChange, settings).find(
-				(element) => element.props.ariaLabel === "Colour map",
-			)!;
+			const session = sessionOf("slider", { top: 0.2, bottom: 0.6 });
+			const before = { ...session.document.renderSettings };
+			const selector = render("slider", session).find((element) => element.props.ariaLabel === "Colour map")!;
 			expect(selector.props.options).toEqual([
 				{ value: "lava", label: "Lava" },
 				{ value: "viridis", label: "Viridis" },
 			]);
 			expect(selector.props.value).toBe("lava");
 			(selector.props.onChange as (value: string) => void)(spectrogramColormap);
-			expect(onSettingsChange).toHaveBeenCalledExactlyOnceWith({ ...settings, spectrogramColormap });
+			expect({ ...session.document.renderSettings }).toEqual({ ...before, spectrogramColormap });
+			expect(session.navigation.frequencyRange).toEqual({ top: 0.2, bottom: 0.6 });
 		},
 	);
 
 	it("keeps Overlay controls limited to grid opacity and waveform opacity", () => {
-		const onSettingsChange = vi.fn();
-		const nodes = render("overlay", onSettingsChange);
-		expect(nodes.some((element) => element.props["aria-label"] === "Disable cross-view sync")).toBe(false);
+		const session = sessionOf("overlay");
+		const nodes = render("overlay", session);
 		expect(nodes.some((element) => element.type === "select" || element.type === "mock-select")).toBe(false);
 		expect(
 			nodes.some(
@@ -116,10 +119,25 @@ describe("spectrogram sampling control", () => {
 		]);
 		(knobs[0]!.props.onChange as (value: number) => void)(0.2);
 		(knobs[1]!.props.onChange as (value: number) => void)(0.6);
-		expect(onSettingsChange.mock.calls).toEqual([
-			[{ ...INITIAL_VIEW_CONTROL_SETTINGS, gridOpacity: 0.2 }],
-			[{ ...INITIAL_VIEW_CONTROL_SETTINGS, waveformOpacity: 0.6 }],
-		]);
+		expect(session.document.renderSettings.gridOpacity).toBe(0.2);
+		expect(session.document.renderSettings.waveformOpacity).toBe(0.6);
+	});
+
+	it("records one history entry per knob drag", () => {
+		const session = sessionOf("slider");
+		const knob = render("slider", session).find((element) => element.type === "mock-knob")!;
+		const turn = (value: number) => {
+			(knob.props.onChange as (value: number) => void)(value);
+			flush(session.document);
+		};
+
+		turn(0.4);
+		turn(0.5);
+		turn(0.6);
+		expect(session.history.length).toBe(1);
+		(knob.props.onChangeEnd as () => void)();
+		turn(0.7);
+		expect(session.history.length).toBe(2);
 	});
 
 	it("omits spectrogram sampling from measurement-only controls", () => {

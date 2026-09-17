@@ -35,11 +35,11 @@ it("migrates old recovery state with persistent names and new defaults", async (
 	expect(state.activeTabId).toBe("tab");
 });
 
-it("keeps a restored comparison clean when its fingerprint was recorded with syncEnabled", async () => {
+it("keeps a restored session clean when its fingerprint was recorded with syncEnabled", async () => {
 	const stored = (id: string, syncEnabled: boolean) => {
-		const comparison = SavedSessionSchema.parse({ id, name: "Stored" });
+		const session = SavedSessionSchema.parse({ id, name: "Stored" });
 
-		return { ...comparison, savedFingerprint: JSON.stringify({ ...sessionContent(comparison), syncEnabled }) };
+		return { ...session, savedFingerprint: JSON.stringify({ ...sessionContent(session), syncEnabled }) };
 	};
 	const clean = stored("clean", true);
 	const edited = { ...stored("edited", false), name: "Edited" };

@@ -1,19 +1,26 @@
 import type { Main } from "./Main";
 import type { MainEvents } from "./MainEvents";
 import type { SessionActions } from "../hooks/useSessionActions";
-import type { ProxyStore } from "./ProxyStore/ProxyStore";
 import type { AppState } from "./State/App";
+import type { Session } from "./State/Session";
 import type { Logger } from "../../shared/models/Logger";
 import type { QueryClient } from "@tanstack/react-query";
-import type { Snapshot } from "valtio/vanilla";
+
+export interface SessionStatus {
+	busy: boolean;
+	error: string | null;
+}
 
 export interface AppContext extends SessionActions {
-	readonly app: Snapshot<AppState>;
-	readonly appStore: ProxyStore;
+	readonly app: AppState;
+	readonly sessionStatus: SessionStatus;
 	readonly logger: Logger;
 	readonly main: Main;
 	readonly mainEvents: MainEvents;
 	readonly queryClient: QueryClient;
 	readonly userDataPath: string;
-	readonly windowId: string;
+}
+
+export interface SessionContext extends AppContext {
+	readonly session: Session;
 }

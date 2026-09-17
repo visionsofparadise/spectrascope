@@ -1,20 +1,20 @@
 import { Icon } from "@iconify/react";
+import { scope } from "opshot/react";
 import { useMemo } from "react";
 import { Select } from "../components/Select";
+import { setDifference } from "../session/utils/documentWrites";
 import { NO_SOURCE, sourcePairOf } from "./views/sourcePair";
 import { METRICS } from "./viewSettings";
 import type { Source } from "./source";
-import type { ViewControlSettings } from "./viewSettings";
 import type { ViewId } from "./Workspace";
+import type { SessionContext } from "../models/Context";
 import type { ChannelInput, VectorscopeScale } from "spectral-display";
 
 interface ViewTopBarProps {
-	readonly activeView: ViewId;
-	readonly onActiveViewChange: (id: ViewId) => void;
-	readonly channelInput: ChannelInput;
-	readonly onChannelInputChange: (next: ChannelInput) => void;
-	readonly settings: ViewControlSettings;
-	readonly onSettingsChange: (next: Partial<ViewControlSettings>) => void;
+	readonly context: SessionContext;
+}
+
+interface SourcePairSelectsProps {
 	readonly sources: ReadonlyArray<Source>;
 	readonly differenceA: string | null;
 	readonly differenceB: string | null;
@@ -67,12 +67,7 @@ function SyncToggle() {
 	);
 }
 
-function SourcePairSelects({
-	sources,
-	differenceA,
-	differenceB,
-	onDifferenceChange,
-}: Pick<ViewTopBarProps, "sources" | "differenceA" | "differenceB" | "onDifferenceChange">) {
+function SourcePairSelects({ sources, differenceA, differenceB, onDifferenceChange }: SourcePairSelectsProps) {
 	const pair = useMemo(() => sourcePairOf(sources, differenceA, differenceB), [sources, differenceA, differenceB]);
 	const options = useMemo(() => sources.map((source) => ({ value: source.id, label: source.name })), [sources]);
 	const optionsB = useMemo(() => [...options, { value: NO_SOURCE, label: "None" }], [options]);
@@ -114,18 +109,9 @@ function SourcePairSelects({
 	);
 }
 
-export function ViewTopBar({
-	activeView,
-	onActiveViewChange,
-	channelInput,
-	onChannelInputChange,
-	settings,
-	onSettingsChange,
-	sources,
-	differenceA,
-	differenceB,
-	onDifferenceChange,
-}: ViewTopBarProps) {
+export const ViewTopBar = scope<ViewTopBarProps>(({ context }: ViewTopBarProps) => {
+	const { document, navigation } = context.session;
+	const { activeView } = navigation;
 	const showPair = activeView === "slider" || activeView === "sum" || activeView === "difference";
 
 	return (
@@ -143,7 +129,7 @@ export function ViewTopBar({
 					onChange={(value) => {
 						const option = VIEW_OPTIONS.find((entry) => entry.value === value);
 
-						if (option) onActiveViewChange(option.value);
+						if (option) navigation.activeView = option.value;
 					}}
 				/>
 			</div>
@@ -155,12 +141,12 @@ export function ViewTopBar({
 					ariaLabel="Channels"
 					className="-ml-1 flex max-w-40"
 					menuClassName="min-w-40"
-					value={channelInput}
+					value={document.channelInput}
 					options={CHANNEL_OPTIONS}
 					onChange={(value) => {
 						const option = CHANNEL_OPTIONS.find((entry) => entry.value === value);
 
-						if (option) onChannelInputChange(option.value);
+						if (option) document.channelInput = option.value;
 					}}
 				/>
 			</div>
@@ -175,12 +161,12 @@ export function ViewTopBar({
 						ariaLabel="Loudness metric"
 						className="-mr-1 flex"
 						menuClassName="right-0 left-auto w-40"
-						value={settings.loudnessMetric}
+						value={document.renderSettings.loudnessMetric}
 						options={METRIC_OPTIONS}
 						onChange={(value) => {
 							const metric = METRICS.find((entry) => entry.id === value);
 
-							if (metric) onSettingsChange({ loudnessMetric: metric.id });
+							if (metric) document.renderSettings.loudnessMetric = metric.id;
 						}}
 					/>
 				</div>
@@ -194,24 +180,26 @@ export function ViewTopBar({
 						ariaLabel="Vectorscope scale"
 						className="-mr-1 flex"
 						menuClassName="right-0 left-auto w-40"
-						value={settings.vectorscopeScale}
+						value={document.renderSettings.vectorscopeScale}
 						options={SCALE_OPTIONS}
 						onChange={(value) => {
 							const option = SCALE_OPTIONS.find((entry) => entry.value === value);
 
-							if (option) onSettingsChange({ vectorscopeScale: option.value });
+							if (option) document.renderSettings.vectorscopeScale = option.value;
 						}}
 					/>
 				</div>
 			)}
 			{showPair && (
 				<SourcePairSelects
-					sources={sources}
-					differenceA={differenceA}
-					differenceB={differenceB}
-					onDifferenceChange={onDifferenceChange}
+					sources={document.sources}
+					differenceA={document.differenceA}
+					differenceB={document.differenceB}
+					onDifferenceChange={(differenceA, differenceB) =>
+						setDifference(differenceA, differenceB, undefined, context)
+					}
 				/>
 			)}
 		</div>
 	);
-}
+});

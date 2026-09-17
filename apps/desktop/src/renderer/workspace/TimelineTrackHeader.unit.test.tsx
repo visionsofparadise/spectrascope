@@ -73,7 +73,7 @@ describe("Timeline track header", () => {
 
 		iconButtonOf(render(source, { onSourceChange }), label).onClick();
 
-		expect(onSourceChange).toHaveBeenCalledWith({ ...source, ...change });
+		expect(onSourceChange).toHaveBeenCalledExactlyOnceWith(change);
 	});
 
 	it("removes the source and replaces its audio from the actions menu", () => {
@@ -122,7 +122,7 @@ describe("Timeline track header", () => {
 
 		(picker?.props.onChange as (next: typeof nextColor) => void)(nextColor);
 
-		expect(onSourceChange).toHaveBeenCalledWith({ ...source, layerColor: nextColor });
+		expect(onSourceChange).toHaveBeenCalledExactlyOnceWith({ layerColor: nextColor });
 		expect(runtime.setMenuOpen).toHaveBeenLastCalledWith(false);
 		expect(opened.some((element) => String(element.props.className ?? "").includes("top-full"))).toBe(false);
 	});

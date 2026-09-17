@@ -1,4 +1,5 @@
 import { Icon } from "@iconify/react";
+import { scope } from "opshot/react";
 import { useEffect, useState } from "react";
 import { Button } from "../Button";
 import { TerrainShader } from "../TerrainShader";
@@ -12,7 +13,7 @@ interface Props {
 
 const LABEL_REFRESH_MS = 60_000;
 
-export function HomeScreen({ context }: Props) {
+export const HomeScreen = scope<Props>(({ context }: Props) => {
 	const [now, setNow] = useState(() => Date.now());
 
 	useEffect(() => {
@@ -43,12 +44,10 @@ export function HomeScreen({ context }: Props) {
 									<div key={key} className="flex min-w-0 items-baseline gap-2">
 										<button
 											type="button"
-											disabled={context.busy}
+											disabled={context.sessionStatus.busy}
 											onClick={() => {
 												if (tabId !== null) {
-													context.appStore.mutate(context.app, (proxy) => {
-														proxy.activeTabId = tabId;
-													});
+													context.app.activeTabId = tabId;
 												} else if (filePath !== null) {
 													void context.openSession(filePath);
 												}
@@ -94,4 +93,4 @@ export function HomeScreen({ context }: Props) {
 			</div>
 		</div>
 	);
-}
+});

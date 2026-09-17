@@ -1,11 +1,12 @@
-import { useMemo, useRef, useState } from "react";
-import { snapshot, type Snapshot } from "valtio/vanilla";
+import { identify } from "opshot";
+import { useMemo, useRef } from "react";
+import { createSession, savedSessionOf } from "../models/State/Session";
 import { AUDIO_FILE_EXTENSIONS, createSavedSession, createTabId } from "../session/createSavedSession";
 import { addRecentSession, sessionPathKey } from "../session/utils/recentSessions";
 import { openSessionFile, saveSessionFile } from "../session/utils/sessionFiles";
 import { sessionFingerprint, isSessionDirty } from "../session/utils/sessionFingerprint";
+import type { SessionStatus } from "../models/Context";
 import type { Main } from "../models/Main";
-import type { ProxyStore } from "../models/ProxyStore/ProxyStore";
 import type { AppState, SavedSession } from "../models/State/App";
 
 export interface SessionActions {
@@ -15,71 +16,56 @@ export interface SessionActions {
 	closeSession: (tabId: string) => Promise<void>;
 	renameTab: (tabId: string, name: string) => void;
 	removeRecentSession: (filePath: string) => void;
-	busy: boolean;
-	error: string | null;
-	clearError: () => void;
 }
 
 const SESSION_FILTERS = [{ name: "Spectrascope session", extensions: ["spectra"] }];
 
-export function useSessionActions(app: Snapshot<AppState>, store: ProxyStore, main: Main): SessionActions {
-	const [busy, setBusy] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+export function useSessionActions(app: AppState, sessionStatus: SessionStatus, main: Main): SessionActions {
 	const operation = useRef(false);
 
 	return useMemo(() => {
-		const current = (): AppState => {
-			const proxy = store.dangerouslyGetProxy<AppState>(app._key);
-
-			if (!proxy) throw new Error("Workspace is unavailable");
-
-			return proxy;
-		};
 		const run = async <T>(action: () => Promise<T>, fallback: T): Promise<T> => {
 			if (operation.current) return fallback;
 
 			operation.current = true;
-			setBusy(true);
-			setError(null);
+			sessionStatus.busy = true;
+			sessionStatus.error = null;
 
 			try {
 				return await action();
 			} catch (cause) {
-				setError(cause instanceof Error ? cause.message : String(cause));
+				sessionStatus.error = cause instanceof Error ? cause.message : String(cause);
 
 				return fallback;
 			} finally {
 				operation.current = false;
-				setBusy(false);
+				sessionStatus.busy = false;
 			}
 		};
-		const openTab = (comparison: SavedSession): void => {
-			const state = current();
+		const sessionOf = (id: string | undefined) => app.sessions.find((entry) => entry.id === id);
+		const openTab = (saved: SavedSession): void => {
 			const id = createTabId();
 
-			state.comparisons.push(comparison);
-			state.tabs.push({ id, comparisonId: comparison.id });
-			state.activeTabId = id;
+			app.sessions.push(createSession(saved));
+			app.tabs.push({ id, sessionId: saved.id });
+			app.activeTabId = id;
 		};
 		const remember = (filePath: string, name: string): void => {
-			const state = current();
-
-			state.recentSessions = addRecentSession(state.recentSessions, filePath, name);
+			app.recentSessions = addRecentSession(app.recentSessions, filePath, name);
 		};
 		const save = async (id: string, saveAs = false): Promise<boolean> => {
-			let comparison = current().comparisons.find((entry) => entry.id === id);
+			let session = sessionOf(id);
 
-			if (!comparison) return false;
+			if (!session) return false;
 
 			const chosen =
-				saveAs || comparison.sessionFilePath === null
+				saveAs || session.file.path === null
 					? await main.showSaveDialog({
 							title: "Save Session",
-							defaultPath:
-								comparison.sessionFilePath ?? `${comparison.name.replace(/[<>:"/\\|?*]/g, "_")}.spectra`,
+							defaultPath: session.file.path ?? `${session.document.name.replace(/[<>:"/\\|?*]/g, "_")}.spectra`,
 							filters: SESSION_FILTERS,
 						})
-					: comparison.sessionFilePath;
+					: session.file.path;
 
 			if (!chosen) return false;
 
@@ -90,22 +76,22 @@ export function useSessionActions(app: Snapshot<AppState>, store: ProxyStore, ma
 				throw new Error("Use the .spectra extension when saving a session.");
 
 			if (
-				current().comparisons.some(
+				app.sessions.some(
 					(entry) =>
 						entry.id !== id &&
-						entry.sessionFilePath !== null &&
-						sessionPathKey(entry.sessionFilePath) === sessionPathKey(filePath),
+						entry.file.path !== null &&
+						sessionPathKey(entry.file.path) === sessionPathKey(filePath),
 				)
 			)
 				throw new Error("That session is open in another tab. Choose a different file.");
 
-			comparison = current().comparisons.find((entry) => entry.id === id);
+			session = sessionOf(id);
 
-			if (!comparison) return false;
+			if (!session) return false;
 
 			if (
-				current().comparisons.some((entry) =>
-					entry.sources.some(
+				app.sessions.some((entry) =>
+					entry.document.sources.some(
 						(source) => source.audioFilePath && sessionPathKey(source.audioFilePath) === sessionPathKey(filePath),
 					),
 				)
@@ -113,23 +99,20 @@ export function useSessionActions(app: Snapshot<AppState>, store: ProxyStore, ma
 				throw new Error("Choose a session file that does not overwrite source audio.");
 			}
 
-			const saved = snapshot(comparison);
+			const saved = savedSessionOf(session);
 
 			await saveSessionFile(main, saved, filePath);
-			comparison.sessionFilePath = filePath;
-			comparison.savedFingerprint = sessionFingerprint(saved);
+			session.file.path = filePath;
+			session.file.savedFingerprint = sessionFingerprint(saved);
 			remember(filePath, saved.name);
 
 			return true;
 		};
 
 		return {
-			busy,
-			error,
-			clearError: () => setError(null),
 			newSession: () =>
 				run(() => {
-					openTab(createSavedSession([], current().preferences, current().theme));
+					openTab(createSavedSession([], app.preferences, app.theme));
 
 					return Promise.resolve();
 				}, undefined),
@@ -147,53 +130,50 @@ export function useSessionActions(app: Snapshot<AppState>, store: ProxyStore, ma
 					if (!chosen) return;
 
 					if (AUDIO_FILE_EXTENSIONS.some((extension) => chosen.toLowerCase().endsWith(`.${extension}`))) {
-						openTab(createSavedSession([chosen], current().preferences, current().theme));
+						openTab(createSavedSession([chosen], app.preferences, app.theme));
 
 						return;
 					}
 
 					const filePath =
 						(await main.mapFilePaths({ baseFilePath: chosen, paths: [chosen], mode: "absolute" }))[0] ?? chosen;
-					const existing = current().comparisons.find(
-						(entry) =>
-							entry.sessionFilePath !== null &&
-							sessionPathKey(entry.sessionFilePath) === sessionPathKey(filePath),
+					const existing = app.sessions.find(
+						(entry) => entry.file.path !== null && sessionPathKey(entry.file.path) === sessionPathKey(filePath),
 					);
-					const tab = existing && current().tabs.find((entry) => entry.comparisonId === existing.id);
+					const tab = existing && app.tabs.find((entry) => entry.sessionId === existing.id);
 
 					if (tab) {
-						current().activeTabId = tab.id;
-						remember(filePath, existing.name);
+						app.activeTabId = tab.id;
+						remember(filePath, existing.document.name);
 
 						return;
 					}
 
-					const comparison = await openSessionFile(main, filePath);
+					const saved = await openSessionFile(main, filePath);
 
-					openTab(comparison);
-					remember(filePath, comparison.name);
+					openTab(saved);
+					remember(filePath, saved.name);
 				}, undefined),
 			saveSession: (saveAs) =>
 				run(async () => {
-					const state = current();
-					const id = state.tabs.find((entry) => entry.id === state.activeTabId)?.comparisonId;
+					const id = app.tabs.find((entry) => entry.id === app.activeTabId)?.sessionId;
 
 					return id ? save(id, saveAs) : false;
 				}, false),
 			closeSession: (tabId) =>
 				run(async () => {
-					const state = current();
-					const tab = state.tabs.find((entry) => entry.id === tabId);
+					const tab = app.tabs.find((entry) => entry.id === tabId);
 
 					if (!tab) return;
 
-					const comparison = state.comparisons.find((entry) => entry.id === tab.comparisonId);
+					const { sessionId } = tab;
+					const session = sessionOf(sessionId);
 
-					if (comparison && isSessionDirty(comparison)) {
+					if (session && isSessionDirty(savedSessionOf(session))) {
 						const response = await main.showMessageBox({
 							type: "question",
 							title: "Close Session",
-							message: `Save changes to ${comparison.name}?`,
+							message: `Save changes to ${session.document.name}?`,
 							buttons: ["Save", "Discard", "Cancel"],
 							defaultId: 0,
 							cancelId: 2,
@@ -201,33 +181,30 @@ export function useSessionActions(app: Snapshot<AppState>, store: ProxyStore, ma
 
 						if (response === 2) return;
 
-						if (response === 0 && (!(await save(comparison.id)) || isSessionDirty(comparison))) return;
+						if (response === 0 && (!(await save(session.id)) || isSessionDirty(savedSessionOf(session)))) return;
 
 						if (response !== 0 && response !== 1) return;
 					}
 
-					const index = state.tabs.findIndex((entry) => entry.id === tabId);
+					const index = app.tabs.findIndex((entry) => entry.id === tabId);
+					const sessionIndex = app.sessions.findIndex((entry) => entry.id === sessionId);
 
-					state.tabs.splice(index, 1);
-					state.comparisons = state.comparisons.filter((entry) => entry.id !== tab.comparisonId);
+					app.tabs.splice(index, 1);
 
-					if (state.activeTabId === tabId)
-						state.activeTabId = state.tabs[index]?.id ?? state.tabs[index - 1]?.id ?? null;
+					if (sessionIndex >= 0) app.sessions.splice(sessionIndex, 1);
+
+					if (app.activeTabId === tabId) app.activeTabId = app.tabs[index]?.id ?? app.tabs[index - 1]?.id ?? null;
 				}, undefined),
 			renameTab: (tabId, name) => {
-				const state = current();
-				const id = state.tabs.find((entry) => entry.id === tabId)?.comparisonId;
-				const comparison = state.comparisons.find((entry) => entry.id === id);
+				const session = sessionOf(app.tabs.find((entry) => entry.id === tabId)?.sessionId);
 
-				if (comparison && name.trim()) comparison.name = name.trim().slice(0, 200);
+				if (session && name.trim()) session.document.name = name.trim().slice(0, 200);
 			},
 			removeRecentSession: (filePath) => {
-				const state = current();
-
-				state.recentSessions = state.recentSessions.filter(
+				app.recentSessions = app.recentSessions.filter(
 					(entry) => sessionPathKey(entry.filePath) !== sessionPathKey(filePath),
 				);
 			},
 		};
-	}, [app._key, store, main, busy, error]);
+	}, [identify(app), identify(sessionStatus), main]);
 }

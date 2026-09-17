@@ -1,10 +1,9 @@
 import type { Main } from "../../models/Main";
 import type { SourceState } from "../../models/State/App";
-import type { Snapshot } from "valtio/vanilla";
 
 export async function relinkSource(
 	main: Pick<Main, "prepareSource" | "releasePreparedSource">,
-	source: Snapshot<SourceState>,
+	source: SourceState,
 	filePath: string,
 ): Promise<SourceState> {
 	const prepared = await main.prepareSource(filePath, null);

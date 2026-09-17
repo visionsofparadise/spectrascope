@@ -26,7 +26,7 @@ function fileNameOf(filePath: string): string {
 	return segment && segment.length > 0 ? segment : filePath;
 }
 
-export function toSourceState(source: Source): SourceState {
+function toSourceState(source: Source): SourceState {
 	return {
 		id: source.id,
 		name: source.name,

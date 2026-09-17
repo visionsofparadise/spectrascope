@@ -1,16 +1,10 @@
+import { identify } from "opshot";
 import { useEffect } from "react";
 import type { Main } from "../models/Main";
 import type { MainEvents } from "../models/MainEvents";
-import type { ProxyStore } from "../models/ProxyStore/ProxyStore";
 import type { AppState, WindowBounds } from "../models/State/App";
-import type { Snapshot } from "valtio/vanilla";
 
-export function useWindowState(
-	app: Snapshot<AppState>,
-	appStore: ProxyStore,
-	main: Main,
-	mainEvents: MainEvents,
-): void {
+export function useWindowState(app: AppState, main: Main, mainEvents: MainEvents): void {
 	useEffect(() => {
 		if (app.windowBounds) {
 			const { x, y, width, height } = app.windowBounds;
@@ -31,9 +25,7 @@ export function useWindowState(
 		}
 
 		const listener = (windowBounds: WindowBounds): void => {
-			appStore.mutate(app, (proxy) => {
-				proxy.windowBounds = windowBounds;
-			});
+			app.windowBounds = windowBounds;
 		};
 
 		mainEvents.on("windowBoundsChanged", listener);
@@ -41,5 +33,5 @@ export function useWindowState(
 		return () => {
 			mainEvents.off("windowBoundsChanged", listener);
 		};
-	}, [app._key, appStore, main, mainEvents]);
+	}, [identify(app), main, mainEvents]);
 }

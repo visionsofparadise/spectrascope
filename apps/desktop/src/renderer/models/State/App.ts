@@ -1,10 +1,8 @@
+import { useMutableState } from "opshot/react";
 import { z } from "zod";
 import { THEME_IDS } from "../../utils/themePalettes";
 import { ViewControlSettingsSchema } from "../../workspace/viewSettings";
-import { useCreateState } from "../ProxyStore/hooks/useCreateState";
-import type { State } from ".";
-import type { ProxyStore } from "../ProxyStore/ProxyStore";
-import type { Snapshot } from "valtio/vanilla";
+import { createSession, savedSessionOf, type Session } from "./Session";
 
 const TabEntrySchema = z.object({
 	id: z.string(),
@@ -106,9 +104,20 @@ const AppStateSchema = z.object({
 export type WindowBounds = z.infer<typeof WindowBoundsSchema>;
 export type SourceState = z.infer<typeof SourceSchema>;
 export type SavedSession = z.infer<typeof SavedSessionSchema>;
-export type AppState = z.infer<typeof AppStateSchema> & State;
 
-const SavedStateSchema = AppStateSchema.pick({
+type SavedAppState = z.infer<typeof AppStateSchema>;
+
+export interface AppState {
+	tabs: Array<{ id: string; sessionId: string }>;
+	activeTabId: string | null;
+	theme: SavedAppState["theme"];
+	windowBounds: WindowBounds | undefined;
+	preferences: Preferences;
+	recentSessions: SavedAppState["recentSessions"];
+	sessions: Array<Session>;
+}
+
+export const SavedStateSchema = AppStateSchema.pick({
 	tabs: true,
 	activeTabId: true,
 	theme: true,
@@ -121,7 +130,7 @@ const SavedStateSchema = AppStateSchema.pick({
 export async function loadAppState(main: {
 	getUserDataPath: () => Promise<string>;
 	readFile: (path: string) => Promise<string>;
-}): Promise<Omit<AppState, "_key">> {
+}): Promise<SavedAppState> {
 	const userDataPath = await main.getUserDataPath();
 	const path = `${userDataPath}/state.json`;
 
@@ -132,21 +141,21 @@ export async function loadAppState(main: {
 		const raw: unknown = JSON.parse(content);
 
 		if (typeof raw === "object" && raw !== null && "comparisons" in raw && Array.isArray(raw.comparisons)) {
-			for (const comparison of raw.comparisons as Array<unknown>) {
-				if (typeof comparison !== "object" || comparison === null) continue;
+			for (const session of raw.comparisons as Array<unknown>) {
+				if (typeof session !== "object" || session === null) continue;
 
-				if (!("name" in comparison)) {
+				if (!("name" in session)) {
 					const legacy = z
 						.object({ sources: z.array(z.object({ name: z.string() })).optional() })
-						.safeParse(comparison);
+						.safeParse(session);
 
-					(comparison as Record<string, unknown>).name = legacy.success
+					(session as Record<string, unknown>).name = legacy.success
 						? (legacy.data.sources?.[0]?.name ?? "New Session")
 						: "New Session";
 				}
 
-				if ("savedFingerprint" in comparison && typeof comparison.savedFingerprint === "string") {
-					(comparison as Record<string, unknown>).savedFingerprint = comparison.savedFingerprint.replace(
+				if ("savedFingerprint" in session && typeof session.savedFingerprint === "string") {
+					(session as Record<string, unknown>).savedFingerprint = session.savedFingerprint.replace(
 						/,"syncEnabled":(?:true|false)\}$/,
 						"}",
 					);
@@ -163,10 +172,10 @@ export async function loadAppState(main: {
 		saved = {};
 	}
 
-	const comparisons = saved.comparisons ?? [];
+	const sessions = saved.comparisons ?? [];
 
-	const comparisonIds = new Set(comparisons.map((comparison) => comparison.id));
-	const tabs = (saved.tabs ?? []).filter((tab) => comparisonIds.has(tab.comparisonId));
+	const sessionIds = new Set(sessions.map((session) => session.id));
+	const tabs = (saved.tabs ?? []).filter((tab) => sessionIds.has(tab.comparisonId));
 
 	const activeTabId = tabs.some((tab) => tab.id === saved.activeTabId)
 		? (saved.activeTabId ?? null)
@@ -177,12 +186,36 @@ export async function loadAppState(main: {
 		activeTabId,
 		theme: saved.theme ?? "lava",
 		windowBounds: saved.windowBounds,
-		comparisons,
+		comparisons: sessions,
 		preferences: saved.preferences ?? PreferencesSchema.parse({}),
 		recentSessions: saved.recentSessions ?? [],
 	};
 }
 
-export function useAppState(initial: Omit<AppState, "_key">, store: ProxyStore): Snapshot<AppState> {
-	return useCreateState<AppState>(initial, store);
+export function createAppState(saved: SavedAppState): AppState {
+	return {
+		tabs: saved.tabs.map((tab) => ({ id: tab.id, sessionId: tab.comparisonId })),
+		activeTabId: saved.activeTabId,
+		theme: saved.theme,
+		windowBounds: saved.windowBounds,
+		preferences: saved.preferences,
+		recentSessions: saved.recentSessions,
+		sessions: saved.comparisons.map((session) => createSession(session)),
+	};
+}
+
+export function savedStateOf(app: AppState): z.infer<typeof SavedStateSchema> {
+	return {
+		tabs: app.tabs.map((tab) => ({ id: tab.id, comparisonId: tab.sessionId })),
+		activeTabId: app.activeTabId,
+		theme: app.theme,
+		windowBounds: app.windowBounds,
+		comparisons: app.sessions.map((session) => savedSessionOf(session)),
+		preferences: app.preferences,
+		recentSessions: app.recentSessions,
+	};
+}
+
+export function useAppState(saved: SavedAppState): AppState {
+	return useMutableState(() => createAppState(saved));
 }

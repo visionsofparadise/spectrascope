@@ -25,6 +25,7 @@ import type { Source } from "../source";
 import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { TimelineDrag } from "./timelineExtent";
 import type { SourceStreamStatus } from "../../audio/useSourceStreams";
+import type { SourceState } from "../../models/State/App";
 import type { TimelineOffsetHandle } from "../TimelineTrackHeader";
 import type { SourceManagementProps } from "./viewProps";
 import type { AudioData } from "../spectral/types";
@@ -147,7 +148,7 @@ function TimelineTrack({
 	/** Emits the final (floored ≥ 0) offset — once per drag (pointer-up) and once
 	 *  per arrow-key nudge. */
 	readonly onCommit: (offsetMs: number) => void;
-	readonly onSourceChange?: (next: Source) => void;
+	readonly onSourceChange?: (changes: Partial<SourceState>) => void;
 	readonly onRetry?: () => void;
 	readonly onRelink?: () => void;
 	readonly onRemove?: () => void;
@@ -342,7 +343,8 @@ export function TimelineView({
 	sourceErrors,
 	onRetrySource,
 	onRelinkSource,
-	onSourcesChange,
+	onSourceChange,
+	onSourceRemove,
 	onAddSources,
 	onAddSourceFiles,
 }: TimelineViewProps) {
@@ -472,11 +474,6 @@ export function TimelineView({
 		};
 	}, []);
 
-	const replaceSource = useCallback(
-		(next: Source) => onSourcesChange?.(sources.map((source) => (source.id === next.id ? next : source))),
-		[onSourcesChange, sources],
-	);
-
 	return (
 		<ViewProgressProvider>
 			<div
@@ -575,14 +572,12 @@ export function TimelineView({
 												setDrag(null);
 												onSourceOffsetChange?.(source.id, offsetMs);
 											}}
-											onSourceChange={onSourcesChange ? replaceSource : undefined}
+											onSourceChange={
+												onSourceChange ? (changes) => onSourceChange(source.id, changes) : undefined
+											}
 											onRetry={onRetrySource ? () => onRetrySource(source.id) : undefined}
 											onRelink={onRelinkSource ? () => onRelinkSource(source.id) : undefined}
-											onRemove={
-												onSourcesChange
-													? () => onSourcesChange(sources.filter((entry) => entry.id !== source.id))
-													: undefined
-											}
+											onRemove={onSourceRemove ? () => onSourceRemove(source.id) : undefined}
 										/>
 									))}
 									<div

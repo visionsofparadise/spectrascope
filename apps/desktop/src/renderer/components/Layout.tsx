@@ -1,10 +1,13 @@
+import { batch, identify } from "opshot";
+import { useMutableState } from "opshot/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAutosave } from "../hooks/useAutosave";
 import { useSessionActions } from "../hooks/useSessionActions";
 import { useWindowState } from "../hooks/useWindowState";
+import { automaticMeta } from "../models/History";
 import { main } from "../models/Main";
 import { MainEvents } from "../models/MainEvents";
-import { useAppState, type AppState } from "../models/State/App";
+import { useAppState } from "../models/State/App";
 import { MeasurementSessionsProvider } from "../workspace/spectral/MeasurementSessionsProvider";
 import { AppBar } from "./AppBar";
 import { ExportDialog } from "./ExportDialog";
@@ -12,30 +15,26 @@ import { PreferencesDialog } from "./PreferencesDialog";
 import { TabContent } from "./Tab";
 import type { Logger } from "../../shared/models/Logger";
 import type { ExportControl, ExportKind, ExportRange } from "../export/ExportControl";
-import type { AppContext } from "../models/Context";
-import type { ProxyStore } from "../models/ProxyStore/ProxyStore";
-import type { HistoryControl } from "../state/useComparisonHistory";
+import type { AppContext, SessionStatus } from "../models/Context";
 import type { QueryClient } from "@tanstack/react-query";
 
 interface Props {
-	readonly initialState: Omit<AppState, "_key">;
-	readonly windowId: string;
+	readonly initialState: Parameters<typeof useAppState>[0];
 	readonly userDataPath: string;
-	readonly appStore: ProxyStore;
 	readonly queryClient: QueryClient;
 	readonly logger: Logger;
 }
 
-export function AppLayout({ initialState, windowId, userDataPath, appStore, queryClient, logger }: Props) {
-	const app = useAppState(initialState, appStore);
+export function AppLayout({ initialState, userDataPath, queryClient, logger }: Props) {
+	const app = useAppState(initialState);
+	const sessionStatus = useMutableState<SessionStatus>({ busy: false, error: null });
 
 	const mainEvents = useMemo(() => new MainEvents(main), []);
 
-	useWindowState(app, appStore, main, mainEvents);
-	useAutosave(app, appStore, main, userDataPath);
+	useWindowState(app, main, mainEvents);
+	useAutosave(app, main, userDataPath);
 
-	const sessions = useSessionActions(app, appStore, main);
-	const [historyControl, setHistoryControl] = useState<HistoryControl | null>(null);
+	const sessions = useSessionActions(app, sessionStatus, main);
 	const [exportControl, setExportControl] = useState<ExportControl | null>(null);
 	const [exportDialog, setExportDialog] = useState<ExportControl | null>(null);
 	const [preferencesOpen, setPreferencesOpen] = useState(false);
@@ -92,17 +91,35 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 			setExportBusy(false);
 		}
 	};
-	const context: AppContext = {
-		app,
-		appStore,
-		logger,
-		main,
-		mainEvents,
-		queryClient,
-		userDataPath,
-		windowId,
-		...sessions,
-	};
+	const context = useMemo(
+		(): AppContext => ({
+			app,
+			sessionStatus,
+			logger,
+			main,
+			mainEvents,
+			queryClient,
+			userDataPath,
+			...sessions,
+		}),
+		[identify(app), identify(sessionStatus), sessions, logger, mainEvents, queryClient, userDataPath],
+	);
+	const activeSessionId = app.tabs.find((tab) => tab.id === app.activeTabId)?.sessionId ?? null;
+	const activeSession = app.sessions.find((session) => session.id === activeSessionId);
+	const measuredSourcesKey = JSON.stringify(
+		app.sessions.map((session) => [
+			session.id,
+			session.document.sources.map((source) => [source.id, source.audioFilePath]),
+		]),
+	);
+	const measuredSessions = useMemo(
+		() =>
+			app.sessions.map((session) => ({
+				id: session.id,
+				sources: session.document.sources.map((source) => ({ id: source.id, audioFilePath: source.audioFilePath })),
+			})),
+		[measuredSourcesKey],
+	);
 
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent): void => {
@@ -130,7 +147,6 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 
 	useEffect(() => {
 		if (app.activeTabId === null) {
-			setHistoryControl(null);
 			setExportControl(null);
 		}
 	}, [app.activeTabId]);
@@ -147,19 +163,24 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 		<div className="flex flex-col h-screen">
 			<AppBar
 				context={context}
-				historyControl={historyControl}
+				history={activeSession?.history ?? null}
 				canExport={exportControl !== null && !exportBusy}
 				exportBusy={exportBusy}
 				onExport={() => setExportDialog(exportControl)}
 				onPreferences={() => setPreferencesOpen(true)}
 			/>
-			{sessions.error && (
+			{context.sessionStatus.error && (
 				<div
 					role="alert"
 					className="flex shrink-0 items-center justify-between gap-3 bg-chrome-raised px-4 py-2 text-sm text-chrome-text"
 				>
-					<span>{sessions.error}</span>
-					<button type="button" onClick={sessions.clearError}>
+					<span>{context.sessionStatus.error}</span>
+					<button
+						type="button"
+						onClick={() => {
+							context.sessionStatus.error = null;
+						}}
+					>
 						Dismiss
 					</button>
 				</div>
@@ -175,15 +196,8 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 					</button>
 				</div>
 			)}
-			<MeasurementSessionsProvider
-				comparisons={app.comparisons}
-				activeSessionId={app.tabs.find((tab) => tab.id === app.activeTabId)?.comparisonId ?? null}
-			>
-				<TabContent
-					context={context}
-					onHistoryControlChange={setHistoryControl}
-					onExportControlChange={setExportControl}
-				/>
+			<MeasurementSessionsProvider sessions={measuredSessions} activeSessionId={activeSessionId}>
+				<TabContent context={context} onExportControlChange={setExportControl} />
 			</MeasurementSessionsProvider>
 			{exportDialog && (
 				<ExportDialog
@@ -196,18 +210,15 @@ export function AppLayout({ initialState, windowId, userDataPath, appStore, quer
 				<PreferencesDialog
 					preferences={app.preferences}
 					theme={app.theme}
-					onPreferencesChange={(preferences) =>
-						appStore.mutate(app, (proxy) => {
-							proxy.preferences = preferences;
-						})
-					}
-					onThemeChange={(theme) =>
-						appStore.mutate(app, (proxy) => {
-							proxy.theme = theme;
-
-							for (const comparison of proxy.comparisons) comparison.viewSettings.spectrogramColormap = theme;
-						})
-					}
+					onPreferencesChange={(preferences) => {
+						app.preferences = preferences;
+					}}
+					onThemeChange={(theme) => {
+						app.theme = theme;
+						batch(() => {
+							for (const session of app.sessions) session.document.renderSettings.spectrogramColormap = theme;
+						}, automaticMeta);
+					}}
 					onClose={() => setPreferencesOpen(false)}
 				/>
 			)}

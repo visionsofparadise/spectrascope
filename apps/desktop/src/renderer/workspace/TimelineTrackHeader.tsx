@@ -13,6 +13,7 @@ import {
 import { IconButton } from "../components/IconButton";
 import { LayerColorPicker } from "./LayerColorPicker";
 import type { Source } from "./source";
+import type { SourceState } from "../models/State/App";
 
 export interface TimelineOffsetHandle {
 	readonly valueMaxMs: number;
@@ -25,7 +26,7 @@ interface TimelineTrackHeaderProps {
 	readonly top: string;
 	readonly offsetMs: number;
 	readonly offsetHandle?: TimelineOffsetHandle;
-	readonly onSourceChange?: (next: Source) => void;
+	readonly onSourceChange?: (changes: Partial<SourceState>) => void;
 	readonly onRelink?: () => void;
 	readonly onRemove?: () => void;
 }
@@ -74,7 +75,7 @@ export function TimelineTrackHeader({
 				active={source.visible}
 				activeVariant="secondary"
 				aria-pressed={source.visible}
-				onClick={() => onSourceChange?.({ ...source, visible: !source.visible })}
+				onClick={() => onSourceChange?.({ visible: !source.visible })}
 			/>
 			<IconButton
 				icon={source.muted ? "lucide:volume-x" : "lucide:volume-2"}
@@ -83,7 +84,7 @@ export function TimelineTrackHeader({
 				active={!source.muted}
 				activeVariant="secondary"
 				aria-pressed={!source.muted}
-				onClick={() => onSourceChange?.({ ...source, muted: !source.muted })}
+				onClick={() => onSourceChange?.({ muted: !source.muted })}
 			/>
 			<IconButton
 				icon="lucide:headphones"
@@ -92,7 +93,7 @@ export function TimelineTrackHeader({
 				active={source.soloed}
 				activeVariant="secondary"
 				aria-pressed={source.soloed}
-				onClick={() => onSourceChange?.({ ...source, soloed: !source.soloed })}
+				onClick={() => onSourceChange?.({ soloed: !source.soloed })}
 			/>
 			<DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
 				<DropdownMenuTrigger asChild>
@@ -113,7 +114,7 @@ export function TimelineTrackHeader({
 							<LayerColorPicker
 								value={source.layerColor}
 								onChange={(layerColor) => {
-									onSourceChange?.({ ...source, layerColor });
+									onSourceChange?.({ layerColor });
 									setMenuOpen(false);
 								}}
 							/>

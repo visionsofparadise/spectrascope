@@ -1,5 +1,10 @@
+import { flush } from "opshot";
 import { expect, it, vi } from "vitest";
+import { createSession } from "../models/State/Session";
+import { createSavedSession } from "../session/createSavedSession";
 import { Transport } from "./Transport";
+import type { SessionContext } from "../models/Context";
+import type { Session } from "../models/State/Session";
 import type { ComponentProps, ReactElement } from "react";
 
 vi.mock("react", async (importOriginal) => ({
@@ -7,7 +12,9 @@ vi.mock("react", async (importOriginal) => ({
 	useId: () => "popover-id",
 	useRef: (value: unknown) => ({ current: value }),
 	useCallback: (callback: unknown) => callback,
+	useState: (initial: unknown) => [typeof initial === "function" ? (initial as () => unknown)() : initial, vi.fn()],
 }));
+vi.mock("opshot/react", () => ({ scope: (component: unknown) => component }));
 vi.mock("@iconify/react", () => ({ Icon: "mock-icon" }));
 vi.mock("../components/IconButton", () => ({ IconButton: () => null }));
 vi.mock("../components/Select", () => ({ Select: "mock-select" }));
@@ -19,7 +26,13 @@ function elements(node: unknown): Array<ReactElement<Record<string, unknown>>> {
 		return elements((element.type as (props: unknown) => unknown)(element.props));
 	return [element, ...elements(element.props?.children)];
 }
-function render(playing: boolean, toggle: ReturnType<typeof vi.fn>, disabled = false, onPlaybackRateChange = vi.fn()) {
+function render(
+	playing: boolean,
+	toggle: ReturnType<typeof vi.fn>,
+	disabled = false,
+	session: Session = createSession(createSavedSession([])),
+	onMonitorVolumeChange = vi.fn(),
+) {
 	return elements(
 		Transport({
 			control: {
@@ -34,14 +47,10 @@ function render(playing: boolean, toggle: ReturnType<typeof vi.fn>, disabled = f
 					{ label: "Freq", cursor: "1.0 kHz", in: "—", out: "—" },
 				],
 			},
-			playbackRate: 1,
-			onPlaybackRateChange,
-			looping: false,
-			onLoopingChange: vi.fn(),
 			sampleRate: 48000,
-			volume: 0.8,
-			onVolumeChange: vi.fn(),
+			onMonitorVolumeChange,
 			viewControls: <span>Display controls</span>,
+			context: { session } as unknown as SessionContext,
 		}),
 	);
 }
@@ -100,8 +109,8 @@ it("keeps compact controls reachable through named native nonmodal popovers", ()
 	}
 });
 it("chooses playback speed through an upward chip selector", () => {
-	const onPlaybackRateChange = vi.fn();
-	const speed = render(false, vi.fn(), false, onPlaybackRateChange).find(
+	const session = createSession(createSavedSession([]));
+	const speed = render(false, vi.fn(), false, session).find(
 		(element) => element.type === "mock-select" && element.props.ariaLabel === "Playback speed",
 	)!;
 	expect(speed.props).toMatchObject({ variant: "chip", size: "sm", direction: "up", value: "1" });
@@ -117,9 +126,51 @@ it("chooses playback speed through an upward chip selector", () => {
 	]);
 	expect(speed.props.disabled).toBe(false);
 	(speed.props.onChange as (value: string) => void)("1.5");
-	expect(onPlaybackRateChange).toHaveBeenCalledExactlyOnceWith(1.5);
+	expect(session.transport.playbackRate).toBe(1.5);
 	const disabledSpeed = render(false, vi.fn(), true).find(
 		(element) => element.type === "mock-select" && element.props.ariaLabel === "Playback speed",
 	)!;
 	expect(disabledSpeed.props.disabled).toBe(true);
+});
+it("records one volume entry per slider gesture, ended on pointer-up and on lost pointer capture", () => {
+	const session = createSession(createSavedSession([]));
+	const onMonitorVolumeChange = vi.fn();
+	const slider = render(false, vi.fn(), false, session, onMonitorVolumeChange).find(
+		(element) => element.props.role === "slider",
+	)!;
+	const press = (key: string) => {
+		(slider.props.onKeyDown as (event: unknown) => void)({ key, preventDefault: vi.fn() });
+		flush(session.document);
+	};
+
+	press("Home");
+	press("End");
+	expect(session.history.length).toBe(1);
+	(slider.props.onPointerUp as () => void)();
+	press("Home");
+	press("End");
+	expect(session.history.length).toBe(2);
+	(slider.props.onLostPointerCapture as () => void)();
+	press("Home");
+	expect(session.history.length).toBe(3);
+	expect(session.document.volume).toBe(0);
+	expect(onMonitorVolumeChange.mock.calls).toEqual([[0], [1], [0], [1], [0]]);
+});
+it("records one volume entry for a key gesture ended on key-up and a second for the next key gesture", () => {
+	const session = createSession(createSavedSession([]));
+	const slider = render(false, vi.fn(), false, session).find((element) => element.props.role === "slider")!;
+	const press = (key: string) => {
+		(slider.props.onKeyDown as (event: unknown) => void)({ key, preventDefault: vi.fn() });
+		flush(session.document);
+	};
+	const release = () => (slider.props.onKeyUp as () => void)();
+
+	press("Home");
+	press("End");
+	release();
+	expect(session.history.length).toBe(1);
+	press("Home");
+	release();
+	expect(session.history.length).toBe(2);
+	expect(session.document.volume).toBe(0);
 });

@@ -1,34 +1,38 @@
-import { proxy, snapshot } from "valtio/vanilla";
+import { createMutableState } from "opshot";
 import { expect, it, vi } from "vitest";
 import { mapFilePaths } from "../../main/utils/mapFilePaths";
 import { createSavedSession } from "../session/createSavedSession";
 import { isSessionDirty } from "../session/utils/sessionFingerprint";
 import { serializeSession } from "../session/utils/sessionDocument";
-import { ProxyStore } from "../models/ProxyStore/ProxyStore";
-import { INITIAL_PREFERENCES, type AppState } from "../models/State/App";
+import { createAppState, INITIAL_PREFERENCES } from "../models/State/App";
+import { savedSessionOf } from "../models/State/Session";
 import { useSessionActions } from "./useSessionActions";
+import type { SessionStatus } from "../models/Context";
 import type { Main } from "../models/Main";
+import type { Session } from "../models/State/Session";
 
 vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
 	useMemo: (factory: () => unknown) => factory(),
 	useRef: (value: unknown) => ({ current: value }),
-	useState: (value: unknown) => [value, vi.fn()],
 }));
 
+const isDirty = (session: Session) => isSessionDirty(savedSessionOf(session));
+
 function setup() {
-	const comparison = createSavedSession(["C:/audio/a.wav"]);
-	const app = proxy<AppState>({
-		_key: Symbol(),
-		tabs: [{ id: "tab", comparisonId: comparison.id }],
-		activeTabId: "tab",
-		theme: "lava",
-		comparisons: [comparison],
-		preferences: { ...INITIAL_PREFERENCES },
-		recentSessions: [],
-	});
-	const store = new ProxyStore();
-	store.dangerouslySetProxy(app._key, app);
+	const saved = createSavedSession(["C:/audio/a.wav"]);
+	const app = createMutableState(
+		createAppState({
+			tabs: [{ id: "tab", comparisonId: saved.id }],
+			activeTabId: "tab",
+			theme: "lava",
+			windowBounds: undefined,
+			comparisons: [saved],
+			preferences: { ...INITIAL_PREFERENCES },
+			recentSessions: [],
+		}),
+	);
+	const sessionStatus = createMutableState<SessionStatus>({ busy: false, error: null });
 	const main = {
 		mapFilePaths: vi
 			.fn()
@@ -36,10 +40,10 @@ function setup() {
 		showSaveDialog: vi.fn().mockResolvedValue("C:/sessions/test.spectra"),
 		showMessageBox: vi.fn().mockResolvedValue(0),
 		writeFile: vi.fn().mockResolvedValue(undefined),
-		readFile: vi.fn().mockResolvedValue(serializeSession(comparison, ["../audio/a.wav"])),
+		readFile: vi.fn().mockResolvedValue(serializeSession(saved, ["../audio/a.wav"])),
 		showOpenDialog: vi.fn().mockResolvedValue(undefined),
 	};
-	const actions = useSessionActions(snapshot(app), store, main as unknown as Main);
+	const actions = useSessionActions(app, sessionStatus, main as unknown as Main);
 	return { app, main, actions };
 }
 
@@ -54,15 +58,15 @@ it("saves a snapshot baseline and preserves edits arriving during the write", as
 	);
 	const saving = actions.saveSession();
 	await vi.waitFor(() => expect(main.writeFile).toHaveBeenCalled());
-	app.comparisons[0]!.name = "Changed while saving";
+	app.sessions[0]!.document.name = "Changed while saving";
 	finish();
 	expect(await saving).toBe(true);
-	expect(isSessionDirty(app.comparisons[0]!)).toBe(true);
+	expect(isDirty(app.sessions[0]!)).toBe(true);
 	expect(app.recentSessions).toHaveLength(1);
 	expect(JSON.parse(main.writeFile.mock.calls[0]![1] as string).comparison.name).toBe("a.wav");
 });
 
-it("cancel and failed save retain the dirty tab; Discard closes and removes its comparison", async () => {
+it("cancel and failed save retain the dirty tab; Discard closes and removes its session", async () => {
 	const { app, main, actions } = setup();
 	main.showSaveDialog.mockResolvedValueOnce(undefined);
 	await actions.closeSession("tab");
@@ -70,25 +74,25 @@ it("cancel and failed save retain the dirty tab; Discard closes and removes its 
 	main.writeFile.mockRejectedValueOnce(new Error("disk full"));
 	await actions.closeSession("tab");
 	expect(app.tabs).toHaveLength(1);
-	expect(app.comparisons[0]?.savedFingerprint).toBeNull();
+	expect(app.sessions[0]?.file.savedFingerprint).toBeNull();
 	main.showMessageBox.mockResolvedValueOnce(2);
 	await actions.closeSession("tab");
 	expect(app.tabs).toHaveLength(1);
 	main.showMessageBox.mockResolvedValueOnce(1);
 	await actions.closeSession("tab");
 	expect(app.tabs).toHaveLength(0);
-	expect(app.comparisons).toHaveLength(0);
+	expect(app.sessions).toHaveLength(0);
 });
 
 it("activates an already-open path without replacing its unsaved edits", async () => {
 	const { app, main, actions } = setup();
 	await actions.saveSession();
-	app.comparisons[0]!.name = "Unsaved name";
+	app.sessions[0]!.document.name = "Unsaved name";
 	app.activeTabId = null;
 	await actions.openSession("c:/sessions/test.spectra");
 	expect(app.activeTabId).toBe("tab");
-	expect(app.comparisons).toHaveLength(1);
-	expect(app.comparisons[0]?.name).toBe("Unsaved name");
+	expect(app.sessions).toHaveLength(1);
+	expect(app.sessions[0]?.document.name).toBe("Unsaved name");
 	expect(main.readFile).not.toHaveBeenCalled();
 });
 
@@ -123,11 +127,11 @@ it("keeps edits that arrive while a close-triggered save is writing", async () =
 	);
 	const closing = actions.closeSession("tab");
 	await vi.waitFor(() => expect(main.writeFile).toHaveBeenCalled());
-	app.comparisons[0]!.volume = 0.3;
+	app.sessions[0]!.document.volume = 0.3;
 	finish();
 	await closing;
 	expect(app.tabs).toHaveLength(1);
-	expect(isSessionDirty(app.comparisons[0]!)).toBe(true);
+	expect(isDirty(app.sessions[0]!)).toBe(true);
 });
 
 it("protects source audio against accidental session overwrite", async () => {
@@ -137,14 +141,14 @@ it("protects source audio against accidental session overwrite", async () => {
 	expect(main.writeFile).not.toHaveBeenCalled();
 });
 
-it("applies changed preferences only to newly created comparisons", async () => {
+it("applies changed preferences only to newly created sessions", async () => {
 	const { app, actions } = setup();
 	app.preferences.monitorVolume = 0.2;
 	app.preferences.fftSize = 8192;
 	app.preferences.sampleRate = 44100;
 	await actions.newSession();
-	expect(app.comparisons[0]?.volume).toBe(1);
-	expect(app.comparisons[1]?.volume).toBe(0.2);
-	expect(app.comparisons[1]?.viewSettings.fftSize).toBe(8192);
-	expect(app.comparisons[1]?.canonicalSampleRate).toBe(44100);
+	expect(app.sessions[0]?.document.volume).toBe(1);
+	expect(app.sessions[1]?.document.volume).toBe(0.2);
+	expect(app.sessions[1]?.document.renderSettings.fftSize).toBe(8192);
+	expect(app.sessions[1]?.document.canonicalSampleRate).toBe(44100);
 });

@@ -1,36 +1,31 @@
 import { markSessionSaved, parseSession, serializeSession } from "./sessionDocument";
 import type { Main } from "../../models/Main";
 import type { SavedSession } from "../../models/State/App";
-import type { Snapshot } from "valtio/vanilla";
 
 type SessionIO = Pick<Main, "readFile" | "writeFile" | "mapFilePaths">;
 
 export async function openSessionFile(main: SessionIO, filePath: string): Promise<SavedSession> {
-	const comparison = parseSession(await main.readFile(filePath));
+	const session = parseSession(await main.readFile(filePath));
 	const paths = await main.mapFilePaths({
 		baseFilePath: filePath,
-		paths: comparison.sources.map((source) => source.audioFilePath),
+		paths: session.sources.map((source) => source.audioFilePath),
 		mode: "absolute",
 	});
 
-	comparison.sources = comparison.sources.map((source, index) => ({
+	session.sources = session.sources.map((source, index) => ({
 		...source,
 		audioFilePath: paths[index] ?? source.audioFilePath,
 	}));
 
-	return markSessionSaved(comparison, filePath);
+	return markSessionSaved(session, filePath);
 }
 
-export async function saveSessionFile(
-	main: SessionIO,
-	comparison: Snapshot<SavedSession>,
-	filePath: string,
-): Promise<void> {
+export async function saveSessionFile(main: SessionIO, session: SavedSession, filePath: string): Promise<void> {
 	const paths = await main.mapFilePaths({
 		baseFilePath: filePath,
-		paths: comparison.sources.map((source) => source.audioFilePath),
+		paths: session.sources.map((source) => source.audioFilePath),
 		mode: "relative",
 	});
 
-	await main.writeFile(filePath, serializeSession(comparison, paths));
+	await main.writeFile(filePath, serializeSession(session, paths));
 }

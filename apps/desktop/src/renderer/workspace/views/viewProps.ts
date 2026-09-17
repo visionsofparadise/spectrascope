@@ -1,4 +1,5 @@
 import type { SourceStreamStatus } from "../../audio/useSourceStreams";
+import type { SourceState } from "../../models/State/App";
 import type { Source } from "../source";
 import type { AudioData } from "../spectral/types";
 import type { TransportControl } from "../Transport";
@@ -29,7 +30,8 @@ export interface SourceManagementProps {
 	readonly sourceErrors?: ReadonlyMap<string, string>;
 	readonly onRetrySource?: (sourceId: string) => void;
 	readonly onRelinkSource?: (sourceId: string) => void;
-	readonly onSourcesChange?: (next: ReadonlyArray<Source>) => void;
+	readonly onSourceChange?: (sourceId: string, changes: Partial<SourceState>) => void;
+	readonly onSourceRemove?: (sourceId: string) => void;
 	readonly onAddSources?: () => void;
 	readonly onAddSourceFiles?: (filePaths: ReadonlyArray<string>) => void;
 }

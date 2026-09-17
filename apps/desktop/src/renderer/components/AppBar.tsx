@@ -1,4 +1,5 @@
 import { Icon } from "@iconify/react";
+import { scope } from "opshot/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	DropdownMenu,
@@ -10,22 +11,22 @@ import {
 import { IconButton } from "./IconButton";
 import { LoadingToast } from "./LoadingToast";
 import type { AppContext } from "../models/Context";
-import type { HistoryControl } from "../state/useComparisonHistory";
+import type { History } from "../models/History";
 
 interface Props {
-	readonly context: AppContext;
-	readonly historyControl: HistoryControl | null;
+	readonly history: History | null;
 	readonly canExport: boolean;
 	readonly exportBusy: boolean;
 	readonly onExport: () => void;
 	readonly onPreferences: () => void;
+	readonly context: AppContext;
 }
 
 const DRAG = { WebkitAppRegion: "drag" } as React.CSSProperties;
 const NO_DRAG = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
 
-export function AppBar({ context, historyControl, canExport, exportBusy, onExport, onPreferences }: Props) {
-	const { app, appStore } = context;
+export const AppBar = scope<Props>(({ history, canExport, exportBusy, onExport, onPreferences, context }: Props) => {
+	const { app, sessionStatus } = context;
 
 	const [editingTabId, setEditingTabId] = useState<string | null>(null);
 	const [editingName, setEditingName] = useState("");
@@ -35,20 +36,18 @@ export function AppBar({ context, historyControl, canExport, exportBusy, onExpor
 
 	const tabs = app.tabs.map((tab) => ({
 		id: tab.id,
-		label: app.comparisons.find((entry) => entry.id === tab.comparisonId)?.name ?? "Session",
+		label: app.sessions.find((entry) => entry.id === tab.sessionId)?.document.name ?? "Session",
 	}));
 
 	const selectTab = (id: string): void => {
-		appStore.mutate(app, (proxy) => {
-			proxy.activeTabId = id;
-		});
+		app.activeTabId = id;
 	};
 
 	const closeTab = useCallback(
 		(id: string): void => {
 			void context.closeSession(id);
 		},
-		[context],
+		[context.closeSession],
 	);
 
 	const closeActiveTab = useCallback((): void => {
@@ -69,7 +68,7 @@ export function AppBar({ context, historyControl, canExport, exportBusy, onExpor
 
 		setEditingTabId(null);
 		setEditingName("");
-	}, [editingTabId, editingName, context]);
+	}, [editingTabId, editingName, context.renameTab]);
 
 	const cancelEditing = useCallback(() => {
 		setEditingTabId(null);
@@ -95,13 +94,13 @@ export function AppBar({ context, historyControl, canExport, exportBusy, onExpor
 						<DropdownMenuItem onSelect={() => void context.openSession()}>Open Session…</DropdownMenuItem>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem
-							disabled={!hasActiveTab || context.busy}
+							disabled={!hasActiveTab || sessionStatus.busy}
 							onSelect={() => void context.saveSession()}
 						>
 							Save Session
 						</DropdownMenuItem>
 						<DropdownMenuItem
-							disabled={!hasActiveTab || context.busy}
+							disabled={!hasActiveTab || sessionStatus.busy}
 							onSelect={() => void context.saveSession(true)}
 						>
 							Save Session As…
@@ -205,11 +204,9 @@ export function AppBar({ context, historyControl, canExport, exportBusy, onExpor
 						size={20}
 						active={app.activeTabId === null}
 						activeVariant="primary"
-						onClick={() =>
-							appStore.mutate(app, (proxy) => {
-								proxy.activeTabId = null;
-							})
-						}
+						onClick={() => {
+							app.activeTabId = null;
+						}}
 					/>
 				</div>
 			</div>
@@ -224,19 +221,19 @@ export function AppBar({ context, historyControl, canExport, exportBusy, onExpor
 						label="Undo"
 						size={16}
 						variant="ghost"
-						disabled={!historyControl?.canUndo}
-						onClick={() => historyControl?.undo()}
+						disabled={!history?.canUndo}
+						onClick={() => history?.undo()}
 					/>
 					<IconButton
 						icon="lucide:redo-2"
 						label="Redo"
 						size={16}
 						variant="ghost"
-						disabled={!historyControl?.canRedo}
-						onClick={() => historyControl?.redo()}
+						disabled={!history?.canRedo}
+						onClick={() => history?.redo()}
 					/>
 				</div>
 			)}
 		</div>
 	);
-}
+});
