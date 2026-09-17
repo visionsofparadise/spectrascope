@@ -1,5 +1,5 @@
 import { Icon } from "@iconify/react";
-import { batch, identify } from "opshot";
+import { batch } from "opshot";
 import { scope } from "opshot/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/Button";
@@ -397,11 +397,11 @@ export const TimelineView = scope<TimelineViewProps>(
 
 		usePublishedTransportControl(readouts.control, onTransportControlChange);
 
-		const addSourcesFromDialog = useCallback(async () => {
+		const addSourcesFromDialog = async (): Promise<void> => {
 			const filePaths = await pickAudioFiles();
 
 			if (filePaths) appendSources(filePaths, context);
-		}, [identify(document)]);
+		};
 
 		const trackCount = sources.length;
 		const defaultRange = useMemo(() => defaultTrackRangeOf(trackCount), [trackCount]);

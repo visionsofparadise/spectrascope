@@ -80,11 +80,6 @@ export const SessionTab = scope<Props>(({ session, onExportControlChange, contex
 
 	const activeView = navigation.activeView;
 
-	const onDefaultDifference = useCallback(
-		(differenceA: string, differenceB: string) => setDifference(differenceA, differenceB, automaticMeta, context),
-		[identify(document)],
-	);
-
 	const { sourceAudio, prepared, status, errors: sourceErrors, retrySource } = useSourceStreams(sources);
 
 	const {
@@ -182,6 +177,10 @@ export const SessionTab = scope<Props>(({ session, onExportControlChange, contex
 			sessionDurationMs,
 		],
 	);
+
+	function onDefaultDifference(differenceA: string, differenceB: string): void {
+		setDifference(differenceA, differenceB, automaticMeta, context);
+	}
 
 	const control = useMemo<TransportControl>(
 		() => ({

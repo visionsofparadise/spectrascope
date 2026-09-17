@@ -1,4 +1,4 @@
-import { createMutableState } from "opshot";
+import { createMutableState, flush } from "opshot";
 import { createElement, isValidElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
@@ -161,6 +161,7 @@ it("keeps the session context and its callbacks across renders that receive a fr
 
 		return {
 			context: propsOf("mock-view-top-bar").context,
+			control: propsOf("mock-transport").control,
 			workspace: propsOf("mock-workspace"),
 		};
 	};
@@ -171,7 +172,28 @@ it("keeps the session context and its callbacks across renders that receive a fr
 
 	expect(after.workspace.context).toBe(before.context);
 	expect(after.workspace.onRelinkSource).toBe(before.workspace.onRelinkSource);
-	expect(hooks.onDefaultDifference[1]).toBe(hooks.onDefaultDifference[0]);
+	expect(after.control).toBe(before.control);
+});
+
+it("writes the default difference pair through the context of the render that supplied the callback", () => {
+	const saved = createSavedSession(["C:/audio/a.wav", "C:/audio/b.wav"]);
+	const app = appOf(saved);
+	const session = app.sessions[0]!;
+
+	hooks.cursor.index = 0;
+	hooks.slots.length = 0;
+	hooks.onDefaultDifference.length = 0;
+	SessionTab({ session, onExportControlChange: vi.fn(), context: appContextOf(app) });
+
+	const [first, second] = session.document.sources;
+	const onDefaultDifference = hooks.onDefaultDifference[0] as (a: string, b: string) => void;
+
+	onDefaultDifference(first!.id, second!.id);
+	flush(session.document);
+
+	expect(session.document.differenceA).toBe(first!.id);
+	expect(session.document.differenceB).toBe(second!.id);
+	expect(session.history.length).toBe(0);
 });
 
 it("bounds a Shift+Arrow extend by the session when the playing stream is shorter", () => {
