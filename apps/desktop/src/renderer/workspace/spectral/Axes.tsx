@@ -7,6 +7,7 @@ import { SelectionSurface } from "./SelectionSurface";
 import { FREQUENCY_TICK_LABELS, majorTickIntervalMs } from "./timeTicks";
 import { useContainerSize } from "./useContainerSize";
 import { visibleValueTicksOf } from "./valueTicks";
+import type { SessionContext } from "../../models/Context";
 import type { AxisRange } from "../utils/axisRange";
 import type { FrequencyScale } from "spectral-display";
 import type { TextureVerticalRange } from "spectral-display";
@@ -122,6 +123,7 @@ export function DbAxis({ verticalRange }: { readonly verticalRange?: TextureVert
 interface TimeRulerProps {
 	readonly startMs: number;
 	readonly endMs: number;
+	readonly context: SessionContext;
 }
 
 function formatRulerTime(ms: number, majorMs: number): string {
@@ -130,7 +132,7 @@ function formatRulerTime(ms: number, majorMs: number): string {
 	return formatInspectionTime(ms, precision);
 }
 
-export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
+export function TimeRuler({ startMs, endMs, context }: TimeRulerProps) {
 	const spanMs = endMs - startMs;
 
 	const majorMs = majorTickIntervalMs(spanMs);
@@ -153,6 +155,7 @@ export function TimeRuler({ startMs, endMs }: TimeRulerProps) {
 			aria-label="Timeline ruler: click to seek, Shift-drag to select"
 			className="relative h-8 cursor-crosshair bg-void font-technical text-chrome-text-secondary"
 			style={AXIS_TEXT_STYLE}
+			context={context}
 		>
 			{majorTicks.map(({ timeMs, label }) => {
 				const fraction = (timeMs - startMs) / spanMs;

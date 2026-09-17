@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createSession } from "../../models/State/Session";
+import { createSavedSession } from "../../session/createSavedSession";
 import { useWaveformReadouts, waveformAmplitudeLabel } from "./useWaveformReadouts";
+import type { SessionContext } from "../../models/Context";
 import type { DisplayedWaveform } from "./useWaveformReadouts";
 import type { ComputeResultReady } from "spectral-display";
 
@@ -19,14 +22,15 @@ vi.mock("react", async (importOriginal) => ({
 		];
 	},
 }));
-vi.mock("../playback", () => ({ useWorkspacePlayback: () => ({ selection: { start: 2010, end: 2012 } }) }));
+const session = createSession({ ...createSavedSession([]), selection: { start: 2010, end: 2012 } });
+const context = { session } as unknown as SessionContext;
 beforeEach(() => {
 	runtime.index = 0;
 	runtime.states = [];
 });
 function readouts() {
 	runtime.index = 0;
-	return useWaveformReadouts();
+	return useWaveformReadouts(context);
 }
 
 const result = {

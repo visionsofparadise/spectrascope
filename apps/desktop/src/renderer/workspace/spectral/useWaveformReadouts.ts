@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { readWaveformAmplitude } from "spectral-display";
-import { useWorkspacePlayback } from "../playback";
 import { EMPTY_READOUT, timeReadoutRowOf } from "./readoutRows";
+import type { SessionContext } from "../../models/Context";
 import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { ComputeResultReady } from "spectral-display";
 
@@ -51,8 +51,9 @@ export function waveformAmplitudeLabel(
 	return amplitude.peak === 0 ? "−∞" : (20 * Math.log10(amplitude.peak)).toFixed(1);
 }
 
-export function useWaveformReadouts() {
-	const { selection } = useWorkspacePlayback();
+export function useWaveformReadouts(context: SessionContext) {
+	const { document } = context.session;
+	const selection = document.selection;
 	const [displayed, setDisplayed] = useState<ReadonlyMap<string, DisplayedWaveform>>(() => new Map());
 	const [cursor, setCursor] = useState<SourceRenderCursorReadout | null>(null);
 	const onDisplayedResultChange = useCallback((sourceId: string, value: DisplayedWaveform | null) => {

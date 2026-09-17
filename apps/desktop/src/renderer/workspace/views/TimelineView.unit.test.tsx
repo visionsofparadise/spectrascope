@@ -1,8 +1,10 @@
+import { createMutableState, flush } from "opshot";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createSession } from "../../models/State/Session";
+import { createSavedSession } from "../../session/createSavedSession";
 import { createDefaultSource } from "../source";
-import { INITIAL_VIEW_CONTROL_SETTINGS } from "../viewSettings";
 import {
 	defaultTrackRangeOf,
 	droppedAudioFilePathsOf,
@@ -15,7 +17,11 @@ import {
 	visibleTracksOf,
 } from "./TimelineView";
 import { EMPTY_AUDIO_DATA } from "./viewAudio";
-import type { SpectralOptions } from "spectral-display";
+import type { SessionContext } from "../../models/Context";
+import type { PlaybackState } from "../../models/State/Playback";
+import type { Source } from "../source";
+import type { TimelineOffsetHandle } from "../TimelineTrackHeader";
+import type { ChannelInput, SpectralOptions } from "spectral-display";
 
 const compute = vi.hoisted(() =>
 	vi.fn<(options: SpectralOptions) => { status: "idle"; fraction: number; tiles: [] }>(() => ({
@@ -52,6 +58,9 @@ vi.mock("../../models/Main", () => ({ main: { pathForFile: () => "" } }));
 
 const hookState = vi.hoisted(() => ({ held: false, index: 0, values: [] as Array<unknown> }));
 const cursorSurfaces = vi.hoisted(() => new Array<{ onCursorChange: (ms: number) => void }>());
+const trackHeaders = vi.hoisted(() => new Array<{ offsetHandle?: TimelineOffsetHandle }>());
+
+vi.mock("opshot/react", () => ({ scope: (component: unknown) => component }));
 
 vi.mock("react", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("react")>();
@@ -91,17 +100,28 @@ vi.mock("../spectral/CursorSurface", async (importOriginal) => {
 	};
 });
 
-vi.mock("../playback", () => ({
-	useWorkspacePlayback: () => ({
-		positionSec: 0,
-		durationSec: 3600,
-		playing: false,
-		onPlayToggle: () => {},
-		onSeek: () => {},
-		selection: null,
-		onSelectionChange: () => {},
-	}),
-}));
+vi.mock("../TimelineTrackHeader", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../TimelineTrackHeader")>();
+
+	return {
+		...actual,
+		TimelineTrackHeader: (props: Parameters<typeof actual.TimelineTrackHeader>[0]) => {
+			trackHeaders.push(props);
+
+			return actual.TimelineTrackHeader(props);
+		},
+	};
+});
+
+function contextOf(sources: ReadonlyArray<Source>, channelInput: ChannelInput = "mono"): SessionContext {
+	const session = createSession({ ...createSavedSession([]), sources: [...sources], channelInput });
+
+	return {
+		session,
+		playback: createMutableState<PlaybackState>({ positionSec: 0, durationSec: 3600, playing: false, error: null }),
+		playbackControls: { onPlayToggle: () => {}, onSeek: () => {}, onVolumeChange: () => {} },
+	} as unknown as SessionContext;
+}
 
 describe("Timeline viewport rendering", () => {
 	beforeEach(() => {
@@ -114,13 +134,11 @@ describe("Timeline viewport rendering", () => {
 		const high = createDefaultSource(1, { id: "high" });
 		renderToStaticMarkup(
 			createElement(TimelineView, {
-				sources: [low, high],
 				sourceAudio: new Map([
 					["low", { ...EMPTY_AUDIO_DATA, sampleRate: 44100, durationMs: 3600000, totalSamples: 44100 * 3600 }],
 					["high", { ...EMPTY_AUDIO_DATA, sampleRate: 96000, durationMs: 3600000, totalSamples: 96000 * 3600 }],
 				]),
-				channelInput: "mono",
-				settings: INITIAL_VIEW_CONTROL_SETTINGS,
+				context: contextOf([low, high]),
 			}),
 		);
 		expect(viewportCalls).toHaveBeenCalledWith(0, 3600000, false, 1000 / 96000);
@@ -137,13 +155,11 @@ describe("Timeline viewport rendering", () => {
 		const hiddenSource = createDefaultSource(1, { id: "offscreen" });
 		const html = renderToStaticMarkup(
 			createElement(TimelineView, {
-				sources: [longSource, hiddenSource],
 				sourceAudio: new Map([
 					["long", { ...EMPTY_AUDIO_DATA, durationMs: 3600000, totalSamples: 172800000 }],
 					["offscreen", { ...EMPTY_AUDIO_DATA, durationMs: 1000, totalSamples: 48000 }],
 				]),
-				channelInput: "mono",
-				settings: INITIAL_VIEW_CONTROL_SETTINGS,
+				context: contextOf([longSource, hiddenSource]),
 			}),
 		);
 		const clipQueries = compute.mock.calls
@@ -159,10 +175,8 @@ describe("Timeline viewport rendering", () => {
 		const source = createDefaultSource(0, { id: "partial", timelineOffsetMs: 1800005 });
 		const html = renderToStaticMarkup(
 			createElement(TimelineView, {
-				sources: [source],
 				sourceAudio: new Map([["partial", { ...EMPTY_AUDIO_DATA, durationMs: 1000, totalSamples: 48000 }]]),
-				channelInput: "side",
-				settings: INITIAL_VIEW_CONTROL_SETTINGS,
+				context: contextOf([source], "side"),
 			}),
 		);
 		const clipQuery = compute.mock.calls.find(([options]) => options.config?.spectrogram !== false)?.[0];
@@ -181,12 +195,7 @@ describe("Timeline local cursor", () => {
 	it("draws the cursor its own surface sets across the tracks", () => {
 		const source = createDefaultSource(0, { id: "only" });
 		const audio = new Map([["only", { ...EMPTY_AUDIO_DATA, durationMs: 3600000, totalSamples: 172800000 }]]);
-		const props = {
-			sources: [source],
-			sourceAudio: audio,
-			channelInput: "mono" as const,
-			settings: INITIAL_VIEW_CONTROL_SETTINGS,
-		};
+		const props = { sourceAudio: audio, context: contextOf([source]) };
 		const render = () => {
 			hookState.index = 0;
 			cursorSurfaces.length = 0;
@@ -211,6 +220,45 @@ describe("Timeline local cursor", () => {
 	});
 });
 
+describe("Timeline offset nudge", () => {
+	afterEach(() => {
+		hookState.held = false;
+	});
+
+	it("records one history entry for a held arrow key and a second after key-up", () => {
+		const context = contextOf([createDefaultSource(0, { id: "only" })]);
+		const { document, history } = context.session;
+		const sourceAudio = new Map([["only", { ...EMPTY_AUDIO_DATA, durationMs: 1000, totalSamples: 48000 }]]);
+		const handle = () => {
+			hookState.index = 0;
+			trackHeaders.length = 0;
+			renderToStaticMarkup(createElement(TimelineView, { sourceAudio, context }));
+
+			return trackHeaders[0]!.offsetHandle!;
+		};
+		const nudge = () => {
+			handle().onKeyDown({
+				key: "ArrowRight",
+				shiftKey: false,
+				preventDefault: () => {},
+			} as unknown as React.KeyboardEvent<HTMLButtonElement>);
+			flush(document);
+		};
+
+		hookState.held = true;
+		hookState.values = [];
+		nudge();
+		nudge();
+		nudge();
+		expect(history.length).toBe(1);
+		expect(document.sources[0]?.timelineOffsetMs).toBe(300);
+		handle().onKeyUp();
+		nudge();
+		expect(history.length).toBe(2);
+		expect(document.sources[0]?.timelineOffsetMs).toBe(400);
+	});
+});
+
 describe("Timeline file drop", () => {
 	it("keeps dropped files with an audio extension", () => {
 		const paths = droppedAudioFilePathsOf(
@@ -228,10 +276,8 @@ describe("Timeline strip headers", () => {
 		const hidden = createDefaultSource(0, { id: "hidden", name: "Hidden take", visible: false });
 		const html = renderToStaticMarkup(
 			createElement(TimelineView, {
-				sources: [hidden],
 				sourceAudio: new Map([["hidden", { ...EMPTY_AUDIO_DATA, durationMs: 1000, totalSamples: 48000 }]]),
-				channelInput: "mono",
-				settings: INITIAL_VIEW_CONTROL_SETTINGS,
+				context: contextOf([hidden]),
 			}),
 		);
 
@@ -245,14 +291,12 @@ describe("Timeline strip headers", () => {
 		const broken = createDefaultSource(0, { id: "broken", audioFilePath: "/missing.wav" });
 		const html = renderToStaticMarkup(
 			createElement(TimelineView, {
-				sources: [broken],
 				sourceAudio: new Map(),
-				channelInput: "mono",
-				settings: INITIAL_VIEW_CONTROL_SETTINGS,
 				sourceStatus: new Map([["broken", "error" as const]]),
 				sourceErrors: new Map([["broken", "File not found"]]),
 				onRetrySource: () => {},
 				onRelinkSource: () => {},
+				context: contextOf([broken]),
 			}),
 		);
 
@@ -309,10 +353,8 @@ describe("Timeline track range", () => {
 	it("renders only the spacer column without visible tracks", () => {
 		const html = renderToStaticMarkup(
 			createElement(TimelineView, {
-				sources: [],
 				sourceAudio: new Map(),
-				channelInput: "mono",
-				settings: INITIAL_VIEW_CONTROL_SETTINGS,
+				context: contextOf([]),
 			}),
 		);
 
@@ -324,10 +366,8 @@ describe("Timeline track range", () => {
 		const source = createDefaultSource(0, { id: "only" });
 		const html = renderToStaticMarkup(
 			createElement(TimelineView, {
-				sources: [source],
 				sourceAudio: new Map([["only", { ...EMPTY_AUDIO_DATA, durationMs: 3600000, totalSamples: 172800000 }]]),
-				channelInput: "mono",
-				settings: INITIAL_VIEW_CONTROL_SETTINGS,
+				context: contextOf([source]),
 			}),
 		);
 

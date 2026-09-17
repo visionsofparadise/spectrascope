@@ -1,3 +1,4 @@
+import { scope } from "opshot/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChartSvg, HorizontalGridlines, TracePolylines } from "../spectral/chartMarks";
 import { ChartLayout, useChartView, type ChartAxis, type ChartCanvasBaseProps } from "../spectral/chartView";
@@ -14,7 +15,7 @@ import type { SourceViewProps } from "./viewProps";
 import type { ChartTraceProps } from "../spectral/chartTraceProps";
 import type { ChartReadoutTrace } from "../spectral/useChartReadouts";
 import type { AxisRange } from "../utils/axisRange";
-import type { LoudnessMetric, MetricSpec, ViewControlSettings } from "../viewSettings";
+import type { LoudnessMetric, MetricSpec } from "../viewSettings";
 import type { LoudnessData, SpectralOptions } from "spectral-display";
 
 const LOUDNESS_CONFIG: SpectralOptions["config"] = {
@@ -22,10 +23,6 @@ const LOUDNESS_CONFIG: SpectralOptions["config"] = {
 	loudness: true,
 	truePeak: true,
 };
-
-interface LoudnessViewProps extends SourceViewProps {
-	readonly settings: ViewControlSettings;
-}
 
 const DEFAULT_METRIC: MetricSpec = METRICS[0] ?? {
 	id: "momentary",
@@ -260,67 +257,73 @@ function ChartCanvas({ chart, renderableSources, metric, onLoudnessData }: Chart
 	);
 }
 
-export function LoudnessView({ sources, sourceAudio, settings, onTransportControlChange }: LoudnessViewProps) {
-	const { renderableSources, chromeAudio } = useTimelineChromeSources(sources, sourceAudio);
+export const LoudnessView = scope<SourceViewProps>(
+	({ sourceAudio, onTransportControlChange, context }: SourceViewProps) => {
+		const { document } = context.session;
+		const { sources, renderSettings } = document;
+		const loudnessMetric = renderSettings.loudnessMetric;
+		const { renderableSources, chromeAudio } = useTimelineChromeSources(sources, sourceAudio);
 
-	const metricSpec = useMemo(
-		() => METRICS.find((entry) => entry.id === settings.loudnessMetric) ?? DEFAULT_METRIC,
-		[settings.loudnessMetric],
-	);
+		const metricSpec = useMemo(
+			() => METRICS.find((entry) => entry.id === loudnessMetric) ?? DEFAULT_METRIC,
+			[loudnessMetric],
+		);
 
-	const axis = useMemo<ChartAxis>(
-		() => ({
-			max: DB_MAX,
-			min: metricSpec.axisMin,
-			formatValue: (value) => `${value.toFixed(1)} dB`,
-			rangeLabel: "Loudness range",
-			readoutLabel: metricSpec.label,
-			unit: "dB",
-			emptyValue: "— dB",
-			widestLabel: "-40",
-		}),
-		[metricSpec.axisMin, metricSpec.label],
-	);
+		const axis = useMemo<ChartAxis>(
+			() => ({
+				max: DB_MAX,
+				min: metricSpec.axisMin,
+				formatValue: (value) => `${value.toFixed(1)} dB`,
+				rangeLabel: "Loudness range",
+				readoutLabel: metricSpec.label,
+				unit: "dB",
+				emptyValue: "— dB",
+				widestLabel: "-40",
+			}),
+			[metricSpec.axisMin, metricSpec.label],
+		);
 
-	const chart = useChartView(chromeAudio, axis, onTransportControlChange);
+		const chart = useChartView(chromeAudio, axis, onTransportControlChange, context);
 
-	const [loudnessMap, setLoudnessMap] = useState<ReadonlyMap<string, LoudnessData>>(() => new Map());
+		const [loudnessMap, setLoudnessMap] = useState<ReadonlyMap<string, LoudnessData>>(() => new Map());
 
-	const handleLoudnessData = useCallback((sourceId: string, data: LoudnessData | null) => {
-		setLoudnessMap((previous) => {
-			const next = new Map(previous);
+		const handleLoudnessData = useCallback((sourceId: string, data: LoudnessData | null) => {
+			setLoudnessMap((previous) => {
+				const next = new Map(previous);
 
-			if (data === null) {
-				next.delete(sourceId);
-			} else {
-				next.set(sourceId, data);
-			}
+				if (data === null) {
+					next.delete(sourceId);
+				} else {
+					next.set(sourceId, data);
+				}
 
-			return next;
-		});
-	}, []);
+				return next;
+			});
+		}, []);
 
-	return (
-		<ChartLayout
-			chart={chart}
-			tickCount={DB_TICK_COUNT}
-			renderableSources={renderableSources}
-			leading={
-				<LoudnessStrips
-					renderableSources={renderableSources}
-					loudnessMap={loudnessMap}
-					metric={metricSpec}
-					range={chart.yRange}
-				/>
-			}
-			leadingSpacerClassName="w-[198px]"
-		>
-			<ChartCanvas
+		return (
+			<ChartLayout
 				chart={chart}
+				tickCount={DB_TICK_COUNT}
 				renderableSources={renderableSources}
-				metric={metricSpec}
-				onLoudnessData={handleLoudnessData}
-			/>
-		</ChartLayout>
-	);
-}
+				leading={
+					<LoudnessStrips
+						renderableSources={renderableSources}
+						loudnessMap={loudnessMap}
+						metric={metricSpec}
+						range={chart.yRange}
+					/>
+				}
+				leadingSpacerClassName="w-[198px]"
+				context={context}
+			>
+				<ChartCanvas
+					chart={chart}
+					renderableSources={renderableSources}
+					metric={metricSpec}
+					onLoudnessData={handleLoudnessData}
+				/>
+			</ChartLayout>
+		);
+	},
+);

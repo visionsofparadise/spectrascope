@@ -9,7 +9,8 @@ import { scrollTrackTextsOf, trackValueTextOf } from "./scrollTrackTexts";
 import { SelectionSurface } from "./SelectionSurface";
 import { useChartReadouts } from "./useChartReadouts";
 import { ViewProgressProvider, ViewProgressToast } from "./viewProgress";
-import { usePublishedTransportControl, useTransportPlayback, useViewportScrub } from "./viewScaffold";
+import { usePublishedTransportControl, useViewportScrub } from "./viewScaffold";
+import type { SessionContext } from "../../models/Context";
 import type { TransportControl } from "../Transport";
 import type { AudioData } from "./types";
 import type { AxisRange } from "../utils/axisRange";
@@ -33,16 +34,14 @@ type ChartView = ReturnType<typeof useChartView>;
 export function useChartView(
 	chromeAudio: AudioData,
 	axis: ChartAxis,
-	onTransportControlChange?: (control: TransportControl) => void,
-	controlExtras?: Partial<TransportControl>,
+	onTransportControlChange: ((control: TransportControl) => void) | undefined,
+	context: SessionContext,
 ) {
 	const scrub = useViewportScrub(chromeAudio);
 
 	const progress = useFirstComputeProgress();
 
-	const playback = useTransportPlayback(chromeAudio.durationMs / 1000);
-
-	const readouts = useChartReadouts(axis.readoutLabel);
+	const readouts = useChartReadouts(axis.readoutLabel, context);
 
 	const [yRange, setYRange] = useState<AxisRange>(FULL_AXIS_RANGE);
 
@@ -65,10 +64,7 @@ export function useChartView(
 		[startMs, endMs, yRange, readouts.setCursor],
 	);
 
-	const control = useMemo<TransportControl>(
-		() => ({ disabled: false, ...playback, ...readouts.control, ...controlExtras }),
-		[playback, readouts.control, controlExtras],
-	);
+	const control = useMemo<TransportControl>(() => ({ disabled: false, ...readouts.control }), [readouts.control]);
 
 	usePublishedTransportControl(control, onTransportControlChange);
 
@@ -96,6 +92,7 @@ interface ChartLayoutProps {
 	readonly children: React.ReactNode;
 	readonly leading?: React.ReactNode;
 	readonly leadingSpacerClassName?: string;
+	readonly context: SessionContext;
 }
 
 export function ChartLayout({
@@ -105,6 +102,7 @@ export function ChartLayout({
 	children,
 	leading,
 	leadingSpacerClassName,
+	context,
 }: ChartLayoutProps) {
 	const leadingSpacer = leadingSpacerClassName && <div className={`${leadingSpacerClassName} shrink-0`} />;
 
@@ -119,7 +117,7 @@ export function ChartLayout({
 						<AxisSpacer sample={axisSample} />
 						{leadingSpacer}
 						<div className="min-w-0 flex-1">
-							<TimeRuler startMs={chart.viewport.startMs} endMs={chart.viewport.endMs} />
+							<TimeRuler startMs={chart.viewport.startMs} endMs={chart.viewport.endMs} context={context} />
 						</div>
 						<div className="w-3 shrink-0" />
 					</div>
@@ -133,6 +131,7 @@ export function ChartLayout({
 							seekOnClick
 							className="relative min-w-0 flex-1"
 							onMouseMove={chart.handleChartMouseMove}
+							context={context}
 						>
 							{renderableSources.length === 0 ? (
 								<div className="flex h-full items-center justify-center bg-void">

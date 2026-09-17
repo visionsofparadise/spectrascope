@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { eventToTime } from "../views/viewCursor";
 import { SelectionSurface } from "./SelectionSurface";
+import type { SessionContext } from "../../models/Context";
 
 interface CursorSurfaceProps {
 	readonly startMs: number;
@@ -10,6 +11,7 @@ interface CursorSurfaceProps {
 	readonly surfaceRef?: React.RefObject<HTMLDivElement | null>;
 	readonly className?: string;
 	readonly children?: React.ReactNode;
+	readonly context: SessionContext;
 }
 
 const KEYBOARD_STEP_FRACTION = 0.01;
@@ -33,6 +35,7 @@ export function CursorSurface({
 	surfaceRef,
 	className,
 	children,
+	context,
 }: CursorSurfaceProps) {
 	const handleClick = useCallback(
 		(event: React.MouseEvent<HTMLDivElement>) => {
@@ -79,6 +82,7 @@ export function CursorSurface({
 			aria-label="Playback and inspection cursor"
 			onClick={handleClick}
 			onKeyDown={handleKeyDown}
+			context={context}
 		>
 			{children}
 		</SelectionSurface>

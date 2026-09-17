@@ -1,9 +1,10 @@
-import { flush } from "opshot";
+import { createMutableState, flush } from "opshot";
 import { expect, it, vi } from "vitest";
 import { createSession } from "../models/State/Session";
 import { createSavedSession } from "../session/createSavedSession";
 import { Transport } from "./Transport";
 import type { SessionContext } from "../models/Context";
+import type { PlaybackControls } from "../models/State/Playback";
 import type { Session } from "../models/State/Session";
 import type { ComponentProps, ReactElement } from "react";
 
@@ -31,26 +32,23 @@ function render(
 	toggle: ReturnType<typeof vi.fn>,
 	disabled = false,
 	session: Session = createSession(createSavedSession([])),
-	onMonitorVolumeChange = vi.fn(),
+	onVolumeChange = vi.fn(),
 ) {
+	const playback = createMutableState({ positionSec: 1, durationSec: 10, playing, error: null });
+	const playbackControls: PlaybackControls = { onPlayToggle: toggle, onSeek: vi.fn(), onVolumeChange };
+
 	return elements(
 		Transport({
 			control: {
-				playing,
 				disabled,
-				positionSec: 1,
-				durationSec: 10,
-				onPlayToggle: toggle,
-				onSeek: vi.fn(),
 				readoutRows: [
 					{ label: "Time", cursor: "00:01.000", in: "—", out: "—" },
 					{ label: "Freq", cursor: "1.0 kHz", in: "—", out: "—" },
 				],
 			},
 			sampleRate: 48000,
-			onMonitorVolumeChange,
 			viewControls: <span>Display controls</span>,
-			context: { session } as unknown as SessionContext,
+			context: { session, playback, playbackControls } as unknown as SessionContext,
 		}),
 	);
 }
@@ -134,8 +132,8 @@ it("chooses playback speed through an upward chip selector", () => {
 });
 it("records one volume entry per slider gesture, ended on pointer-up and on lost pointer capture", () => {
 	const session = createSession(createSavedSession([]));
-	const onMonitorVolumeChange = vi.fn();
-	const slider = render(false, vi.fn(), false, session, onMonitorVolumeChange).find(
+	const onVolumeChange = vi.fn();
+	const slider = render(false, vi.fn(), false, session, onVolumeChange).find(
 		(element) => element.props.role === "slider",
 	)!;
 	const press = (key: string) => {
@@ -154,7 +152,7 @@ it("records one volume entry per slider gesture, ended on pointer-up and on lost
 	press("Home");
 	expect(session.history.length).toBe(3);
 	expect(session.document.volume).toBe(0);
-	expect(onMonitorVolumeChange.mock.calls).toEqual([[0], [1], [0], [1], [0]]);
+	expect(onVolumeChange.mock.calls).toEqual([[0], [1], [0], [1], [0]]);
 });
 it("records one volume entry for a key gesture ended on key-up and a second for the next key gesture", () => {
 	const session = createSession(createSavedSession([]));

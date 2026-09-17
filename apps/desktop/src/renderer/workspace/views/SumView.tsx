@@ -1,6 +1,7 @@
+import { scope } from "opshot/react";
 import { DerivedPairView } from "./DerivedPairView";
-import type { DerivedSpectralViewProps, DifferenceSelectionProps } from "./viewProps";
+import type { DerivedSpectralViewProps } from "./viewProps";
 
-export function SumView(props: DerivedSpectralViewProps & DifferenceSelectionProps) {
-	return <DerivedPairView {...props} viewId="sum" operator="+" />;
-}
+export const SumView = scope<DerivedSpectralViewProps>((props: DerivedSpectralViewProps) => (
+	<DerivedPairView {...props} viewId="sum" operator="+" />
+));

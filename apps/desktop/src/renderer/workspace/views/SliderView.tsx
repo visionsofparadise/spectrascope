@@ -1,76 +1,65 @@
+import { scope } from "opshot/react";
 import { useMemo, useState } from "react";
 import { Curtain } from "../spectral/Curtain";
 import { StripLayout, StripOverlays, StripSourceRender, useStripView } from "../spectral/stripView";
 import { stripClipPath } from "./sliderClip";
 import { sourcePairOf } from "./sourcePair";
 import { useTimelineChromeSources } from "./viewAudio";
-import type { DifferenceSelectionProps, PerSourceSpectralViewProps } from "./viewProps";
+import type { SourceViewProps } from "./viewProps";
 
-interface SliderViewProps extends PerSourceSpectralViewProps, DifferenceSelectionProps {}
+export const SliderView = scope<SourceViewProps>(
+	({ sourceAudio, onTransportControlChange, context }: SourceViewProps) => {
+		const { document } = context.session;
+		const { sources, channelInput, renderSettings, differenceA, differenceB } = document;
+		const { renderableSources, chromeAudio } = useTimelineChromeSources(sources, sourceAudio);
+		const pair = useMemo(() => sourcePairOf(sources, differenceA, differenceB), [sources, differenceA, differenceB]);
+		const pairEntries = useMemo(
+			() =>
+				[pair.a, pair.b].flatMap((id) => {
+					const entry =
+						id === null ? undefined : renderableSources.find((candidate) => candidate.source.id === id);
 
-export function SliderView({
-	sources,
-	sourceAudio,
-	channelInput,
-	settings,
-	differenceA,
-	differenceB,
-	onFrequencyRangeChange,
-	onTransportControlChange,
-}: SliderViewProps) {
-	const { renderableSources, chromeAudio } = useTimelineChromeSources(sources, sourceAudio);
-	const pair = useMemo(() => sourcePairOf(sources, differenceA, differenceB), [sources, differenceA, differenceB]);
-	const pairEntries = useMemo(
-		() =>
-			[pair.a, pair.b].flatMap((id) => {
-				const entry = id === null ? undefined : renderableSources.find((candidate) => candidate.source.id === id);
+					return entry ? [entry] : [];
+				}),
+			[pair.a, pair.b, renderableSources],
+		);
+		const highestRateEntry = pairEntries.reduce<(typeof pairEntries)[number] | undefined>(
+			(highest, entry) => (!highest || entry.audioData.sampleRate > highest.audioData.sampleRate ? entry : highest),
+			undefined,
+		);
 
-				return entry ? [entry] : [];
-			}),
-		[pair.a, pair.b, renderableSources],
-	);
-	const highestRateEntry = pairEntries.reduce<(typeof pairEntries)[number] | undefined>(
-		(highest, entry) => (!highest || entry.audioData.sampleRate > highest.audioData.sampleRate ? entry : highest),
-		undefined,
-	);
+		const [curtain, setCurtain] = useState(0.5);
 
-	const [curtain, setCurtain] = useState(0.5);
+		const view = useStripView(highestRateEntry?.audioData ?? chromeAudio, onTransportControlChange, context);
 
-	const view = useStripView(
-		highestRateEntry?.audioData ?? chromeAudio,
-		settings.frequencyRange,
-		settings.frequencyScale,
-		onFrequencyRangeChange,
-		onTransportControlChange,
-	);
+		const count = pairEntries.length;
 
-	const count = pairEntries.length;
-
-	return (
-		<StripLayout channelInput={channelInput} view={view} minimapSources={renderableSources}>
-			{count > 0 && (
-				<>
-					<div className="absolute inset-0">
-						{pairEntries.map((entry, index) => (
-							<StripSourceRender
-								key={index}
-								view={view}
-								settings={settings}
-								channelInput={channelInput}
-								source={entry.source}
-								audioData={entry.audioData}
-								clipPath={count > 1 ? stripClipPath(index, [curtain], count) : undefined}
-							/>
-						))}
-					</div>
-					{count > 1 && (
-						<div className="pointer-events-none absolute inset-0">
-							<Curtain position={curtain} min={0} max={1} onPositionChange={setCurtain} />
+		return (
+			<StripLayout channelInput={channelInput} view={view} minimapSources={renderableSources} context={context}>
+				{count > 0 && (
+					<>
+						<div className="absolute inset-0">
+							{pairEntries.map((entry, index) => (
+								<StripSourceRender
+									key={index}
+									view={view}
+									settings={renderSettings}
+									channelInput={channelInput}
+									source={entry.source}
+									audioData={entry.audioData}
+									clipPath={count > 1 ? stripClipPath(index, [curtain], count) : undefined}
+								/>
+							))}
 						</div>
-					)}
-					<StripOverlays view={view} settings={settings} />
-				</>
-			)}
-		</StripLayout>
-	);
-}
+						{count > 1 && (
+							<div className="pointer-events-none absolute inset-0">
+								<Curtain position={curtain} min={0} max={1} onPositionChange={setCurtain} />
+							</div>
+						)}
+						<StripOverlays view={view} settings={renderSettings} />
+					</>
+				)}
+			</StripLayout>
+		);
+	},
+);

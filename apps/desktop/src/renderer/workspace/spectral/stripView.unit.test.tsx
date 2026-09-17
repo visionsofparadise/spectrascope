@@ -6,6 +6,7 @@ import { GridOverlay } from "./GridOverlay";
 import { createDefaultSource } from "../source";
 import { INITIAL_VIEW_CONTROL_SETTINGS } from "../viewSettings";
 import { EMPTY_AUDIO_DATA } from "../views/viewAudio";
+import type { SessionContext } from "../../models/Context";
 import type { ComponentProps, ReactElement } from "react";
 
 const source = createDefaultSource(0);
@@ -20,6 +21,7 @@ const view = {
 	displayed: new Map(),
 	cursorFrac: null,
 } as unknown as ComponentProps<typeof StripLayout>["view"];
+const context = {} as SessionContext;
 
 function elements(node: unknown): Array<ReactElement<Record<string, unknown>>> {
 	if (Array.isArray(node)) return node.flatMap(elements);
@@ -31,7 +33,7 @@ function elements(node: unknown): Array<ReactElement<Record<string, unknown>>> {
 describe("strip display modes", () => {
 	it("retains amplitude navigation and dB scale without frequency chrome", () => {
 		const tree = elements(
-			StripLayout({ view, channelInput: "mono", minimapSources: [], children: null, spectrogram: false }),
+			StripLayout({ view, channelInput: "mono", minimapSources: [], children: null, spectrogram: false, context }),
 		);
 		expect(tree.some((element) => element.type === FrequencyAxis)).toBe(false);
 		expect(tree.find((element) => element.type === DbAxis)?.props.verticalRange).toEqual(view.frequencyRange);
@@ -42,7 +44,7 @@ describe("strip display modes", () => {
 		expect(grid.find((element) => element.type === GridOverlay)?.props.mode).toBe("amp");
 	});
 	it("retains frequency chrome and configured grids by default", () => {
-		const tree = elements(StripLayout({ view, channelInput: "mono", minimapSources: [], children: null }));
+		const tree = elements(StripLayout({ view, channelInput: "mono", minimapSources: [], children: null, context }));
 		expect(tree.some((element) => element.type === FrequencyAxis)).toBe(true);
 		expect(tree.find((element) => element.type === FrequencyMinimap)?.props.amplitude).toBe(false);
 		const grid = elements(StripOverlays({ view, settings: INITIAL_VIEW_CONTROL_SETTINGS }));

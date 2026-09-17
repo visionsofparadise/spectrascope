@@ -1,3 +1,4 @@
+import { scope } from "opshot/react";
 import { useMemo, useEffect } from "react";
 import { ChartSvg, HorizontalGridlines, TraceGroup } from "../spectral/chartMarks";
 import { ChartLayout, useChartView, type ChartAxis, type ChartCanvasBaseProps } from "../spectral/chartView";
@@ -126,14 +127,17 @@ function ChartCanvas({ chart, renderableSources }: ChartCanvasBaseProps) {
 	);
 }
 
-export function CorrelationView({ sources, sourceAudio, onTransportControlChange }: SourceViewProps) {
-	const { renderableSources, chromeAudio } = useTimelineChromeSources(sources, sourceAudio);
+export const CorrelationView = scope<SourceViewProps>(
+	({ sourceAudio, onTransportControlChange, context }: SourceViewProps) => {
+		const { document } = context.session;
+		const { renderableSources, chromeAudio } = useTimelineChromeSources(document.sources, sourceAudio);
 
-	const chart = useChartView(chromeAudio, CORR_AXIS, onTransportControlChange);
+		const chart = useChartView(chromeAudio, CORR_AXIS, onTransportControlChange, context);
 
-	return (
-		<ChartLayout chart={chart} tickCount={CORR_TICK_COUNT} renderableSources={renderableSources}>
-			<ChartCanvas chart={chart} renderableSources={renderableSources} />
-		</ChartLayout>
-	);
-}
+		return (
+			<ChartLayout chart={chart} tickCount={CORR_TICK_COUNT} renderableSources={renderableSources} context={context}>
+				<ChartCanvas chart={chart} renderableSources={renderableSources} />
+			</ChartLayout>
+		);
+	},
+);

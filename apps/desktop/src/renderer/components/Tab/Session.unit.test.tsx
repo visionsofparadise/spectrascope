@@ -4,9 +4,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 import { createAppState, INITIAL_PREFERENCES } from "../../models/State/App";
 import { createSavedSession } from "../../session/createSavedSession";
+import { SelectionSurface } from "../../workspace/spectral/SelectionSurface";
 import { SessionTab } from "./Session";
-import type { AppContext, SessionStatus } from "../../models/Context";
-import type { ReactElement } from "react";
+import type { AppContext, SessionContext, SessionStatus } from "../../models/Context";
+import type { ComponentProps, KeyboardEvent, ReactElement } from "react";
 
 const hooks = vi.hoisted(() => {
 	const slots = new Array<{ deps: ReadonlyArray<unknown>; value: unknown }>();
@@ -26,7 +27,7 @@ const hooks = vi.hoisted(() => {
 		return value;
 	};
 
-	return { cursor, memoize, onDefaultDifference: new Array<unknown>() };
+	return { cursor, slots, memoize, effects: new Array<() => unknown>(), onDefaultDifference: new Array<unknown>() };
 });
 
 vi.mock("react", async (importOriginal) => ({
@@ -35,21 +36,25 @@ vi.mock("react", async (importOriginal) => ({
 	useCallback: (callback: unknown, deps: ReadonlyArray<unknown>) => hooks.memoize(() => callback, deps),
 	useState: (initial: unknown) => [typeof initial === "function" ? (initial as () => unknown)() : initial, vi.fn()],
 	useRef: (value: unknown) => ({ current: value }),
-	useEffect: () => {},
+	useEffect: (effect: () => unknown) => {
+		hooks.effects.push(effect);
+	},
 }));
 vi.mock("opshot/react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("opshot/react")>()),
 	scope: (component: unknown) => component,
+	useMutableState: (initial: object | (() => object)) =>
+		hooks.memoize(() => createMutableState(typeof initial === "function" ? initial() : initial), []),
 }));
 
 const SOURCE_STREAMS = {
-	sourceAudio: new Map(),
+	sourceAudio: new Map<string, { durationMs: number }>(),
 	prepared: new Map(),
 	status: new Map(),
 	errors: new Map(),
 	retrySource: () => {},
 };
-const DERIVED_STREAMS = {
+const DERIVED_STREAMS: Record<string, unknown> = {
 	sumAudio: null,
 	diffAudio: null,
 	sumInfo: null,
@@ -58,14 +63,10 @@ const DERIVED_STREAMS = {
 	error: null,
 	retry: () => {},
 };
-const PLAYER = {
-	playing: false,
-	positionSec: 0,
-	durationSec: 0,
+const PLAYBACK_CONTROLS = {
 	onPlayToggle: () => {},
 	onSeek: () => {},
 	onVolumeChange: () => {},
-	error: null,
 };
 
 vi.mock("../../audio/useSourceStreams", () => ({ useSourceStreams: () => SOURCE_STREAMS }));
@@ -77,11 +78,9 @@ vi.mock("../../audio/useDerivedStreams", () => ({
 		return DERIVED_STREAMS;
 	},
 }));
-vi.mock("../../audio/usePlayer", () => ({ usePlayer: () => PLAYER }));
-vi.mock("../../session/pickAudioFiles", () => ({ pickAudioFiles: vi.fn() }));
+vi.mock("../../audio/usePlayer", () => ({ usePlayer: () => PLAYBACK_CONTROLS }));
 vi.mock("../../session/utils/relinkSource", () => ({ relinkSource: vi.fn() }));
 vi.mock("../../workspace/AppShell", () => ({ AppShell: "mock-app-shell" }));
-vi.mock("../../workspace/playback", () => ({ WorkspacePlaybackProvider: "mock-playback" }));
 vi.mock("../../workspace/spectral/MeasurementSession", () => ({ MeasurementSessionProvider: "mock-measurement" }));
 vi.mock("../../workspace/spectral/ViewLoadingToast", () => ({ ViewLoadingToast: "mock-toast" }));
 vi.mock("../../workspace/spectral/viewProgress", () => ({ PreparingAudioContext: { Provider: "mock-preparing" } }));
@@ -92,6 +91,38 @@ vi.mock("../../workspace/TransportViewControls", () => ({
 }));
 vi.mock("../../workspace/ViewTopBar", () => ({ ViewTopBar: "mock-view-top-bar" }));
 vi.mock("../../workspace/Workspace", () => ({ Workspace: "mock-workspace" }));
+
+function appContextOf(app: AppContext["app"]): AppContext {
+	return {
+		app,
+		sessionStatus: createMutableState<SessionStatus>({ busy: false, error: null }),
+		logger: {},
+		main: {},
+		mainEvents: {},
+		queryClient: {},
+		userDataPath: "C:/userData",
+		openSession: vi.fn(),
+		newSession: vi.fn(),
+		saveSession: vi.fn(),
+		closeSession: vi.fn(),
+		renameTab: vi.fn(),
+		removeRecentSession: vi.fn(),
+	} as unknown as AppContext;
+}
+
+function appOf(saved: ReturnType<typeof createSavedSession>): AppContext["app"] {
+	return createMutableState(
+		createAppState({
+			tabs: [{ id: "tab", comparisonId: saved.id }],
+			activeTabId: "tab",
+			theme: "lava",
+			windowBounds: undefined,
+			comparisons: [saved],
+			preferences: INITIAL_PREFERENCES,
+			recentSessions: [],
+		}),
+	);
+}
 
 function elementsOf(node: unknown): Array<ReactElement<Record<string, unknown>>> {
 	if (Array.isArray(node)) return node.flatMap(elementsOf);
@@ -117,33 +148,9 @@ async function scopedContextsOf(context: AppContext, count: number): Promise<Arr
 
 it("keeps the session context and its callbacks across renders that receive a fresh scoped app context", async () => {
 	const saved = createSavedSession(["C:/audio/a.wav", "C:/audio/b.wav"]);
-	const app = createMutableState(
-		createAppState({
-			tabs: [{ id: "tab", comparisonId: saved.id }],
-			activeTabId: "tab",
-			theme: "lava",
-			windowBounds: undefined,
-			comparisons: [saved],
-			preferences: INITIAL_PREFERENCES,
-			recentSessions: [],
-		}),
-	);
+	const app = appOf(saved);
 	const session = app.sessions[0]!;
-	const appContext = {
-		app,
-		sessionStatus: createMutableState<SessionStatus>({ busy: false, error: null }),
-		logger: {},
-		main: {},
-		mainEvents: {},
-		queryClient: {},
-		userDataPath: "C:/userData",
-		openSession: vi.fn(),
-		newSession: vi.fn(),
-		saveSession: vi.fn(),
-		closeSession: vi.fn(),
-		renameTab: vi.fn(),
-		removeRecentSession: vi.fn(),
-	} as unknown as AppContext;
+	const appContext = appContextOf(app);
 	const [first, second] = await scopedContextsOf(appContext, 2);
 
 	expect(first).not.toBe(second);
@@ -156,7 +163,6 @@ it("keeps the session context and its callbacks across renders that receive a fr
 		return {
 			context: propsOf("mock-view-top-bar").context,
 			workspace: propsOf("mock-workspace"),
-			playback: propsOf("mock-playback").value as Record<string, unknown>,
 		};
 	};
 	const before = render(first!);
@@ -164,10 +170,65 @@ it("keeps the session context and its callbacks across renders that receive a fr
 
 	expect(after.context).toBe(before.context);
 
-	for (const callback of ["onRelinkSource", "onSourceRemove", "onAddSources", "onAddSourceFiles"]) {
-		expect(after.workspace[callback]).toBe(before.workspace[callback]);
+	expect(after.workspace.context).toBe(before.context);
+	expect(after.workspace.onRelinkSource).toBe(before.workspace.onRelinkSource);
+	expect(hooks.onDefaultDifference[1]).toBe(hooks.onDefaultDifference[0]);
+});
+
+it("bounds a Shift+Arrow extend by the session when the playing stream is shorter", () => {
+	class SurfaceElement {
+		closest() {
+			return this;
+		}
 	}
 
-	expect(after.playback.onSelectionChange).toBe(before.playback.onSelectionChange);
-	expect(hooks.onDefaultDifference[1]).toBe(hooks.onDefaultDifference[0]);
+	vi.stubGlobal("Element", SurfaceElement);
+	vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+
+	try {
+		const saved = createSavedSession(["C:/audio/long.wav"]);
+		const app = appOf(saved);
+		const session = app.sessions[0]!;
+		const appContext = appContextOf(app);
+		const render = () => {
+			hooks.cursor.index = 0;
+			hooks.effects.length = 0;
+			const elements = elementsOf(SessionTab({ session, onExportControlChange: vi.fn(), context: appContext }));
+
+			for (const effect of hooks.effects) effect();
+
+			return elements.find((element) => element.type === "mock-view-top-bar")!.props.context as SessionContext;
+		};
+
+		hooks.slots.length = 0;
+		render();
+		SOURCE_STREAMS.sourceAudio.set(session.document.sources[0]!.id, { durationMs: 10_000 });
+		DERIVED_STREAMS.sumInfo = { key: "sum", sampleRate: 48_000, durationMs: 2000 };
+		const context = render();
+
+		expect(context.playback.durationSec).toBe(10);
+
+		session.document.selection = { start: 1000, end: 8000 };
+		const surface = new SurfaceElement();
+		const element = SelectionSurface({ startMs: 0, endMs: 2000, context }) as ReactElement<ComponentProps<"div">>;
+
+		element.props.onKeyDown?.({
+			currentTarget: surface,
+			target: surface,
+			key: "ArrowLeft",
+			shiftKey: true,
+			altKey: false,
+			ctrlKey: false,
+			metaKey: false,
+			defaultPrevented: false,
+			preventDefault: vi.fn(),
+			stopPropagation: vi.fn(),
+		} as unknown as KeyboardEvent<HTMLDivElement>);
+
+		expect(session.document.selection).toEqual({ start: 1000, end: 7980 });
+	} finally {
+		SOURCE_STREAMS.sourceAudio.clear();
+		DERIVED_STREAMS.sumInfo = null;
+		vi.unstubAllGlobals();
+	}
 });

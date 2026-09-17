@@ -1,5 +1,10 @@
+import { createMutableState, flush } from "opshot";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createSession } from "../models/State/Session";
+import { createSavedSession } from "../session/createSavedSession";
 import { usePlayer } from "./usePlayer";
+import type { PlaybackState } from "../models/State/Playback";
+import type { Session } from "../models/State/Session";
 
 const hooks = vi.hoisted(() => ({
 	index: 0,
@@ -17,6 +22,9 @@ const media = vi.hoisted(() => ({
 	pause: vi.fn(),
 	seek: vi.fn(),
 	dispose: vi.fn(),
+	setVolume: vi.fn(),
+	setLoopRegion: vi.fn(),
+	setLooping: vi.fn(),
 }));
 
 vi.mock("react", () => ({
@@ -26,7 +34,7 @@ vi.mock("react", () => ({
 	},
 	useState: (initial: unknown) => {
 		const index = hooks.index++;
-		if (!(index in hooks.values)) hooks.values[index] = initial;
+		if (!(index in hooks.values)) hooks.values[index] = typeof initial === "function" ? initial() : initial;
 		return [
 			hooks.values[index],
 			(next: unknown) => {
@@ -69,10 +77,10 @@ vi.mock("./PlaybackEngine", () => ({
 			media.playing = false;
 			return true;
 		}
-		setVolume() {}
+		setVolume = media.setVolume;
 		setPlaybackRate() {}
-		setLoopRegion() {}
-		setLooping() {}
+		setLoopRegion = media.setLoopRegion;
+		setLooping = media.setLooping;
 		onPositionChange(listener: (position: number) => void) {
 			media.positionListener = listener;
 			return () => {
@@ -91,14 +99,12 @@ vi.mock("./PlaybackEngine", () => ({
 	},
 }));
 
-function render(url: string | null, preparing = false) {
+let playback = createMutableState<PlaybackState>({ positionSec: 3, durationSec: 0, playing: false, error: null });
+let session: Session = createSession(createSavedSession([]));
+
+function render(url: string | null, preparing = false, selection: { start: number; end: number } | null = null) {
 	hooks.index = 0;
-	const result = usePlayer(url, url ? 10 : 0, 3, vi.fn(), 0.8, {
-		playbackRate: 1,
-		looping: false,
-		selection: null,
-		preparing,
-	});
+	const result = usePlayer(url, url ? 10 : 0, preparing, selection, playback, session);
 	for (const effect of hooks.pending.splice(0)) effect();
 	return result;
 }
@@ -108,6 +114,8 @@ beforeEach(() => {
 	hooks.values = [];
 	hooks.effects.clear();
 	hooks.pending = [];
+	playback = createMutableState<PlaybackState>({ positionSec: 3, durationSec: 0, playing: false, error: null });
+	session = createSession(createSavedSession([]));
 	media.playing = false;
 	media.url = "";
 	media.positionSec = 3;
@@ -120,6 +128,9 @@ beforeEach(() => {
 	});
 	media.seek.mockReset();
 	media.dispose.mockReset();
+	media.setVolume.mockReset();
+	media.setLoopRegion.mockReset();
+	media.setLooping.mockReset();
 });
 
 afterEach(() => {
@@ -196,5 +207,39 @@ describe("playback stream transitions", () => {
 		render("media://audio");
 		render(null).onSeek(8);
 		expect(media.seek).not.toHaveBeenCalled();
+	});
+});
+
+describe("session state reaching the engine", () => {
+	it("follows a selection edit with the loop region and ignores an unrelated document write", () => {
+		const { document } = session;
+
+		document.selection = { start: 1000, end: 4000 };
+		render("media://audio", false, document.selection);
+		expect(media.setLoopRegion).toHaveBeenLastCalledWith({ startSec: 1, endSec: 4 });
+		media.setLoopRegion.mockClear();
+		document.selection = { start: 2000, end: 5000 };
+		render("media://audio", false, document.selection);
+		expect(media.setLoopRegion).toHaveBeenCalledExactlyOnceWith({ startSec: 2, endSec: 5 });
+		media.setLoopRegion.mockClear();
+		document.name = "Renamed";
+		flush(document);
+		render("media://audio", false, document.selection);
+		expect(media.setLoopRegion).not.toHaveBeenCalled();
+	});
+
+	it("reaches the engine with a volume write and with the undo of one", () => {
+		const { document, history } = session;
+		const initial = document.volume;
+
+		render("media://audio");
+		media.setVolume.mockClear();
+		document.volume = 0.25;
+		flush(document);
+		expect(media.setVolume).toHaveBeenLastCalledWith(0.25);
+		history.undo();
+		flush(document);
+		expect(media.setVolume).toHaveBeenLastCalledWith(initial);
+		expect(media.setVolume).toHaveBeenCalledTimes(2);
 	});
 });

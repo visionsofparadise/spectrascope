@@ -1,3 +1,4 @@
+import { scope } from "opshot/react";
 import { useMemo } from "react";
 import { getBandFrequencies } from "spectral-display";
 import { AxisSpacer, LinearDbAxis, linearAxisSampleOf, useLabelFit } from "../spectral/Axes";
@@ -17,20 +18,12 @@ import { buildPolylineSegments } from "./chartTrace";
 import { resolveVisibleSourceAudio } from "./viewAudio";
 import type { Source } from "../source";
 import type { SourceWithAudio } from "./viewAudio";
+import type { SourceViewProps } from "./viewProps";
 import type { ComputeState } from "../spectral/firstComputeProgress";
 import type { AudioData } from "../spectral/types";
-import type { TransportControl, TransportReadoutRow } from "../Transport";
+import type { TransportReadoutRow } from "../Transport";
 import type { AxisRange } from "../utils/axisRange";
-import type { ViewControlSettings } from "../viewSettings";
 import type { ChannelInput, SpectralOptions } from "spectral-display";
-
-interface FrequencyDistributionViewProps {
-	readonly sources: ReadonlyArray<Source>;
-	readonly sourceAudio: ReadonlyMap<string, AudioData>;
-	readonly settings: ViewControlSettings;
-	readonly channelInput: ChannelInput;
-	readonly onTransportControlChange?: (control: TransportControl) => void;
-}
 
 const FREQ_MIN_HZ = 20;
 const FREQ_MAX_HZ = 20000;
@@ -231,100 +224,97 @@ function HorizontalFrequencyAxis({ range }: { readonly range: AxisRange }) {
 	);
 }
 
-export function FrequencyDistributionView({
-	sources,
-	sourceAudio,
-	settings,
-	channelInput,
-	onTransportControlChange,
-}: FrequencyDistributionViewProps) {
-	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
+export const FrequencyDistributionView = scope<SourceViewProps>(
+	({ sourceAudio, onTransportControlChange, context }: SourceViewProps) => {
+		const { document } = context.session;
+		const { sources, channelInput, renderSettings } = document;
+		const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
-	const progress = useFirstComputeProgress();
+		const progress = useFirstComputeProgress();
 
-	const { xRange, setXRange, yRange, setYRange, onMouseMove, onMouseLeave } = usePointerReadoutTransport(
-		renderableSources,
-		frequencyReadoutRowsOf,
-		onTransportControlChange,
-	);
+		const { xRange, setXRange, yRange, setYRange, onMouseMove, onMouseLeave } = usePointerReadoutTransport(
+			frequencyReadoutRowsOf,
+			onTransportControlChange,
+		);
 
-	const axisSample = linearAxisSampleOf(DB_MIN, DB_MAX, DB_TICK_COUNT, yRange, DB_WIDEST_LABEL);
+		const axisSample = linearAxisSampleOf(DB_MIN, DB_MAX, DB_TICK_COUNT, yRange, DB_WIDEST_LABEL);
 
-	return (
-		<ViewProgressProvider>
-			<div className="flex h-full min-h-0 w-full flex-col bg-void">
-				<div className="flex min-h-0 flex-1 flex-col">
-					<div className="flex shrink-0">
-						<AxisSpacer sample={axisSample} />
-						<div className="min-w-0 flex-1">
-							<HorizontalFrequencyAxis range={xRange} />
+		return (
+			<ViewProgressProvider>
+				<div className="flex h-full min-h-0 w-full flex-col bg-void">
+					<div className="flex min-h-0 flex-1 flex-col">
+						<div className="flex shrink-0">
+							<AxisSpacer sample={axisSample} />
+							<div className="min-w-0 flex-1">
+								<HorizontalFrequencyAxis range={xRange} />
+							</div>
+							<div className="w-3 shrink-0" />
 						</div>
-						<div className="w-3 shrink-0" />
-					</div>
-					<div className="flex min-h-0 flex-1">
-						<LinearDbAxis
-							min={DB_MIN}
-							max={DB_MAX}
-							tickCount={DB_TICK_COUNT}
-							range={yRange}
-							sample={DB_WIDEST_LABEL}
-						/>
-						<div className="relative min-w-0 flex-1" onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
-							{renderableSources.length === 0 ? (
-								<div className="flex h-full items-center justify-center bg-void">
-									<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
-								</div>
-							) : (
-								<>
-									<ChartCanvas
-										renderableSources={renderableSources}
-										fftSize={settings.fftSize}
-										hopOverlap={settings.hopOverlap}
-										channelInput={channelInput}
-										onComputeState={progress.handleComputeState}
-										xRange={xRange}
-										yRange={yRange}
-									/>
-									{progress.firstComputing && <ComputeProgress fraction={progress.fraction} />}
-								</>
-							)}
-							<ViewProgressToast />
+						<div className="flex min-h-0 flex-1">
+							<LinearDbAxis
+								min={DB_MIN}
+								max={DB_MAX}
+								tickCount={DB_TICK_COUNT}
+								range={yRange}
+								sample={DB_WIDEST_LABEL}
+							/>
+							<div className="relative min-w-0 flex-1" onMouseMove={onMouseMove} onMouseLeave={onMouseLeave}>
+								{renderableSources.length === 0 ? (
+									<div className="flex h-full items-center justify-center bg-void">
+										<p className="font-body text-sm text-chrome-text-secondary">No visible sources.</p>
+									</div>
+								) : (
+									<>
+										<ChartCanvas
+											renderableSources={renderableSources}
+											fftSize={renderSettings.fftSize}
+											hopOverlap={renderSettings.hopOverlap}
+											channelInput={channelInput}
+											onComputeState={progress.handleComputeState}
+											xRange={xRange}
+											yRange={yRange}
+										/>
+										{progress.firstComputing && <ComputeProgress fraction={progress.fraction} />}
+									</>
+								)}
+								<ViewProgressToast />
+							</div>
+							<ScrollTrack
+								axis="y"
+								className="shrink-0"
+								range={yRange}
+								minSpan={LEVEL_MIN_SPAN}
+								onRangeChange={setYRange}
+								{...scrollTrackTextsOf(
+									"y",
+									"Level range",
+									yRange,
+									(fraction) => trackValueTextOf(DB_MAX - fraction * (DB_MAX - DB_MIN)),
+									"dB",
+								)}
+							/>
 						</div>
-						<ScrollTrack
-							axis="y"
-							className="shrink-0"
-							range={yRange}
-							minSpan={LEVEL_MIN_SPAN}
-							onRangeChange={setYRange}
-							{...scrollTrackTextsOf(
-								"y",
-								"Level range",
-								yRange,
-								(fraction) => trackValueTextOf(DB_MAX - fraction * (DB_MAX - DB_MIN)),
-								"dB",
-							)}
-						/>
-					</div>
-					<div className="flex shrink-0">
-						<AxisSpacer sample={axisSample} />
-						<ScrollTrack
-							axis="x"
-							className="min-w-0 flex-1"
-							range={xRange}
-							minSpan={FREQUENCY_MIN_SPAN}
-							onRangeChange={setXRange}
-							{...scrollTrackTextsOf(
-								"x",
-								"Frequency range",
-								xRange,
-								(fraction) => String(Math.round(xToFreq(fraction))),
-								"Hz",
-							)}
-						/>
-						<div className="w-3 shrink-0" />
+						<div className="flex shrink-0">
+							<AxisSpacer sample={axisSample} />
+							<ScrollTrack
+								axis="x"
+								className="min-w-0 flex-1"
+								range={xRange}
+								minSpan={FREQUENCY_MIN_SPAN}
+								onRangeChange={setXRange}
+								{...scrollTrackTextsOf(
+									"x",
+									"Frequency range",
+									xRange,
+									(fraction) => String(Math.round(xToFreq(fraction))),
+									"Hz",
+								)}
+							/>
+							<div className="w-3 shrink-0" />
+						</div>
 					</div>
 				</div>
-			</div>
-		</ViewProgressProvider>
-	);
-}
+			</ViewProgressProvider>
+		);
+	},
+);

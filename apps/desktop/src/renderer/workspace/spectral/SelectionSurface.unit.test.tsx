@@ -1,15 +1,17 @@
+import { createMutableState, flush } from "opshot";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import { createSession } from "../../models/State/Session";
+import { createSavedSession } from "../../session/createSavedSession";
 import { SelectionSurface } from "./SelectionSurface";
+import type { SessionContext } from "../../models/Context";
+import type { PlaybackState } from "../../models/State/Playback";
+import type { Session } from "../../models/State/Session";
 import type { ComponentProps, ReactElement } from "react";
 
 const runtime = vi.hoisted(() => ({ index: 0, values: [] as Array<unknown> }));
-const playback = vi.hoisted(() => ({
-	positionSec: 0.5,
-	durationSec: 1,
-	selection: null as { start: number; end: number } | null,
-	onSelectionChange: vi.fn<(selection: { start: number; end: number } | null) => void>(),
-	onSeek: vi.fn<(position: number) => void>(),
-}));
+const onSeek = vi.fn<(position: number) => void>();
+let session: Session = createSession(createSavedSession([]));
+let context = {} as SessionContext;
 
 vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
@@ -20,7 +22,7 @@ vi.mock("react", async (importOriginal) => ({
 	},
 	useState: (initial: unknown) => {
 		const index = runtime.index++;
-		if (!(index in runtime.values)) runtime.values[index] = initial;
+		if (!(index in runtime.values)) runtime.values[index] = typeof initial === "function" ? initial() : initial;
 		return [
 			runtime.values[index],
 			(value: unknown) => {
@@ -30,7 +32,7 @@ vi.mock("react", async (importOriginal) => ({
 	},
 }));
 
-vi.mock("../playback", () => ({ useWorkspacePlayback: () => playback }));
+vi.mock("opshot/react", () => ({ scope: (component: unknown) => component }));
 
 class SurfaceElement {
 	readonly focus = vi.fn();
@@ -47,7 +49,9 @@ class SurfaceElement {
 
 function surfaceProps(extra: Partial<ComponentProps<typeof SelectionSurface>> = {}) {
 	runtime.index = 0;
-	const element = SelectionSurface({ startMs: 0, endMs: 1000, ...extra }) as ReactElement<ComponentProps<"div">>;
+	const element = SelectionSurface({ startMs: 0, endMs: 1000, ...extra, context }) as ReactElement<
+		ComponentProps<"div">
+	>;
 	return element.props;
 }
 
@@ -70,12 +74,13 @@ function keyboardEvent(surface: SurfaceElement, key: string, shiftKey = false, t
 beforeEach(() => {
 	runtime.index = 0;
 	runtime.values = [];
-	playback.positionSec = 0.5;
-	playback.selection = null;
-	playback.onSelectionChange.mockReset().mockImplementation((selection) => {
-		playback.selection = selection;
-	});
-	playback.onSeek.mockReset();
+	session = createSession(createSavedSession([]));
+	context = {
+		session,
+		playback: createMutableState<PlaybackState>({ positionSec: 0.5, durationSec: 1, playing: false, error: null }),
+		playbackControls: { onPlayToggle: vi.fn(), onSeek, onVolumeChange: vi.fn() },
+	} as unknown as SessionContext;
+	onSeek.mockReset();
 	vi.stubGlobal("Element", SurfaceElement);
 });
 
@@ -93,17 +98,17 @@ describe("SelectionSurface gestures", () => {
 		surfaceProps().onPointerDown?.(down);
 		expect(surface.focus).toHaveBeenCalledExactlyOnceWith({ preventScroll: true });
 		surfaceProps().onPointerUp?.({ ...down, clientX: 70 });
-		expect(playback.selection).toEqual({ start: 200, end: 700 });
+		expect(session.document.selection).toEqual({ start: 200, end: 700 });
 		surfaceProps().onKeyDown?.(keyboardEvent(surface, "Escape"));
-		expect(playback.selection).toBeNull();
+		expect(session.document.selection).toBeNull();
 	});
 
 	it("extends the left endpoint repeatedly without moving the keyboard anchor", () => {
 		const surface = new SurfaceElement();
 		for (let count = 0; count < 3; count++) surfaceProps().onKeyDown?.(keyboardEvent(surface, "ArrowLeft", true));
-		expect(playback.selection).toEqual({ start: 470, end: 500 });
+		expect(session.document.selection).toEqual({ start: 470, end: 500 });
 		surfaceProps().onKeyDown?.(keyboardEvent(surface, "ArrowRight", true));
-		expect(playback.selection).toEqual({ start: 480, end: 500 });
+		expect(session.document.selection).toEqual({ start: 480, end: 500 });
 	});
 
 	it("ignores handled or nested-control keys", () => {
@@ -113,8 +118,8 @@ describe("SelectionSurface gestures", () => {
 		props.onKeyDown?.({ ...keyboardEvent(surface, "Escape"), defaultPrevented: true });
 		props.onKeyDown?.(keyboardEvent(surface, "ArrowLeft", true, new SurfaceElement()));
 		props.onKeyDown?.(keyboardEvent(surface, "ArrowRight", false, new SurfaceElement()));
-		expect(playback.onSelectionChange).not.toHaveBeenCalled();
-		expect(playback.onSeek).not.toHaveBeenCalled();
+		expect(session.document.selection).toBeNull();
+		expect(onSeek).not.toHaveBeenCalled();
 		expect(delegated).not.toHaveBeenCalled();
 	});
 
@@ -126,7 +131,7 @@ describe("SelectionSurface gestures", () => {
 	] as const)("seeks with %s", (key, expected) => {
 		const surface = new SurfaceElement();
 		surfaceProps({ seekOnClick: true }).onKeyDown?.(keyboardEvent(surface, key));
-		expect(playback.onSeek).toHaveBeenCalledExactlyOnceWith(expected);
+		expect(onSeek).toHaveBeenCalledExactlyOnceWith(expected);
 	});
 
 	it("continues delegating ordinary inspection keys when seeking is disabled", () => {
@@ -135,19 +140,21 @@ describe("SelectionSurface gestures", () => {
 		const event = keyboardEvent(surface, "ArrowRight");
 		surfaceProps({ seekOnClick: false, onKeyDown: delegated }).onKeyDown?.(event);
 		expect(delegated).toHaveBeenCalledExactlyOnceWith(event);
-		expect(playback.onSeek).not.toHaveBeenCalled();
+		expect(onSeek).not.toHaveBeenCalled();
 	});
 
 	it("clears the range and seeks on an ordinary click", () => {
 		const surface = new SurfaceElement();
-		playback.selection = { start: 100, end: 300 };
+		const selectionsAtSeek = new Array<unknown>();
+		session.document.selection = { start: 100, end: 300 };
+		onSeek.mockImplementation(() => {
+			selectionsAtSeek.push(session.document.selection);
+		});
 		const event = { ...keyboardEvent(surface, ""), clientX: 75 } as unknown as React.MouseEvent<HTMLDivElement>;
 		surfaceProps().onClick?.(event);
-		expect(playback.onSelectionChange).toHaveBeenCalledExactlyOnceWith(null);
-		expect(playback.onSeek).toHaveBeenCalledExactlyOnceWith(0.75);
-		expect(playback.onSelectionChange.mock.invocationCallOrder[0]).toBeLessThan(
-			playback.onSeek.mock.invocationCallOrder[0]!,
-		);
+		expect(session.document.selection).toBeNull();
+		expect(onSeek).toHaveBeenCalledExactlyOnceWith(0.75);
+		expect(selectionsAtSeek).toEqual([null]);
 	});
 
 	it.each([
@@ -166,8 +173,8 @@ describe("SelectionSurface gestures", () => {
 		surfaceProps().onPointerUp?.({ ...down, clientX: to });
 		surfaceProps().onLostPointerCapture?.(down);
 		surfaceProps().onClick?.({ ...down, clientX: to });
-		expect(playback.selection).toEqual({ start: 200, end: 700 });
-		expect(playback.onSeek).not.toHaveBeenCalled();
+		expect(session.document.selection).toEqual({ start: 200, end: 700 });
+		expect(onSeek).not.toHaveBeenCalled();
 		expect(surface.releasePointerCapture).toHaveBeenCalledExactlyOnceWith(1);
 	});
 
@@ -182,9 +189,9 @@ describe("SelectionSurface gestures", () => {
 		surfaceProps().onPointerDown?.(down);
 		surfaceProps().onPointerMove?.({ ...down, clientX: 23 });
 		surfaceProps().onPointerUp?.({ ...down, clientX: 23 });
-		expect(playback.onSelectionChange).not.toHaveBeenCalled();
+		expect(session.document.selection).toBeNull();
 		surfaceProps().onClick?.({ ...down, clientX: 23 });
-		expect(playback.onSeek).toHaveBeenCalledExactlyOnceWith(0.23);
+		expect(onSeek).toHaveBeenCalledExactlyOnceWith(0.23);
 	});
 
 	it.each(["onPointerCancel", "onLostPointerCapture"] as const)("abandons a drag on %s", (cancel) => {
@@ -200,8 +207,8 @@ describe("SelectionSurface gestures", () => {
 		surfaceProps()[cancel]?.(down);
 		surfaceProps().onPointerUp?.({ ...down, clientX: 70 });
 		surfaceProps().onClick?.({ ...down, clientX: 70 });
-		expect(playback.onSelectionChange).not.toHaveBeenCalled();
-		expect(playback.onSeek).not.toHaveBeenCalled();
+		expect(session.document.selection).toBeNull();
+		expect(onSeek).not.toHaveBeenCalled();
 	});
 
 	it("leaves nested controls independent of display gestures", () => {
@@ -216,7 +223,24 @@ describe("SelectionSurface gestures", () => {
 		surfaceProps().onPointerUp?.({ ...down, clientX: 70 });
 		surfaceProps().onClick?.({ ...down, clientX: 70 });
 		expect(surface.setPointerCapture).not.toHaveBeenCalled();
-		expect(playback.onSelectionChange).not.toHaveBeenCalled();
-		expect(playback.onSeek).not.toHaveBeenCalled();
+		expect(session.document.selection).toBeNull();
+		expect(onSeek).not.toHaveBeenCalled();
+	});
+
+	it("records one history entry for a held Shift+Arrow and a second after key-up", () => {
+		const surface = new SurfaceElement();
+		const extend = () => {
+			surfaceProps().onKeyDown?.(keyboardEvent(surface, "ArrowLeft", true));
+			flush(session.document);
+		};
+
+		extend();
+		extend();
+		extend();
+		expect(session.history.length).toBe(1);
+		surfaceProps().onKeyUp?.(keyboardEvent(surface, "ArrowLeft", true));
+		extend();
+		expect(session.history.length).toBe(2);
+		expect(session.document.selection).toEqual({ start: 460, end: 500 });
 	});
 });

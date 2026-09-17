@@ -55,7 +55,13 @@ function menuItemOf(elements: Array<AnyElement>, text: string) {
 	return elements.find((element) => element.type === DropdownMenuItem && textOf(element) === text);
 }
 
-const offsetHandle: TimelineOffsetHandle = { valueMaxMs: 1000, onPointerDown: () => {}, onKeyDown: () => {} };
+const offsetHandle: TimelineOffsetHandle = {
+	valueMaxMs: 1000,
+	onPointerDown: () => {},
+	onKeyDown: () => {},
+	onKeyUp: () => {},
+	onBlur: () => {},
+};
 
 describe("Timeline track header", () => {
 	beforeEach(() => {

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
-import { useWorkspacePlayback } from "../playback";
 import { readChartValue } from "../utils/readChartValue";
 import { EMPTY_READOUT, timeReadoutRowOf } from "./readoutRows";
+import type { SessionContext } from "../../models/Context";
 import type { TimeWindow } from "../useTimeViewport";
 
 export interface ChartReadoutTrace {
@@ -36,8 +36,9 @@ export function nearestChartTrace(
 	return nearest;
 }
 
-export function useChartReadouts(valueLabel: string) {
-	const { selection } = useWorkspacePlayback();
+export function useChartReadouts(valueLabel: string, context: SessionContext) {
+	const { document } = context.session;
+	const selection = document.selection;
 	const [traces, setTraces] = useState<ReadonlyMap<string, ChartReadoutTrace>>(() => new Map());
 	const [cursor, setCursor] = useState<{ timeMs: number; y: number } | null>(null);
 	const onTraceChange = useCallback((sourceId: string, trace: ChartReadoutTrace | null) => {

@@ -1,8 +1,13 @@
 import { Icon } from "@iconify/react";
+import { batch, identify } from "opshot";
+import { scope } from "opshot/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../components/Button";
 import { main } from "../../models/Main";
 import { AUDIO_FILE_EXTENSIONS } from "../../session/createSavedSession";
+import { pickAudioFiles } from "../../session/pickAudioFiles";
+import { appendSources, removeSource } from "../../session/utils/documentWrites";
+import { createGestureKey } from "../../utils/gestureKey";
 import { SourceRender } from "../SourceRender";
 import { TimeRuler } from "../spectral/Axes";
 import { CursorLine, CursorSurface } from "../spectral/CursorSurface";
@@ -13,7 +18,7 @@ import { ScrollTrack } from "../spectral/ScrollTrack";
 import { useWaveformReadouts } from "../spectral/useWaveformReadouts";
 import { ViewLoadingToast } from "../spectral/ViewLoadingToast";
 import { ViewProgressProvider, ViewProgressToast } from "../spectral/viewProgress";
-import { useTransportPlayback } from "../spectral/viewScaffold";
+import { usePublishedTransportControl } from "../spectral/viewScaffold";
 import { TimelineTrackHeader } from "../TimelineTrackHeader";
 import { useTimeViewport } from "../useTimeViewport";
 import { panAxisRange } from "../utils/axisRange";
@@ -27,10 +32,9 @@ import type { TimelineDrag } from "./timelineExtent";
 import type { SourceStreamStatus } from "../../audio/useSourceStreams";
 import type { SourceState } from "../../models/State/App";
 import type { TimelineOffsetHandle } from "../TimelineTrackHeader";
-import type { SourceManagementProps } from "./viewProps";
+import type { SourceManagementProps, SourceViewProps } from "./viewProps";
 import type { AudioData } from "../spectral/types";
 import type { DisplayedWaveform } from "../spectral/useWaveformReadouts";
-import type { TransportControl } from "../Transport";
 import type { AxisRange } from "../utils/axisRange";
 import type { ViewControlSettings } from "../viewSettings";
 import type { FrequencyScale } from "spectral-display";
@@ -107,7 +111,6 @@ function TimelineTrack({
 	channelInput,
 	waveformOpacity,
 	spectrogramOpacity,
-	draggable,
 	handleTop,
 	onCursorMove,
 	onDisplayedResultChange,
@@ -140,7 +143,6 @@ function TimelineTrack({
 	readonly channelInput: ChannelInput;
 	readonly waveformOpacity: number;
 	readonly spectrogramOpacity: number;
-	readonly draggable: boolean;
 	readonly handleTop: string;
 	readonly onCursorMove: (readout: SourceRenderCursorReadout) => void;
 	readonly onDisplayedResultChange: (sourceId: string, displayed: DisplayedWaveform | null) => void;
@@ -154,6 +156,7 @@ function TimelineTrack({
 	readonly onRemove?: () => void;
 }) {
 	const trackRef = useRef<HTMLDivElement>(null);
+	const [nudgeKey] = useState(createGestureKey);
 
 	const durationMs = audioData?.durationMs ?? 0;
 
@@ -175,8 +178,6 @@ function TimelineTrack({
 
 	const handlePointerDown = useCallback(
 		(event: React.PointerEvent<HTMLButtonElement>) => {
-			if (!draggable) return;
-
 			event.preventDefault();
 			event.stopPropagation();
 
@@ -206,13 +207,11 @@ function TimelineTrack({
 				},
 			);
 		},
-		[draggable, offsetMs],
+		[offsetMs],
 	);
 
 	const handleKeyDown = useCallback(
 		(event: React.KeyboardEvent<HTMLButtonElement>) => {
-			if (!draggable) return;
-
 			const fine = event.shiftKey ? 10 : 100;
 			let next: number | null = null;
 
@@ -224,9 +223,12 @@ function TimelineTrack({
 			if (next === null) return;
 
 			event.preventDefault();
-			onCommit(Math.max(0, next));
+
+			const nudgedMs = Math.max(0, next);
+
+			batch(() => onCommit(nudgedMs), nudgeKey.current());
 		},
-		[draggable, offsetMs, extentEndMs, durationMs, onCommit],
+		[offsetMs, extentEndMs, durationMs, onCommit, nudgeKey],
 	);
 
 	const windowSpanMs = windowEndMs - windowStartMs;
@@ -238,10 +240,15 @@ function TimelineTrack({
 	});
 	const leftPct = liveWindow ? ((offsetMs + liveWindow.startMs - windowStartMs) / span) * 100 : 0;
 	const widthPct = liveWindow ? ((liveWindow.endMs - liveWindow.startMs) / span) * 100 : 0;
-	const offsetHandle: TimelineOffsetHandle | undefined =
-		draggable && audioData
-			? { valueMaxMs: extentEndMs, onPointerDown: handlePointerDown, onKeyDown: handleKeyDown }
-			: undefined;
+	const offsetHandle: TimelineOffsetHandle | undefined = audioData
+		? {
+				valueMaxMs: extentEndMs,
+				onPointerDown: handlePointerDown,
+				onKeyDown: handleKeyDown,
+				onKeyUp: nudgeKey.end,
+				onBlur: nudgeKey.end,
+			}
+		: undefined;
 
 	return (
 		<ViewProgressProvider>
@@ -315,326 +322,299 @@ function TimelineTrack({
 	);
 }
 
-interface TimelineViewProps extends SourceManagementProps {
-	readonly sources: ReadonlyArray<Source>;
-	readonly sourceAudio: ReadonlyMap<string, AudioData>;
-	readonly channelInput: ChannelInput;
-	readonly settings: ViewControlSettings;
-	/**
-	 * Emitted when a source's clip is dragged (or keyboard-nudged) on the
-	 * timeline — `(sourceId, offsetMs)` with `offsetMs ≥ 0`. Controlled,
-	 * props-in / callbacks-out: the view owns no placement state, it renders
-	 * position from each `Source.timelineOffsetMs` and reports drag results out.
-	 * When omitted, the timeline still lays strips out by offset but the drag
-	 * affordance is not rendered (the component-showcase case).
-	 */
-	readonly onSourceOffsetChange?: (sourceId: string, offsetMs: number) => void;
-	readonly onTransportControlChange?: (control: TransportControl) => void;
-}
+interface TimelineViewProps extends SourceViewProps, SourceManagementProps {}
 
-export function TimelineView({
-	sources,
-	sourceAudio,
-	channelInput,
-	settings,
-	onSourceOffsetChange,
-	onTransportControlChange,
-	sourceStatus,
-	sourceErrors,
-	onRetrySource,
-	onRelinkSource,
-	onSourceChange,
-	onSourceRemove,
-	onAddSources,
-	onAddSourceFiles,
-}: TimelineViewProps) {
-	const readouts = useWaveformReadouts();
-	const [cursor, setCursor] = useState<number | null>(null);
-	const [drag, setDrag] = useState<TimelineDrag | null>(null);
-	const [fileDragActive, setFileDragActive] = useState(false);
-	const fileDragDepth = useRef(0);
+export const TimelineView = scope<TimelineViewProps>(
+	({
+		sourceAudio,
+		onTransportControlChange,
+		sourceStatus,
+		sourceErrors,
+		onRetrySource,
+		onRelinkSource,
+		context,
+	}: TimelineViewProps) => {
+		const { document } = context.session;
+		const { sources, channelInput, renderSettings: settings } = document;
+		const readouts = useWaveformReadouts(context);
+		const [cursor, setCursor] = useState<number | null>(null);
+		const [drag, setDrag] = useState<TimelineDrag | null>(null);
+		const [fileDragActive, setFileDragActive] = useState(false);
+		const fileDragDepth = useRef(0);
 
-	const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
+		const renderableSources = useMemo(() => resolveVisibleSourceAudio(sources, sourceAudio), [sources, sourceAudio]);
 
-	const extent = useMemo(
-		() =>
-			computeTimelineExtent(
-				renderableSources.map(({ source, audioData }) => ({
-					id: source.id,
-					offsetMs: source.timelineOffsetMs,
-					durationMs: audioData.durationMs,
-				})),
-				drag,
-			),
-		[renderableSources, drag],
-	);
-	const minimapDurationMs = useMemo(
-		() =>
-			computeTimelineExtent(
-				renderableSources.map(({ source, audioData }) => ({
-					id: source.id,
-					offsetMs: source.timelineOffsetMs,
-					durationMs: audioData.durationMs,
-				})),
-				null,
-			).endMs,
-		[renderableSources],
-	);
+		const extent = useMemo(
+			() =>
+				computeTimelineExtent(
+					renderableSources.map(({ source, audioData }) => ({
+						id: source.id,
+						offsetMs: source.timelineOffsetMs,
+						durationMs: audioData.durationMs,
+					})),
+					drag,
+				),
+			[renderableSources, drag],
+		);
+		const minimapDurationMs = useMemo(
+			() =>
+				computeTimelineExtent(
+					renderableSources.map(({ source, audioData }) => ({
+						id: source.id,
+						offsetMs: source.timelineOffsetMs,
+						durationMs: audioData.durationMs,
+					})),
+					null,
+				).endMs,
+			[renderableSources],
+		);
 
-	const highestSampleRate =
-		renderableSources.reduce((highest, entry) => Math.max(highest, entry.audioData.sampleRate), 0) || 48000;
-	const viewport = useTimeViewport(extent.startMs, extent.endMs, drag !== null, 1000 / highestSampleRate);
-	const windowStartMs = viewport.startMs;
-	const windowEndMs = viewport.endMs;
+		const highestSampleRate =
+			renderableSources.reduce((highest, entry) => Math.max(highest, entry.audioData.sampleRate), 0) || 48000;
+		const viewport = useTimeViewport(extent.startMs, extent.endMs, drag !== null, 1000 / highestSampleRate);
+		const windowStartMs = viewport.startMs;
+		const windowEndMs = viewport.endMs;
 
-	const durationSec = extent.endMs / 1000;
+		const setViewportToFraction = useCallback(
+			(fraction: number) => {
+				const centerMs = fraction * minimapDurationMs;
+				const span = viewport.endMs - viewport.startMs;
 
-	const setViewportToFraction = useCallback(
-		(fraction: number) => {
-			const centerMs = fraction * minimapDurationMs;
-			const span = viewport.endMs - viewport.startMs;
+				viewport.setViewport({ startMs: centerMs - span / 2, endMs: centerMs + span / 2 });
+			},
+			[minimapDurationMs, viewport],
+		);
 
-			viewport.setViewport({ startMs: centerMs - span / 2, endMs: centerMs + span / 2 });
-		},
-		[minimapDurationMs, viewport],
-	);
+		const viewStartFrac = minimapDurationMs > 0 ? Math.max(0, Math.min(1, windowStartMs / minimapDurationMs)) : 0;
+		const viewEndFrac = minimapDurationMs > 0 ? Math.max(0, Math.min(1, windowEndMs / minimapDurationMs)) : 1;
 
-	const viewStartFrac = minimapDurationMs > 0 ? Math.max(0, Math.min(1, windowStartMs / minimapDurationMs)) : 0;
-	const viewEndFrac = minimapDurationMs > 0 ? Math.max(0, Math.min(1, windowEndMs / minimapDurationMs)) : 1;
+		const minimapLayers = useMemo(
+			() =>
+				minimapLayersOf(
+					renderableSources.map(({ source, audioData }) => ({
+						source,
+						audioData: placeAudioOnTimeline(audioData, source.timelineOffsetMs, minimapDurationMs),
+					})),
+				),
+			[renderableSources, minimapDurationMs],
+		);
 
-	const minimapLayers = useMemo(
-		() =>
-			minimapLayersOf(
-				renderableSources.map(({ source, audioData }) => ({
-					source,
-					audioData: placeAudioOnTimeline(audioData, source.timelineOffsetMs, minimapDurationMs),
-				})),
-			),
-		[renderableSources, minimapDurationMs],
-	);
+		usePublishedTransportControl(readouts.control, onTransportControlChange);
 
-	const playback = useTransportPlayback(durationSec);
+		const addSourcesFromDialog = useCallback(async () => {
+			const filePaths = await pickAudioFiles();
 
-	const transportControl = useMemo<TransportControl>(
-		() => ({
-			...playback,
-			...readouts.control,
-		}),
-		[playback, readouts.control],
-	);
+			if (filePaths) appendSources(filePaths, context);
+		}, [identify(document)]);
 
-	useEffect(() => {
-		if (onTransportControlChange) {
-			onTransportControlChange(transportControl);
-		}
-	}, [onTransportControlChange, transportControl]);
+		const trackCount = sources.length;
+		const defaultRange = useMemo(() => defaultTrackRangeOf(trackCount), [trackCount]);
+		const minSpan = Math.min(TRACK_MIN_SPAN, defaultRange.end);
+		const [trackRange, setTrackRange] = useState<{ readonly count: number; readonly range: AxisRange }>({
+			count: trackCount,
+			range: defaultRange,
+		});
+		const yRange = trackRange.count === trackCount ? trackRange.range : defaultRange;
+		const setYRange = useCallback((range: AxisRange) => setTrackRange({ count: trackCount, range }), [trackCount]);
+		const visibleTracks = visibleTracksOf(yRange, trackCount);
+		const trackHeight = trackHeightStyleOf(trackCount);
 
-	const trackCount = sources.length;
-	const defaultRange = useMemo(() => defaultTrackRangeOf(trackCount), [trackCount]);
-	const minSpan = Math.min(TRACK_MIN_SPAN, defaultRange.end);
-	const [trackRange, setTrackRange] = useState<{ readonly count: number; readonly range: AxisRange }>({
-		count: trackCount,
-		range: defaultRange,
-	});
-	const yRange = trackRange.count === trackCount ? trackRange.range : defaultRange;
-	const setYRange = useCallback((range: AxisRange) => setTrackRange({ count: trackCount, range }), [trackCount]);
-	const visibleTracks = visibleTracksOf(yRange, trackCount);
-	const trackHeight = trackHeightStyleOf(trackCount);
+		const stripViewportRef = useRef<HTMLDivElement>(null);
+		const wheelStateRef = useRef({ trackCount, defaultRange, minSpan, yRange });
 
-	const stripViewportRef = useRef<HTMLDivElement>(null);
-	const wheelStateRef = useRef({ trackCount, defaultRange, minSpan, yRange });
+		wheelStateRef.current = { trackCount, defaultRange, minSpan, yRange };
 
-	wheelStateRef.current = { trackCount, defaultRange, minSpan, yRange };
+		useEffect(() => {
+			const element = stripViewportRef.current;
 
-	useEffect(() => {
-		const element = stripViewportRef.current;
+			if (!element) return;
 
-		if (!element) return;
+			const onWheel = (event: WheelEvent) => {
+				const state = wheelStateRef.current;
+				const rect = element.getBoundingClientRect();
 
-		const onWheel = (event: WheelEvent) => {
-			const state = wheelStateRef.current;
-			const rect = element.getBoundingClientRect();
+				if (event.ctrlKey || event.metaKey || state.yRange.end - state.yRange.start >= 1 || rect.height <= 0)
+					return;
 
-			if (event.ctrlKey || event.metaKey || state.yRange.end - state.yRange.start >= 1 || rect.height <= 0) return;
+				event.preventDefault();
+				event.stopPropagation();
+				setTrackRange((previous) => {
+					const current = previous.count === state.trackCount ? previous.range : state.defaultRange;
+					const delta = (event.deltaY / rect.height) * (current.end - current.start);
 
-			event.preventDefault();
-			event.stopPropagation();
-			setTrackRange((previous) => {
-				const current = previous.count === state.trackCount ? previous.range : state.defaultRange;
-				const delta = (event.deltaY / rect.height) * (current.end - current.start);
+					return { count: state.trackCount, range: panAxisRange(current, delta, state.minSpan) };
+				});
+			};
 
-				return { count: state.trackCount, range: panAxisRange(current, delta, state.minSpan) };
-			});
-		};
+			element.addEventListener("wheel", onWheel, { passive: false });
 
-		element.addEventListener("wheel", onWheel, { passive: false });
+			return () => {
+				element.removeEventListener("wheel", onWheel);
+			};
+		}, []);
 
-		return () => {
-			element.removeEventListener("wheel", onWheel);
-		};
-	}, []);
-
-	return (
-		<ViewProgressProvider>
-			<div
-				className="flex h-full min-h-0 w-full overflow-hidden bg-void"
-				onDragEnter={(event) => {
-					if (!event.dataTransfer.types.includes("Files")) return;
-
-					fileDragDepth.current += 1;
-					setFileDragActive(true);
-				}}
-				onDragLeave={(event) => {
-					if (!event.dataTransfer.types.includes("Files")) return;
-
-					fileDragDepth.current = Math.max(0, fileDragDepth.current - 1);
-
-					if (fileDragDepth.current === 0) setFileDragActive(false);
-				}}
-				onDragOver={(event) => {
-					if (event.dataTransfer.types.includes("Files")) event.preventDefault();
-				}}
-				onDrop={(event) => {
-					fileDragDepth.current = 0;
-					setFileDragActive(false);
-
-					if (event.dataTransfer.files.length === 0) return;
-
-					event.preventDefault();
-
-					const filePaths = droppedAudioFilePathsOf([...event.dataTransfer.files], (file) =>
-						main.pathForFile(file),
-					);
-
-					if (filePaths.length > 0) onAddSourceFiles?.(filePaths);
-				}}
-			>
+		return (
+			<ViewProgressProvider>
 				<div
-					className="min-h-0 min-w-0 flex-1 overflow-hidden"
-					style={{
-						display: "grid",
-						gridTemplateColumns: "minmax(0, 1fr)",
-						gridTemplateRows: "auto minmax(0, 1fr) auto",
+					className="flex h-full min-h-0 w-full overflow-hidden bg-void"
+					onDragEnter={(event) => {
+						if (!event.dataTransfer.types.includes("Files")) return;
+
+						fileDragDepth.current += 1;
+						setFileDragActive(true);
+					}}
+					onDragLeave={(event) => {
+						if (!event.dataTransfer.types.includes("Files")) return;
+
+						fileDragDepth.current = Math.max(0, fileDragDepth.current - 1);
+
+						if (fileDragDepth.current === 0) setFileDragActive(false);
+					}}
+					onDragOver={(event) => {
+						if (event.dataTransfer.types.includes("Files")) event.preventDefault();
+					}}
+					onDrop={(event) => {
+						fileDragDepth.current = 0;
+						setFileDragActive(false);
+
+						if (event.dataTransfer.files.length === 0) return;
+
+						event.preventDefault();
+
+						const filePaths = droppedAudioFilePathsOf([...event.dataTransfer.files], (file) =>
+							main.pathForFile(file),
+						);
+
+						if (filePaths.length > 0) appendSources(filePaths, context);
 					}}
 				>
-					<TimeRuler startMs={windowStartMs} endMs={windowEndMs} />
+					<div
+						className="min-h-0 min-w-0 flex-1 overflow-hidden"
+						style={{
+							display: "grid",
+							gridTemplateColumns: "minmax(0, 1fr)",
+							gridTemplateRows: "auto minmax(0, 1fr) auto",
+						}}
+					>
+						<TimeRuler startMs={windowStartMs} endMs={windowEndMs} context={context} />
 
-					<div className="relative flex min-h-0 flex-col bg-void">
-						<CursorSurface
-							surfaceRef={viewport.wheelHandlers.ref}
-							startMs={windowStartMs}
-							endMs={windowEndMs}
-							cursorMs={cursor}
-							onCursorChange={setCursor}
-							className="relative min-h-0 flex-1 overflow-hidden bg-void"
-						>
-							<div ref={stripViewportRef} className="absolute inset-0 overflow-hidden">
-								<div className="absolute inset-x-0 flex flex-col" style={trackStackStyleOf(yRange)}>
-									{sources.map((source, index) => (
-										<TimelineTrack
-											key={source.id}
-											source={source}
-											audioData={sourceAudio.get(source.id)}
-											status={sourceStatus?.get(source.id)}
-											error={sourceErrors?.get(source.id)}
-											height={trackHeight}
-											offsetMs={
-												drag?.id === source.id
-													? Math.max(0, drag.offsetMs)
-													: Math.max(0, source.timelineOffsetMs)
-											}
-											windowStartMs={windowStartMs}
-											windowEndMs={windowEndMs}
-											committedStartMs={viewport.committedStartMs}
-											committedEndMs={viewport.committedEndMs}
-											freezeCompute={
-												drag !== null ||
-												viewport.startMs !== viewport.committedStartMs ||
-												viewport.endMs !== viewport.committedEndMs
-											}
-											extentEndMs={extent.endMs}
-											frequencyScale={settings.frequencyScale}
-											spectrogramSampling={settings.spectrogramSampling}
-											spectrogramColormap={settings.spectrogramColormap}
-											fftSize={settings.fftSize}
-											hopOverlap={settings.hopOverlap}
-											channelInput={channelInput}
-											waveformOpacity={settings.waveformOpacity}
-											spectrogramOpacity={settings.spectrogramOpacity}
-											draggable={onSourceOffsetChange !== undefined}
-											handleTop={trackHandleTopOf(yRange, index, trackCount)}
-											onCursorMove={readouts.setCursorReadout}
-											onDisplayedResultChange={readouts.onDisplayedResultChange}
-											onDragMove={(offsetMs) => {
-												setDrag({ id: source.id, offsetMs });
-											}}
-											onCommit={(offsetMs) => {
-												setDrag(null);
-												onSourceOffsetChange?.(source.id, offsetMs);
-											}}
-											onSourceChange={
-												onSourceChange ? (changes) => onSourceChange(source.id, changes) : undefined
-											}
-											onRetry={onRetrySource ? () => onRetrySource(source.id) : undefined}
-											onRelink={onRelinkSource ? () => onRelinkSource(source.id) : undefined}
-											onRemove={onSourceRemove ? () => onSourceRemove(source.id) : undefined}
-										/>
-									))}
-									<div
-										className={`relative z-[3] flex h-14 shrink-0 items-center justify-center border border-dashed bg-void ${fileDragActive ? "border-chrome-text-secondary" : "border-chrome-border"}`}
-									>
-										{fileDragActive && (
-											<div
-												aria-hidden="true"
-												className="pointer-events-none absolute inset-0 bg-data-cursor/15"
+						<div className="relative flex min-h-0 flex-col bg-void">
+							<CursorSurface
+								surfaceRef={viewport.wheelHandlers.ref}
+								startMs={windowStartMs}
+								endMs={windowEndMs}
+								cursorMs={cursor}
+								onCursorChange={setCursor}
+								className="relative min-h-0 flex-1 overflow-hidden bg-void"
+								context={context}
+							>
+								<div ref={stripViewportRef} className="absolute inset-0 overflow-hidden">
+									<div className="absolute inset-x-0 flex flex-col" style={trackStackStyleOf(yRange)}>
+										{sources.map((source, index) => (
+											<TimelineTrack
+												key={source.id}
+												source={source}
+												audioData={sourceAudio.get(source.id)}
+												status={sourceStatus?.get(source.id)}
+												error={sourceErrors?.get(source.id)}
+												height={trackHeight}
+												offsetMs={
+													drag?.id === source.id
+														? Math.max(0, drag.offsetMs)
+														: Math.max(0, source.timelineOffsetMs)
+												}
+												windowStartMs={windowStartMs}
+												windowEndMs={windowEndMs}
+												committedStartMs={viewport.committedStartMs}
+												committedEndMs={viewport.committedEndMs}
+												freezeCompute={
+													drag !== null ||
+													viewport.startMs !== viewport.committedStartMs ||
+													viewport.endMs !== viewport.committedEndMs
+												}
+												extentEndMs={extent.endMs}
+												frequencyScale={settings.frequencyScale}
+												spectrogramSampling={settings.spectrogramSampling}
+												spectrogramColormap={settings.spectrogramColormap}
+												fftSize={settings.fftSize}
+												hopOverlap={settings.hopOverlap}
+												channelInput={channelInput}
+												waveformOpacity={settings.waveformOpacity}
+												spectrogramOpacity={settings.spectrogramOpacity}
+												handleTop={trackHandleTopOf(yRange, index, trackCount)}
+												onCursorMove={readouts.setCursorReadout}
+												onDisplayedResultChange={readouts.onDisplayedResultChange}
+												onDragMove={(offsetMs) => {
+													setDrag({ id: source.id, offsetMs });
+												}}
+												onCommit={(offsetMs) => {
+													setDrag(null);
+													source.timelineOffsetMs = offsetMs;
+												}}
+												onSourceChange={(changes) => {
+													Object.assign(source, changes);
+												}}
+												onRetry={onRetrySource ? () => onRetrySource(source.id) : undefined}
+												onRelink={onRelinkSource ? () => onRelinkSource(source.id) : undefined}
+												onRemove={() => removeSource(source.id, context)}
 											/>
-										)}
-										<Button variant="primary" className="px-1 py-0.5" onClick={onAddSources}>
-											<Icon icon="lucide:plus" width={16} height={16} aria-hidden="true" />
-											Add Source
-										</Button>
-										<span className="ml-3 font-body text-sm text-chrome-text-dim">
-											or drop audio files here
-										</span>
+										))}
+										<div
+											className={`relative z-[3] flex h-14 shrink-0 items-center justify-center border border-dashed bg-void ${fileDragActive ? "border-chrome-text-secondary" : "border-chrome-border"}`}
+										>
+											{fileDragActive && (
+												<div
+													aria-hidden="true"
+													className="pointer-events-none absolute inset-0 bg-data-cursor/15"
+												/>
+											)}
+											<Button variant="primary" className="px-1 py-0.5" onClick={addSourcesFromDialog}>
+												<Icon icon="lucide:plus" width={16} height={16} aria-hidden="true" />
+												Add Source
+											</Button>
+											<span className="ml-3 font-body text-sm text-chrome-text-dim">
+												or drop audio files here
+											</span>
+										</div>
 									</div>
 								</div>
-							</div>
-							{renderableSources.length > 0 && (
-								<GridOverlay startMs={windowStartMs} endMs={windowEndMs} opacity={settings.gridOpacity} />
-							)}
-							<CursorLine fraction={timeToFraction(cursor, windowStartMs, windowEndMs)} />
-						</CursorSurface>
-						<ViewProgressToast />
-					</div>
+								{renderableSources.length > 0 && (
+									<GridOverlay startMs={windowStartMs} endMs={windowEndMs} opacity={settings.gridOpacity} />
+								)}
+								<CursorLine fraction={timeToFraction(cursor, windowStartMs, windowEndMs)} />
+							</CursorSurface>
+							<ViewProgressToast />
+						</div>
 
-					<MinimapDisplay
-						layers={minimapLayers}
-						viewStartFrac={viewStartFrac}
-						viewEndFrac={viewEndFrac}
-						channelInput={channelInput}
-						onScrubToFraction={setViewportToFraction}
-					/>
-				</div>
-				{trackCount === 0 ? (
-					<div className="w-3 shrink-0" />
-				) : (
-					<div className="flex shrink-0 flex-col">
-						<div className="h-8" />
-						<ScrollTrack
-							axis="y"
-							className="min-h-0 flex-1"
-							range={yRange}
-							minSpan={minSpan}
-							onRangeChange={setYRange}
-							label="Track range"
-							valueText={`tracks ${visibleTracks.first} to ${visibleTracks.last} of ${trackCount}`}
-							edgeLabels={["Upper track range", "Lower track range"]}
-							edgeValueTexts={[`track ${visibleTracks.first}`, `track ${visibleTracks.last}`]}
+						<MinimapDisplay
+							layers={minimapLayers}
+							viewStartFrac={viewStartFrac}
+							viewEndFrac={viewEndFrac}
+							channelInput={channelInput}
+							onScrubToFraction={setViewportToFraction}
 						/>
-						<div className="h-10" />
 					</div>
-				)}
-			</div>
-		</ViewProgressProvider>
-	);
-}
+					{trackCount === 0 ? (
+						<div className="w-3 shrink-0" />
+					) : (
+						<div className="flex shrink-0 flex-col">
+							<div className="h-8" />
+							<ScrollTrack
+								axis="y"
+								className="min-h-0 flex-1"
+								range={yRange}
+								minSpan={minSpan}
+								onRangeChange={setYRange}
+								label="Track range"
+								valueText={`tracks ${visibleTracks.first} to ${visibleTracks.last} of ${trackCount}`}
+								edgeLabels={["Upper track range", "Lower track range"]}
+								edgeValueTexts={[`track ${visibleTracks.first}`, `track ${visibleTracks.last}`]}
+							/>
+							<div className="h-10" />
+						</div>
+					)}
+				</div>
+			</ViewProgressProvider>
+		);
+	},
+);

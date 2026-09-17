@@ -1,6 +1,7 @@
+import { scope } from "opshot/react";
 import { DerivedPairView } from "./DerivedPairView";
-import type { DerivedSpectralViewProps, DifferenceSelectionProps } from "./viewProps";
+import type { DerivedSpectralViewProps } from "./viewProps";
 
-export function DifferenceView(props: DerivedSpectralViewProps & DifferenceSelectionProps) {
-	return <DerivedPairView {...props} viewId="difference" operator="−" />;
-}
+export const DifferenceView = scope<DerivedSpectralViewProps>((props: DerivedSpectralViewProps) => (
+	<DerivedPairView {...props} viewId="difference" operator="−" />
+));

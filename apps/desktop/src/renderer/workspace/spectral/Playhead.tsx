@@ -1,12 +1,15 @@
-import { useWorkspacePlayback } from "../playback";
+import { scope } from "opshot/react";
+import type { SessionContext } from "../../models/Context";
 
 interface PlayheadProps {
 	readonly startMs: number;
 	readonly endMs: number;
+	readonly context: SessionContext;
 }
 
-export function Playhead({ startMs, endMs }: PlayheadProps) {
-	const { positionSec } = useWorkspacePlayback();
+export const Playhead = scope<PlayheadProps>(({ startMs, endMs, context }: PlayheadProps) => {
+	const { playback } = context;
+	const positionSec = playback.positionSec;
 	const fraction = (positionSec * 1000 - startMs) / (endMs - startMs);
 
 	if (endMs <= startMs || !Number.isFinite(fraction) || fraction < 0 || fraction > 1) return null;
@@ -19,4 +22,4 @@ export function Playhead({ startMs, endMs }: PlayheadProps) {
 			style={{ left: `${fraction * 100}%` }}
 		/>
 	);
-}
+});

@@ -1,77 +1,96 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { identify, subscribe } from "opshot";
+import { useEffect, useRef, useState } from "react";
 import { PlaybackEngine } from "./PlaybackEngine";
+import type { PlaybackControls, PlaybackState } from "../models/State/Playback";
+import type { Session } from "../models/State/Session";
 
-export interface UsePlayerResult {
-	readonly playing: boolean;
-	readonly positionSec: number;
-	readonly durationSec: number;
-	readonly onPlayToggle: () => void;
-	readonly onSeek: (sec: number) => void;
-	readonly onVolumeChange: (volume: number) => void;
-	readonly error: string | null;
+function messageOf(reason: unknown): string {
+	return reason instanceof Error ? reason.message : String(reason);
 }
-
-interface PlayerSettings {
-	readonly playbackRate: number;
-	readonly looping: boolean;
-	readonly selection: { readonly start: number; readonly end: number } | null;
-	readonly preparing: boolean;
-}
-
-const DEFAULT_SETTINGS: PlayerSettings = { playbackRate: 1, looping: false, selection: null, preparing: false };
 
 export function usePlayer(
 	streamUrl: string | null,
 	durationSec: number,
-	initialPositionSec: number,
-	onPositionCommit: (positionSec: number) => void,
-	volume: number,
-	settings: PlayerSettings = DEFAULT_SETTINGS,
-): UsePlayerResult {
-	const [playing, setPlaying] = useState(false);
-	const [positionSec, setPositionSec] = useState(initialPositionSec);
-	const [reportedDurationSec, setReportedDurationSec] = useState(durationSec);
-	const [error, setError] = useState<string | null>(null);
+	preparing: boolean,
+	selection: { readonly start: number; readonly end: number } | null,
+	playback: PlaybackState,
+	session: Session,
+): PlaybackControls {
+	const { document, transport } = session;
 	const playerRef = useRef<PlaybackEngine | null>(null);
-	const livePositionRef = useRef(initialPositionSec);
 	const resumeAfterPreparationRef = useRef(false);
-	const onPositionCommitRef = useRef(onPositionCommit);
-	const volumeRef = useRef(volume);
-	const settingsRef = useRef(settings);
+	const streamUrlRef = useRef(streamUrl);
 
-	onPositionCommitRef.current = onPositionCommit;
-	volumeRef.current = volume;
-	settingsRef.current = settings;
+	streamUrlRef.current = streamUrl;
+
+	const [controls] = useState<PlaybackControls>(() => ({
+		onPlayToggle: () => {
+			const player = playerRef.current;
+
+			if (!player) return;
+
+			playback.error = null;
+
+			if (player.playing || resumeAfterPreparationRef.current) {
+				resumeAfterPreparationRef.current = false;
+				player.pause();
+			} else if (streamUrlRef.current !== null) {
+				if (player.positionSec >= player.durationSec) player.seek(0);
+
+				void player.play().catch((reason: unknown) => {
+					playback.error = messageOf(reason);
+					player.pause();
+				});
+			}
+		},
+		onSeek: (sec: number) => {
+			const player = playerRef.current;
+
+			if (!player || streamUrlRef.current === null) return;
+
+			player.seek(sec);
+			transport.positionSec = player.positionSec;
+		},
+		onVolumeChange: (volume: number) => playerRef.current?.setVolume(volume),
+	}));
 
 	useEffect(() => {
 		const player = new PlaybackEngine();
 
 		playerRef.current = player;
-		player.setVolume(volumeRef.current);
-		player.setPlaybackRate(settingsRef.current.playbackRate);
+		player.setVolume(document.volume);
+		player.setPlaybackRate(transport.playbackRate);
 
 		const unsubscribePosition = player.onPositionChange((next) => {
-			livePositionRef.current = next;
-			setPositionSec(next);
+			playback.positionSec = next;
 		});
 		const unsubscribePlaying = player.onPlayingChange((next) => {
-			setPlaying(next);
+			playback.playing = next;
 
-			if (!next) onPositionCommitRef.current(livePositionRef.current);
+			if (!next) transport.positionSec = playback.positionSec;
 		});
-		const unsubscribeDuration = player.onDurationChange((next) => setReportedDurationSec(next));
-		const unsubscribeError = player.onError(setError);
+		const unsubscribeError = player.onError((message) => {
+			playback.error = message;
+		});
 
 		return () => {
-			onPositionCommitRef.current(livePositionRef.current);
+			transport.positionSec = playback.positionSec;
 			unsubscribePosition();
 			unsubscribePlaying();
-			unsubscribeDuration();
 			unsubscribeError();
 			player.dispose();
 			playerRef.current = null;
 		};
 	}, []);
+
+	useEffect(
+		() =>
+			subscribe(document, (operations) => {
+				if (operations.some((operation) => operation.key === "volume"))
+					playerRef.current?.setVolume(document.volume);
+			}),
+		[identify(document)],
+	);
 
 	useEffect(() => {
 		const player = playerRef.current;
@@ -79,92 +98,51 @@ export function usePlayer(
 		if (!player) return;
 
 		if (streamUrl === null) {
-			resumeAfterPreparationRef.current =
-				settings.preparing && (player.playing || resumeAfterPreparationRef.current);
+			resumeAfterPreparationRef.current = preparing && (player.playing || resumeAfterPreparationRef.current);
 			player.pause();
-			setReportedDurationSec(0);
 
 			return;
 		}
 
-		const resumeSec = livePositionRef.current;
+		const resumeSec = playback.positionSec;
 		const wasPlaying = player.playing || resumeAfterPreparationRef.current;
 
 		resumeAfterPreparationRef.current = false;
 
 		const changed = player.setSourceUrl(streamUrl, resumeSec, durationSec);
 
-		setReportedDurationSec(durationSec);
-
-		if (changed) setError(null);
+		if (changed) playback.error = null;
 
 		if (wasPlaying && !player.playing) {
 			void player.play().catch((reason: unknown) => {
-				setError(reason instanceof Error ? reason.message : String(reason));
+				playback.error = messageOf(reason);
 				player.pause();
 			});
 		}
-	}, [streamUrl, durationSec, settings.preparing]);
+	}, [streamUrl, durationSec, preparing]);
 
 	useEffect(() => {
 		const player = playerRef.current;
 
 		if (!player) return;
 
-		player.setPlaybackRate(settings.playbackRate);
+		player.setPlaybackRate(transport.playbackRate);
 
-		const loopStart = settings.selection
-			? Math.max(0, Math.min(player.durationSec, settings.selection.start / 1000))
-			: 0;
-		const loopEnd = settings.selection
-			? Math.max(0, Math.min(player.durationSec, settings.selection.end / 1000))
-			: player.durationSec;
+		const loopStart = selection ? Math.max(0, Math.min(player.durationSec, selection.start / 1000)) : 0;
+		const loopEnd = selection ? Math.max(0, Math.min(player.durationSec, selection.end / 1000)) : player.durationSec;
 		const loopRegion = loopEnd > loopStart ? { startSec: loopStart, endSec: loopEnd } : null;
 
 		player.setLoopRegion(loopRegion);
-		player.setLooping(settings.looping);
+		player.setLooping(transport.looping);
 
 		if (
-			settings.looping &&
+			transport.looping &&
 			loopRegion &&
 			(player.positionSec < loopRegion.startSec || player.positionSec >= loopRegion.endSec)
 		) {
 			player.seek(loopRegion.startSec);
 		}
-	}, [settings.playbackRate, settings.looping, settings.selection, streamUrl]);
+	}, [selection?.start, selection?.end, transport.looping, transport.playbackRate, streamUrl]);
 
-	const onPlayToggle = useCallback(() => {
-		const player = playerRef.current;
-
-		if (!player) return;
-
-		setError(null);
-
-		if (player.playing || resumeAfterPreparationRef.current) {
-			resumeAfterPreparationRef.current = false;
-			player.pause();
-		} else if (streamUrl !== null) {
-			if (player.positionSec >= player.durationSec) player.seek(0);
-
-			void player.play().catch((reason: unknown) => {
-				setError(reason instanceof Error ? reason.message : String(reason));
-				player.pause();
-			});
-		}
-	}, [streamUrl]);
-
-	const onSeek = useCallback(
-		(sec: number) => {
-			const player = playerRef.current;
-
-			if (!player || streamUrl === null) return;
-
-			player.seek(sec);
-			onPositionCommitRef.current(player.positionSec);
-		},
-		[streamUrl],
-	);
-	const onVolumeChange = useCallback((next: number) => playerRef.current?.setVolume(next), []);
-
-	return { playing, positionSec, durationSec: reportedDurationSec, onPlayToggle, onSeek, onVolumeChange, error };
+	return controls;
 }

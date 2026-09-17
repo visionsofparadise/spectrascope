@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { identify } from "opshot";
+import { useCallback, useState } from "react";
 import { SourceRender } from "../SourceRender";
 import { timeToFraction } from "../views/viewCursor";
 import { FrequencyAxis, DbAxis, TimeRuler } from "./Axes";
@@ -8,13 +9,13 @@ import { GridOverlay } from "./GridOverlay";
 import { MinimapDisplay, minimapLayersOf } from "./MinimapDisplay";
 import { useWaveformReadouts } from "./useWaveformReadouts";
 import { ViewProgressProvider, ViewProgressToast } from "./viewProgress";
-import { usePublishedTransportControl, useTransportPlayback, useViewportScrub } from "./viewScaffold";
+import { usePublishedTransportControl, useViewportScrub } from "./viewScaffold";
+import type { SessionContext } from "../../models/Context";
+import type { RenderSettings } from "../../models/State/Session";
 import type { Source } from "../source";
 import type { TransportControl } from "../Transport";
-import type { SourceWithAudio } from "../views/viewAudio";
-import type { ViewControlSettings } from "../viewSettings";
 import type { AudioData } from "./types";
-import type { FrequencyScale } from "spectral-display";
+import type { SourceWithAudio } from "../views/viewAudio";
 import type { TextureVerticalRange } from "spectral-display";
 import type { ChannelInput } from "spectral-display";
 
@@ -22,12 +23,11 @@ type StripView = ReturnType<typeof useStripView>;
 
 export function useStripView(
 	chromeAudio: AudioData,
-	frequencyRange: TextureVerticalRange,
-	frequencyScale: FrequencyScale,
-	onFrequencyRangeChange: (range: TextureVerticalRange) => void,
-	onTransportControlChange?: (control: TransportControl) => void,
+	onTransportControlChange: ((control: TransportControl) => void) | undefined,
+	context: SessionContext,
 ) {
-	const readouts = useWaveformReadouts();
+	const { document, navigation } = context.session;
+	const readouts = useWaveformReadouts(context);
 
 	const [cursor, setCursor] = useState<number | null>(null);
 
@@ -35,17 +35,14 @@ export function useStripView(
 	const startMs = scrub.viewport.committedStartMs;
 	const endMs = scrub.viewport.committedEndMs;
 
-	const playback = useTransportPlayback(chromeAudio.durationMs / 1000);
+	usePublishedTransportControl(readouts.control, onTransportControlChange);
 
-	const control = useMemo<TransportControl>(
-		() => ({
-			...playback,
-			...readouts.control,
-		}),
-		[playback, readouts.control],
+	const onFrequencyRangeChange = useCallback(
+		(range: TextureVerticalRange) => {
+			navigation.frequencyRange = { top: range.top, bottom: range.bottom };
+		},
+		[identify(navigation)],
 	);
-
-	usePublishedTransportControl(control, onTransportControlChange);
 
 	return {
 		chromeAudio,
@@ -55,8 +52,8 @@ export function useStripView(
 		startMs,
 		endMs,
 		...readouts,
-		frequencyRange,
-		frequencyScale,
+		frequencyRange: navigation.frequencyRange,
+		frequencyScale: document.renderSettings.frequencyScale,
 		onFrequencyRangeChange,
 		cursorFrac: timeToFraction(cursor, scrub.viewport.startMs, scrub.viewport.endMs),
 	};
@@ -64,7 +61,7 @@ export function useStripView(
 
 interface StripOverlaysProps {
 	readonly view: StripView;
-	readonly settings: ViewControlSettings;
+	readonly settings: RenderSettings;
 	readonly spectrogram?: boolean;
 }
 
@@ -91,9 +88,17 @@ interface StripLayoutProps {
 	readonly channelInput: ChannelInput;
 	readonly minimapSources: ReadonlyArray<SourceWithAudio>;
 	readonly spectrogram?: boolean;
+	readonly context: SessionContext;
 }
 
-export function StripLayout({ view, children, channelInput, minimapSources, spectrogram = true }: StripLayoutProps) {
+export function StripLayout({
+	view,
+	children,
+	channelInput,
+	minimapSources,
+	spectrogram = true,
+	context,
+}: StripLayoutProps) {
 	return (
 		<ViewProgressProvider>
 			<div className="flex h-full min-h-0 w-full overflow-hidden bg-void">
@@ -106,7 +111,7 @@ export function StripLayout({ view, children, channelInput, minimapSources, spec
 					}}
 				>
 					<div className="bg-void" />
-					<TimeRuler startMs={view.viewport.startMs} endMs={view.viewport.endMs} />
+					<TimeRuler startMs={view.viewport.startMs} endMs={view.viewport.endMs} context={context} />
 					<div className="bg-void" />
 					<div className="bg-void" />
 
@@ -127,6 +132,7 @@ export function StripLayout({ view, children, channelInput, minimapSources, spec
 						endMs={view.viewport.endMs}
 						cursorMs={view.cursor}
 						onCursorChange={view.setCursor}
+						context={context}
 					>
 						{children}
 						<ViewProgressToast />
@@ -159,7 +165,7 @@ export function StripLayout({ view, children, channelInput, minimapSources, spec
 
 interface StripSourceRenderProps {
 	readonly view: StripView;
-	readonly settings: ViewControlSettings;
+	readonly settings: RenderSettings;
 	readonly channelInput: ChannelInput;
 	readonly source: Source;
 	readonly audioData: AudioData;

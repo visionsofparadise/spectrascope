@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { useChartView } from "./chartView";
 import type { ChartAxis } from "./chartView";
 import type { AudioData } from "./types";
+import type { SessionContext } from "../../models/Context";
 
 const runtime = vi.hoisted(() => ({ setCursor: vi.fn() }));
 
@@ -14,7 +15,6 @@ vi.mock("react", async (importOriginal) => ({
 
 vi.mock("./viewScaffold", () => ({
 	useViewportScrub: () => ({ viewport: { startMs: 0, endMs: 1000 } }),
-	useTransportPlayback: () => ({}),
 	usePublishedTransportControl: () => {},
 }));
 
@@ -28,7 +28,7 @@ vi.mock("./useChartReadouts", () => ({
 
 describe("chart view cursor", () => {
 	it("maps the cursor to the full-range value fraction through the visible range", () => {
-		const chart = useChartView({} as AudioData, {} as ChartAxis);
+		const chart = useChartView({} as AudioData, {} as ChartAxis, undefined, {} as SessionContext);
 		const rect = { left: 0, top: 100, width: 400, height: 200 };
 
 		chart.handleChartMouseMove({

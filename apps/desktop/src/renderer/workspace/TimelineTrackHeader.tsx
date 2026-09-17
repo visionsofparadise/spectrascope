@@ -19,6 +19,8 @@ export interface TimelineOffsetHandle {
 	readonly valueMaxMs: number;
 	readonly onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => void;
 	readonly onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
+	readonly onKeyUp: () => void;
+	readonly onBlur: () => void;
 }
 
 interface TimelineTrackHeaderProps {
@@ -58,6 +60,8 @@ export function TimelineTrackHeader({
 					aria-valuetext={`${(offsetMs / 1000).toFixed(2)} seconds`}
 					onPointerDown={offsetHandle.onPointerDown}
 					onKeyDown={offsetHandle.onKeyDown}
+					onKeyUp={offsetHandle.onKeyUp}
+					onBlur={offsetHandle.onBlur}
 					className={cn(
 						CHIP_CLASS,
 						"cursor-ew-resize outline-none focus-visible:ring-1 focus-visible:ring-primary",
