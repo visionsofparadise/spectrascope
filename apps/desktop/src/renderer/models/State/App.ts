@@ -73,7 +73,6 @@ export const ComparisonSchema = z.object({
 	volume: z.number().min(0).max(1).default(1),
 	playbackRate: z.number().min(0.25).max(2).default(1),
 	looping: z.boolean().default(false),
-	syncEnabled: z.boolean().default(false),
 	sessionFilePath: z.string().nullable().default(null),
 	savedFingerprint: z.string().nullable().default(null),
 	sources: z.array(SourceSchema).default([]),
@@ -134,7 +133,9 @@ export async function loadAppState(main: {
 
 		if (typeof raw === "object" && raw !== null && "comparisons" in raw && Array.isArray(raw.comparisons)) {
 			for (const comparison of raw.comparisons as Array<unknown>) {
-				if (typeof comparison === "object" && comparison !== null && !("name" in comparison)) {
+				if (typeof comparison !== "object" || comparison === null) continue;
+
+				if (!("name" in comparison)) {
 					const legacy = z
 						.object({ sources: z.array(z.object({ name: z.string() })).optional() })
 						.safeParse(comparison);
@@ -142,6 +143,13 @@ export async function loadAppState(main: {
 					(comparison as Record<string, unknown>).name = legacy.success
 						? (legacy.data.sources?.[0]?.name ?? "New Session")
 						: "New Session";
+				}
+
+				if ("savedFingerprint" in comparison && typeof comparison.savedFingerprint === "string") {
+					(comparison as Record<string, unknown>).savedFingerprint = comparison.savedFingerprint.replace(
+						/,"syncEnabled":(?:true|false)\}$/,
+						"}",
+					);
 				}
 			}
 		}

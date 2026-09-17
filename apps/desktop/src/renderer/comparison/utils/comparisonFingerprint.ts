@@ -15,7 +15,6 @@ export function comparisonContent(comparison: Snapshot<Comparison>) {
 		volume: comparison.volume,
 		playbackRate: comparison.playbackRate,
 		looping: comparison.looping,
-		syncEnabled: comparison.syncEnabled,
 	};
 }
 

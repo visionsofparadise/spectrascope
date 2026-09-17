@@ -37,7 +37,6 @@ export function SliderView({
 	const [curtain, setCurtain] = useState(0.5);
 
 	const view = useStripView(
-		"slider",
 		highestRateEntry?.audioData ?? chromeAudio,
 		settings.frequencyRange,
 		settings.frequencyScale,

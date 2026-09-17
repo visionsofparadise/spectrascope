@@ -1,6 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { SourceRender } from "../SourceRender";
-import { EMPTY_SYNC_STATE, useViewSync } from "../sync";
 import { timeToFraction } from "../views/viewCursor";
 import { FrequencyAxis, DbAxis, TimeRuler } from "./Axes";
 import { CursorLine, CursorSurface } from "./CursorSurface";
@@ -22,7 +21,6 @@ import type { ChannelInput } from "spectral-display";
 type StripView = ReturnType<typeof useStripView>;
 
 export function useStripView(
-	viewId: string,
 	chromeAudio: AudioData,
 	frequencyRange: TextureVerticalRange,
 	frequencyScale: FrequencyScale,
@@ -31,7 +29,7 @@ export function useStripView(
 ) {
 	const readouts = useWaveformReadouts();
 
-	const viewSync = useViewSync(viewId, EMPTY_SYNC_STATE);
+	const [cursor, setCursor] = useState<number | null>(null);
 
 	const scrub = useViewportScrub(chromeAudio);
 	const startMs = scrub.viewport.committedStartMs;
@@ -51,7 +49,8 @@ export function useStripView(
 
 	return {
 		chromeAudio,
-		viewSync,
+		cursor,
+		setCursor,
 		...scrub,
 		startMs,
 		endMs,
@@ -59,7 +58,7 @@ export function useStripView(
 		frequencyRange,
 		frequencyScale,
 		onFrequencyRangeChange,
-		cursorFrac: timeToFraction(viewSync.cursor, scrub.viewport.startMs, scrub.viewport.endMs),
+		cursorFrac: timeToFraction(cursor, scrub.viewport.startMs, scrub.viewport.endMs),
 	};
 }
 
@@ -126,8 +125,8 @@ export function StripLayout({ view, children, channelInput, minimapSources, spec
 						className="relative cursor-crosshair overflow-hidden bg-void"
 						startMs={view.viewport.startMs}
 						endMs={view.viewport.endMs}
-						cursorMs={view.viewSync.cursor}
-						onCursorChange={view.viewSync.setCursor}
+						cursorMs={view.cursor}
+						onCursorChange={view.setCursor}
 					>
 						{children}
 						<ViewProgressToast />

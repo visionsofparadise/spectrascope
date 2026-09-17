@@ -22,12 +22,7 @@ const SOURCES = [
 	{ id: "c", name: "Third" },
 ] as unknown as ReadonlyArray<Source>;
 
-function render(
-	activeView: ViewId,
-	onSettingsChange = vi.fn(),
-	onDifferenceChange = vi.fn(),
-	onSyncEnabledChange = vi.fn(),
-) {
+function render(activeView: ViewId, onSettingsChange = vi.fn(), onDifferenceChange = vi.fn()) {
 	selects.length = 0;
 	const html = renderToStaticMarkup(
 		createElement(ViewTopBar, {
@@ -41,8 +36,6 @@ function render(
 			differenceA: "a",
 			differenceB: "b",
 			onDifferenceChange,
-			syncEnabled: false,
-			onSyncEnabledChange,
 		}),
 	);
 
@@ -79,9 +72,11 @@ describe("ViewTopBar", () => {
 		expect(selectOf("Loudness metric")!.size).toBe(selectOf("Channels")!.size);
 	});
 
-	it("shows the sync toggle on timeline alone", () => {
-		expect(render("timeline").html).toContain('aria-label="Enable cross-view sync"');
-		expect(render("overlay").html).not.toContain("cross-view sync");
+	it("shows the unpressed sync button on timeline alone", () => {
+		const timeline = render("timeline").html;
+		expect(timeline).toContain('aria-pressed="false"');
+		expect(timeline).toContain("<span>Sync</span>");
+		expect(render("overlay").html).not.toContain("<span>Sync</span>");
 	});
 
 	it.each(["slider", "sum", "difference"] as const)("keeps the other side when %s changes A or B", (view) => {

@@ -13,7 +13,6 @@ import { WorkspacePlaybackProvider } from "../../workspace/playback";
 import { MeasurementSessionProvider } from "../../workspace/spectral/MeasurementSession";
 import { ViewLoadingToast } from "../../workspace/spectral/ViewLoadingToast";
 import { PreparingAudioContext } from "../../workspace/spectral/viewProgress";
-import { SyncProvider } from "../../workspace/sync";
 import { Transport } from "../../workspace/Transport";
 import { hasTransportViewControls, TransportViewControls } from "../../workspace/TransportViewControls";
 import { normalizeSelection } from "../../workspace/utils/selection";
@@ -24,7 +23,6 @@ import type { AppContext } from "../../models/Context";
 import type { Comparison } from "../../models/State/App";
 import type { HistoryControl } from "../../state/useComparisonHistory";
 import type { Source } from "../../workspace/source";
-import type { SyncState } from "../../workspace/sync";
 import type { TransportControl } from "../../workspace/Transport";
 import type { ViewControlSettings } from "../../workspace/viewSettings";
 import type { ViewId } from "../../workspace/Workspace";
@@ -43,11 +41,6 @@ interface Props {
 	readonly onExportControlChange: (control: ExportControl | null) => void;
 }
 
-const INITIAL_SYNC_STATE: SyncState = {
-	cursor: null,
-	selection: null,
-};
-
 const INITIAL_TRANSPORT_CONTROL: TransportControl = {
 	disabled: false,
 	playing: false,
@@ -63,7 +56,7 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 
 	const [transportControl, setTransportControl] = useState<TransportControl>(INITIAL_TRANSPORT_CONTROL);
 
-	const { volume, playbackRate, looping, syncEnabled, viewSettings } = comparison;
+	const { volume, playbackRate, looping, viewSettings } = comparison;
 	const [relinkError, setRelinkError] = useState<string | null>(null);
 	const updateSettings = useCallback(
 		(changes: Partial<Comparison>): void => {
@@ -78,7 +71,6 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 	const setVolume = useCallback((value: number) => updateSettings({ volume: value }), [updateSettings]);
 	const setPlaybackRate = useCallback((value: number) => updateSettings({ playbackRate: value }), [updateSettings]);
 	const setLooping = useCallback((value: boolean) => updateSettings({ looping: value }), [updateSettings]);
-	const setSyncEnabled = useCallback((value: boolean) => updateSettings({ syncEnabled: value }), [updateSettings]);
 	const setViewSettings = useCallback(
 		(value: ViewControlSettings) => updateSettings({ viewSettings: value }),
 		[updateSettings],
@@ -437,37 +429,33 @@ export function ComparisonTab({ context, comparison, onHistoryControlChange, onE
 								differenceA={comparison.differenceA}
 								differenceB={comparison.differenceB}
 								onDifferenceChange={setDifference}
-								syncEnabled={syncEnabled}
-								onSyncEnabledChange={setSyncEnabled}
 							/>
 							<div className="relative min-h-0 flex-1 overflow-hidden px-4">
 								{(preparing || derivedPreparing) && <ViewLoadingToast label="Preparing audio" />}
 								<PreparingAudioContext.Provider value={preparing || derivedPreparing}>
 									<MeasurementSessionProvider sessionId={comparison.id} sourceAudio={sourceAudio}>
-										<SyncProvider enabled={syncEnabled} initial={INITIAL_SYNC_STATE}>
-											<Workspace
-												sources={sources}
-												sourceAudio={sourceAudio}
-												derivedAudio={derivedAudio}
-												activeView={activeView}
-												channelInput={comparison.channelInput}
-												settings={viewSettings}
-												onFrequencyRangeChange={(frequencyRange) =>
-													setViewSettings({ ...viewSettings, frequencyRange })
-												}
-												differenceA={comparison.differenceA}
-												differenceB={comparison.differenceB}
-												onSourceOffsetChange={handleSourceOffsetChange}
-												onTransportControlChange={setTransportControl}
-												sourceStatus={status}
-												sourceErrors={sourceErrors}
-												onRetrySource={retrySource}
-												onRelinkSource={onRelinkSource}
-												onSourcesChange={handleSourcesChange}
-												onAddSources={addSourcesFromDialog}
-												onAddSourceFiles={appendSources}
-											/>
-										</SyncProvider>
+										<Workspace
+											sources={sources}
+											sourceAudio={sourceAudio}
+											derivedAudio={derivedAudio}
+											activeView={activeView}
+											channelInput={comparison.channelInput}
+											settings={viewSettings}
+											onFrequencyRangeChange={(frequencyRange) =>
+												setViewSettings({ ...viewSettings, frequencyRange })
+											}
+											differenceA={comparison.differenceA}
+											differenceB={comparison.differenceB}
+											onSourceOffsetChange={handleSourceOffsetChange}
+											onTransportControlChange={setTransportControl}
+											sourceStatus={status}
+											sourceErrors={sourceErrors}
+											onRetrySource={retrySource}
+											onRelinkSource={onRelinkSource}
+											onSourcesChange={handleSourcesChange}
+											onAddSources={addSourcesFromDialog}
+											onAddSourceFiles={appendSources}
+										/>
 									</MeasurementSessionProvider>
 								</PreparingAudioContext.Provider>
 							</div>

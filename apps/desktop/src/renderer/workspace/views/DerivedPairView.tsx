@@ -37,7 +37,6 @@ export function DerivedPairView({
 	);
 
 	const view = useStripView(
-		viewId,
 		derivedAudio,
 		settings.frequencyRange,
 		settings.frequencyScale,

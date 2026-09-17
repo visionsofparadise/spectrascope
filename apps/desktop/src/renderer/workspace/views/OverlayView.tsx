@@ -13,7 +13,6 @@ export function OverlayView({
 	const { renderableSources, chromeAudio } = useTimelineChromeSources(sources, sourceAudio);
 
 	const view = useStripView(
-		"overlay",
 		chromeAudio,
 		settings.frequencyRange,
 		settings.frequencyScale,

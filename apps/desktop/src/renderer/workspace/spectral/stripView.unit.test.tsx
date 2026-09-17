@@ -12,7 +12,8 @@ const source = createDefaultSource(0);
 const view = {
 	chromeAudio: EMPTY_AUDIO_DATA,
 	viewport: { startMs: 0, endMs: 1000, wheelHandlers: { ref: vi.fn() } },
-	viewSync: { cursor: null, setCursor: vi.fn() },
+	cursor: null,
+	setCursor: vi.fn(),
 	frequencyRange: { top: 0.25, bottom: 0.75 },
 	frequencyScale: "mel",
 	onFrequencyRangeChange: vi.fn(),

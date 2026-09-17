@@ -1,6 +1,6 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDefaultSource } from "../source";
 import { INITIAL_VIEW_CONTROL_SETTINGS } from "../viewSettings";
 import {
@@ -50,18 +50,46 @@ vi.mock("../useTimeViewport", async (importOriginal) => ({
 
 vi.mock("../../models/Main", () => ({ main: { pathForFile: () => "" } }));
 
-const syncCursorMs = vi.hoisted(() => ({ current: null as number | null }));
+const hookState = vi.hoisted(() => ({ held: false, index: 0, values: [] as Array<unknown> }));
+const cursorSurfaces = vi.hoisted(() => new Array<{ onCursorChange: (ms: number) => void }>());
 
-vi.mock("../sync", async (importOriginal) => ({
-	...(await importOriginal<typeof import("../sync")>()),
-	useViewSync: () => ({
-		synced: true,
-		cursor: syncCursorMs.current,
-		selection: null,
-		setCursor: () => {},
-		setSelection: () => {},
-	}),
-}));
+vi.mock("react", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("react")>();
+
+	return {
+		...actual,
+		useState: (initial: unknown) => {
+			if (!hookState.held) return actual.useState(initial);
+
+			const index = hookState.index++;
+
+			if (!(index in hookState.values)) {
+				hookState.values[index] = typeof initial === "function" ? (initial as () => unknown)() : initial;
+			}
+
+			return [
+				hookState.values[index],
+				(next: unknown) => {
+					hookState.values[index] =
+						typeof next === "function" ? (next as (previous: unknown) => unknown)(hookState.values[index]) : next;
+				},
+			];
+		},
+	};
+});
+
+vi.mock("../spectral/CursorSurface", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("../spectral/CursorSurface")>();
+
+	return {
+		...actual,
+		CursorSurface: (props: Parameters<typeof actual.CursorSurface>[0]) => {
+			cursorSurfaces.push(props);
+
+			return actual.CursorSurface(props);
+		},
+	};
+});
 
 vi.mock("../playback", () => ({
 	useWorkspacePlayback: () => ({
@@ -145,8 +173,12 @@ describe("Timeline viewport rendering", () => {
 	});
 });
 
-describe("Timeline sync cursor", () => {
-	it("draws the synced cursor across the tracks", () => {
+describe("Timeline local cursor", () => {
+	afterEach(() => {
+		hookState.held = false;
+	});
+
+	it("draws the cursor its own surface sets across the tracks", () => {
 		const source = createDefaultSource(0, { id: "only" });
 		const audio = new Map([["only", { ...EMPTY_AUDIO_DATA, durationMs: 3600000, totalSamples: 172800000 }]]);
 		const props = {
@@ -155,18 +187,27 @@ describe("Timeline sync cursor", () => {
 			channelInput: "mono" as const,
 			settings: INITIAL_VIEW_CONTROL_SETTINGS,
 		};
+		const render = () => {
+			hookState.index = 0;
+			cursorSurfaces.length = 0;
 
-		syncCursorMs.current = 1800005;
+			return renderToStaticMarkup(createElement(TimelineView, props));
+		};
 
-		const withCursor = renderToStaticMarkup(createElement(TimelineView, props));
+		hookState.held = true;
+		hookState.values = [];
 
-		syncCursorMs.current = null;
+		const withoutCursor = render();
 
-		const withoutCursor = renderToStaticMarkup(createElement(TimelineView, props));
+		expect(cursorSurfaces).toHaveLength(1);
 
+		cursorSurfaces[0]!.onCursorChange(1800005);
+
+		const withCursor = render();
+
+		expect(withoutCursor).not.toContain("bg-data-cursor");
 		expect(withCursor).toContain("bg-data-cursor");
 		expect(withCursor).toContain("left:50%");
-		expect(withoutCursor).not.toContain("bg-data-cursor");
 	});
 });
 

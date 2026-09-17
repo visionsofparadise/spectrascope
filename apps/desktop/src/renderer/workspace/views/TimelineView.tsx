@@ -14,7 +14,6 @@ import { useWaveformReadouts } from "../spectral/useWaveformReadouts";
 import { ViewLoadingToast } from "../spectral/ViewLoadingToast";
 import { ViewProgressProvider, ViewProgressToast } from "../spectral/viewProgress";
 import { useTransportPlayback } from "../spectral/viewScaffold";
-import { EMPTY_SYNC_STATE, useViewSync } from "../sync";
 import { TimelineTrackHeader } from "../TimelineTrackHeader";
 import { useTimeViewport } from "../useTimeViewport";
 import { panAxisRange } from "../utils/axisRange";
@@ -348,7 +347,7 @@ export function TimelineView({
 	onAddSourceFiles,
 }: TimelineViewProps) {
 	const readouts = useWaveformReadouts();
-	const viewSync = useViewSync("timeline", EMPTY_SYNC_STATE);
+	const [cursor, setCursor] = useState<number | null>(null);
 	const [drag, setDrag] = useState<TimelineDrag | null>(null);
 	const [fileDragActive, setFileDragActive] = useState(false);
 	const fileDragDepth = useRef(0);
@@ -528,8 +527,8 @@ export function TimelineView({
 							surfaceRef={viewport.wheelHandlers.ref}
 							startMs={windowStartMs}
 							endMs={windowEndMs}
-							cursorMs={viewSync.cursor}
-							onCursorChange={viewSync.setCursor}
+							cursorMs={cursor}
+							onCursorChange={setCursor}
 							className="relative min-h-0 flex-1 overflow-hidden bg-void"
 						>
 							<div ref={stripViewportRef} className="absolute inset-0 overflow-hidden">
@@ -608,7 +607,7 @@ export function TimelineView({
 							{renderableSources.length > 0 && (
 								<GridOverlay startMs={windowStartMs} endMs={windowEndMs} opacity={settings.gridOpacity} />
 							)}
-							<CursorLine fraction={timeToFraction(viewSync.cursor, windowStartMs, windowEndMs)} />
+							<CursorLine fraction={timeToFraction(cursor, windowStartMs, windowEndMs)} />
 						</CursorSurface>
 						<ViewProgressToast />
 					</div>
