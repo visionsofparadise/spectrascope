@@ -78,7 +78,10 @@ export function useDerivedStreams(
 		onDefaultDifferenceRef.current = onDefaultDifference;
 	}, [onDefaultDifference]);
 
-	const pair = useMemo(() => sourcePairOf(sources, differenceA, differenceB), [sources, differenceA, differenceB]);
+	const sourcesKey = JSON.stringify(
+		sources.map((source) => [source.id, source.timelineOffsetMs, prepared.get(source.id)?.pcmPath ?? null]),
+	);
+	const pair = useMemo(() => sourcePairOf(sources, differenceA, differenceB), [sourcesKey, differenceA, differenceB]);
 
 	const pairInputsOf = useCallback(
 		(gainB: StreamInput["gain"]): ReadonlyArray<StreamInput> | null => {
@@ -100,7 +103,7 @@ export function useDerivedStreams(
 
 			return inputs.length === 0 ? null : inputs;
 		},
-		[pair, sources, prepared],
+		[pair, sourcesKey],
 	);
 
 	const sumSpec = useMemo(() => {
@@ -125,7 +128,7 @@ export function useDerivedStreams(
 		if (!first || !second) return;
 
 		onDefaultDifferenceRef.current(first.id, second.id);
-	}, [differenceA, differenceB, sources]);
+	}, [differenceA, differenceB, sourcesKey]);
 
 	const sum = useRegisteredDerivedStream(sumSpec);
 	const difference = useRegisteredDerivedStream(diffSpec);

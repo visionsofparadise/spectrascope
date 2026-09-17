@@ -8,7 +8,7 @@ import { automaticMeta } from "../models/History";
 import { main } from "../models/Main";
 import { MainEvents } from "../models/MainEvents";
 import { useAppState } from "../models/State/App";
-import { MeasurementSessionsProvider } from "../workspace/spectral/MeasurementSessionsProvider";
+import { MeasurementSessionsProvider, useMeasuredSessions } from "../workspace/spectral/MeasurementSessionsProvider";
 import { AppBar } from "./AppBar";
 import { ExportDialog } from "./ExportDialog";
 import { PreferencesDialog } from "./PreferencesDialog";
@@ -106,20 +106,7 @@ export function AppLayout({ initialState, userDataPath, queryClient, logger }: P
 	);
 	const activeSessionId = app.tabs.find((tab) => tab.id === app.activeTabId)?.sessionId ?? null;
 	const activeSession = app.sessions.find((session) => session.id === activeSessionId);
-	const measuredSourcesKey = JSON.stringify(
-		app.sessions.map((session) => [
-			session.id,
-			session.document.sources.map((source) => [source.id, source.audioFilePath]),
-		]),
-	);
-	const measuredSessions = useMemo(
-		() =>
-			app.sessions.map((session) => ({
-				id: session.id,
-				sources: session.document.sources.map((source) => ({ id: source.id, audioFilePath: source.audioFilePath })),
-			})),
-		[measuredSourcesKey],
-	);
+	const measuredSessions = useMeasuredSessions(app.sessions);
 
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent): void => {

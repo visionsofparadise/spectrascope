@@ -24,14 +24,13 @@ export function useSourceStreams(sources: ReadonlyArray<Source>): UseSourceStrea
 
 	initializeStreamQueries(client);
 
+	const sourcesKey = JSON.stringify(sources.map((source) => [source.id, source.audioFilePath]));
 	const filePaths = useMemo(
 		() => [...new Set(sources.map((source) => source.audioFilePath).filter(Boolean))],
-		[sources],
+		[sourcesKey],
 	);
-	const results = useQueries({
-		queries: filePaths.map((filePath) => sourceStreamQueryOptions(filePath, null)),
-		combine: combineSourceResults,
-	});
+	const queries = useMemo(() => filePaths.map((filePath) => sourceStreamQueryOptions(filePath, null)), [filePaths]);
+	const results = useQueries({ queries, combine: combineSourceResults });
 
 	const retrySource = useCallback(
 		(sourceId: string): void => {
@@ -44,7 +43,7 @@ export function useSourceStreams(sources: ReadonlyArray<Source>): UseSourceStrea
 				exact: true,
 			});
 		},
-		[sources, client],
+		[sourcesKey, client],
 	);
 
 	return useMemo(() => {
@@ -70,5 +69,5 @@ export function useSourceStreams(sources: ReadonlyArray<Source>): UseSourceStrea
 		}
 
 		return { sourceAudio, prepared, status, errors, retrySource };
-	}, [sources, filePaths, results, retrySource]);
+	}, [sourcesKey, filePaths, results, retrySource]);
 }

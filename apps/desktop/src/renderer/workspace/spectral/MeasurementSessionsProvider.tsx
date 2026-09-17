@@ -5,10 +5,29 @@ import { MeasurementSessions, MeasurementSessionsContext } from "./MeasurementSe
 import type { SessionSources } from "./MeasurementSession";
 import type { AudioData } from "./types";
 import type { StreamQueryEntry } from "../../audio/utils/streamQueryOptions";
+import type { Session } from "../../models/State/Session";
 import type { ReactNode } from "react";
 
 function combineStreams(results: Array<UseQueryResult<StreamQueryEntry>>) {
 	return results.map((result) => result.data);
+}
+
+export function useMeasuredSessions(sessions: ReadonlyArray<Session>): ReadonlyArray<SessionSources> {
+	const sourcesKey = JSON.stringify(
+		sessions.map((session) => [
+			session.id,
+			session.document.sources.map((source) => [source.id, source.audioFilePath]),
+		]),
+	);
+
+	return useMemo(
+		() =>
+			sessions.map((session) => ({
+				id: session.id,
+				sources: session.document.sources.map((source) => ({ id: source.id, audioFilePath: source.audioFilePath })),
+			})),
+		[sourcesKey],
+	);
 }
 
 export function MeasurementSessionsProvider({
