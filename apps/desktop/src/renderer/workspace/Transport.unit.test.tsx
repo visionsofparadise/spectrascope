@@ -32,7 +32,6 @@ function render(
 	toggle: ReturnType<typeof vi.fn>,
 	disabled = false,
 	session: Session = createSession(createSavedSession([])),
-	onVolumeChange = vi.fn(),
 	durations: { readonly durationSec: number; readonly sessionDurationMs: number } = {
 		durationSec: 10,
 		sessionDurationMs: 10_000,
@@ -40,7 +39,7 @@ function render(
 	onSeek = vi.fn(),
 ) {
 	const playback = createMutableState({ positionSec: 1, durationSec: durations.durationSec, playing, error: null });
-	const playbackControls: PlaybackControls = { onPlayToggle: toggle, onSeek, onVolumeChange };
+	const playbackControls: PlaybackControls = { onPlayToggle: toggle, onSeek };
 
 	return elements(
 		Transport({
@@ -123,7 +122,6 @@ it("shows, steps and seeks to the end of the stream duration when the session sp
 		vi.fn(),
 		false,
 		createSession(createSavedSession([])),
-		vi.fn(),
 		{ durationSec: 2, sessionDurationMs: 10_000 },
 		onSeek,
 	);
@@ -165,10 +163,7 @@ it("chooses playback speed through an upward chip selector", () => {
 });
 it("records one volume entry per slider gesture, ended on pointer-up and on lost pointer capture", () => {
 	const session = createSession(createSavedSession([]));
-	const onVolumeChange = vi.fn();
-	const slider = render(false, vi.fn(), false, session, onVolumeChange).find(
-		(element) => element.props.role === "slider",
-	)!;
+	const slider = render(false, vi.fn(), false, session).find((element) => element.props.role === "slider")!;
 	const press = (key: string) => {
 		(slider.props.onKeyDown as (event: unknown) => void)({ key, preventDefault: vi.fn() });
 		flush(session.document);
@@ -185,7 +180,6 @@ it("records one volume entry per slider gesture, ended on pointer-up and on lost
 	press("Home");
 	expect(session.history.length).toBe(3);
 	expect(session.document.volume).toBe(0);
-	expect(onVolumeChange.mock.calls).toEqual([[0], [1], [0], [1], [0]]);
 });
 it("records one volume entry for a key gesture ended on key-up and a second for the next key gesture", () => {
 	const session = createSession(createSavedSession([]));

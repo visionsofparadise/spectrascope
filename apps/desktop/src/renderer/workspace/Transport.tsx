@@ -296,14 +296,13 @@ export const Transport = scope<TransportProps>(({ control, sampleRate, viewContr
 	const { playback, playbackControls } = context;
 	const { disabled, readoutRows } = control;
 	const { playing, positionSec, durationSec } = playback;
-	const { onPlayToggle, onSeek, onVolumeChange } = playbackControls;
+	const { onPlayToggle, onSeek } = playbackControls;
 	const [volumeGestureKey] = useState(createGestureKey);
 
 	const handleVolumeChange = (volume: number): void => {
 		batch(() => {
 			document.volume = volume;
 		}, volumeGestureKey.current());
-		onVolumeChange(volume);
 	};
 
 	const timecodeMainClass = disabled ? "text-chrome-text-dim" : "text-chrome-text";

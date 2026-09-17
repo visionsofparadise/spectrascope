@@ -119,7 +119,7 @@ function contextOf(sources: ReadonlyArray<Source>, channelInput: ChannelInput = 
 	return {
 		session,
 		playback: createMutableState<PlaybackState>({ positionSec: 0, durationSec: 3600, playing: false, error: null }),
-		playbackControls: { onPlayToggle: () => {}, onSeek: () => {}, onVolumeChange: () => {} },
+		playbackControls: { onPlayToggle: () => {}, onSeek: () => {} },
 		sessionDurationMs: 3_600_000,
 	} as unknown as SessionContext;
 }

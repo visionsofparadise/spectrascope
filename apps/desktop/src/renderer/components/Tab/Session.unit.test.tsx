@@ -66,7 +66,6 @@ const DERIVED_STREAMS: Record<string, unknown> = {
 const PLAYBACK_CONTROLS = {
 	onPlayToggle: () => {},
 	onSeek: () => {},
-	onVolumeChange: () => {},
 };
 
 vi.mock("../../audio/useSourceStreams", () => ({ useSourceStreams: () => SOURCE_STREAMS }));

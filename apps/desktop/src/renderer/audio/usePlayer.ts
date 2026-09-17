@@ -1,4 +1,4 @@
-import { identify, subscribe } from "opshot";
+import { identify, isSameIdentity, subscribe } from "opshot";
 import { useEffect, useRef, useState } from "react";
 import { PlaybackEngine } from "./PlaybackEngine";
 import type { PlaybackControls, PlaybackState } from "../models/State/Playback";
@@ -51,7 +51,6 @@ export function usePlayer(
 			player.seek(sec);
 			transport.positionSec = player.positionSec;
 		},
-		onVolumeChange: (volume: number) => playerRef.current?.setVolume(volume),
 	}));
 
 	useEffect(() => {
@@ -90,7 +89,7 @@ export function usePlayer(
 	useEffect(
 		() =>
 			subscribe(document, (operations) => {
-				if (operations.some((operation) => operation.key === "volume"))
+				if (operations.some((operation) => operation.key === "volume" && isSameIdentity(operation.node, document)))
 					playerRef.current?.setVolume(document.volume);
 			}),
 		[identify(document)],

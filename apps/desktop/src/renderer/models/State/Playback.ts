@@ -8,5 +8,4 @@ export interface PlaybackState {
 export interface PlaybackControls {
 	readonly onPlayToggle: () => void;
 	readonly onSeek: (sec: number) => void;
-	readonly onVolumeChange: (volume: number) => void;
 }

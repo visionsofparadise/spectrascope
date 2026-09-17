@@ -79,7 +79,7 @@ beforeEach(() => {
 	context = {
 		session,
 		playback: createMutableState<PlaybackState>({ positionSec: 0.5, durationSec: 1, playing: false, error: null }),
-		playbackControls: { onPlayToggle: vi.fn(), onSeek, onVolumeChange: vi.fn() },
+		playbackControls: { onPlayToggle: vi.fn(), onSeek },
 		sessionDurationMs: 1000,
 	} as unknown as SessionContext;
 	onSeek.mockReset();
