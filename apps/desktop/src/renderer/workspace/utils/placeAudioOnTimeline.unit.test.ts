@@ -108,7 +108,7 @@ describe("placeAudioOnTimeline", () => {
 		expect(readSamples).not.toHaveBeenCalled();
 	});
 
-	it("clamps the read to the comparison extent and rounds placement to a sample", async () => {
+	it("clamps the read to the session extent and rounds placement to a sample", async () => {
 		const { audio } = fixture();
 		const placed = placeAudioOnTimeline(audio, 2.6, 8);
 

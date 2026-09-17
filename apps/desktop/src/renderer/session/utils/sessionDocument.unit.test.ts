@@ -3,7 +3,7 @@ import { createSavedSession } from "../createSavedSession";
 import { parseSession, serializeSession } from "./sessionDocument";
 import { ViewControlSettingsSchema } from "../../workspace/viewSettings";
 
-it("roundtrips settings and references while regenerating only the comparison identity", () => {
+it("roundtrips settings and references while regenerating only the session identity", () => {
 	const original = createSavedSession(["/audio/a.wav", "/audio/b.wav"]);
 	original.name = "A/B";
 	original.differenceA = original.sources[0]?.id ?? null;

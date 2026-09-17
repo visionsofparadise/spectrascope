@@ -174,15 +174,15 @@ export class MeasurementSessions {
 	readonly sessions = new Map<string, MeasurementSession>();
 	readonly visited = new Set<string>();
 
-	sourcePaths(comparisons: ReadonlyArray<SessionSources>, activeSessionId: string | null): Array<string> {
-		if (activeSessionId && comparisons.some((comparison) => comparison.id === activeSessionId))
+	sourcePaths(sessions: ReadonlyArray<SessionSources>, activeSessionId: string | null): Array<string> {
+		if (activeSessionId && sessions.some((session) => session.id === activeSessionId))
 			this.visited.add(activeSessionId);
 
 		return [
 			...new Set(
-				comparisons
-					.filter((comparison) => this.visited.has(comparison.id))
-					.flatMap((comparison) => comparison.sources.map((source) => source.audioFilePath))
+				sessions
+					.filter((session) => this.visited.has(session.id))
+					.flatMap((session) => session.sources.map((source) => source.audioFilePath))
 					.filter(Boolean),
 			),
 		];
@@ -201,15 +201,15 @@ export class MeasurementSessions {
 		return session;
 	}
 
-	retain(comparisons: ReadonlyArray<SessionSources>, audioByPath: ReadonlyMap<string, AudioData>) {
-		const active = new Map(comparisons.map((comparison) => [comparison.id, comparison]));
+	retain(sessions: ReadonlyArray<SessionSources>, audioByPath: ReadonlyMap<string, AudioData>) {
+		const active = new Map(sessions.map((session) => [session.id, session]));
 
 		for (const id of this.visited) if (!active.has(id)) this.visited.delete(id);
 
 		for (const [id, session] of this.sessions) {
-			const comparison = active.get(id);
+			const sessionSources = active.get(id);
 
-			if (!comparison) {
+			if (!sessionSources) {
 				session.dispose();
 				this.sessions.delete(id);
 
@@ -218,7 +218,7 @@ export class MeasurementSessions {
 
 			const sourceAudio = new Map<string, AudioData>();
 
-			for (const source of comparison.sources) {
+			for (const source of sessionSources.sources) {
 				const audio = audioByPath.get(source.audioFilePath);
 
 				if (audio) sourceAudio.set(source.id, audio);

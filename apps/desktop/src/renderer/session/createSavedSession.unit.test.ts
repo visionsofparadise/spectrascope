@@ -17,26 +17,26 @@ describe("createSourceFromFile", () => {
 	});
 });
 
-describe("createComparison", () => {
+describe("createSavedSession", () => {
 	it("creates one source per file with distinct ids and round-robin layer colors", () => {
 		// Five files exercises the round-robin past the 4-entry default palette.
 		const files = ["a.wav", "b.wav", "c.wav", "d.wav", "e.wav"];
 
-		const comparison = createSavedSession(files);
+		const session = createSavedSession(files);
 
-		expect(comparison.sources).toHaveLength(5);
-		expect(new Set(comparison.sources.map((source) => source.id)).size).toBe(5);
+		expect(session.sources).toHaveLength(5);
+		expect(new Set(session.sources.map((source) => source.id)).size).toBe(5);
 		// Index 0 and index 4 wrap to the same palette entry (palette length 4).
-		expect(comparison.sources[4]?.layerColor).toEqual(comparison.sources[0]?.layerColor);
+		expect(session.sources[4]?.layerColor).toEqual(session.sources[0]?.layerColor);
 		// Adjacent sources differ — the round-robin actually advances.
-		expect(comparison.sources[0]?.layerColor).not.toEqual(comparison.sources[1]?.layerColor);
-		expect(comparison.activeView).toBe("overlay");
+		expect(session.sources[0]?.layerColor).not.toEqual(session.sources[1]?.layerColor);
+		expect(session.activeView).toBe("overlay");
 	});
 
-	it("creates an empty, source-less comparison for the New flow", () => {
-		const comparison = createSavedSession([]);
+	it("creates an empty, source-less session for the New flow", () => {
+		const session = createSavedSession([]);
 
-		expect(comparison.sources).toEqual([]);
-		expect(comparison.id.length).toBeGreaterThan(0);
+		expect(session.sources).toEqual([]);
+		expect(session.id.length).toBeGreaterThan(0);
 	});
 });

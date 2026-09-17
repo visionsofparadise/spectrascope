@@ -53,7 +53,7 @@ export function createSavedSession(
 	preferences: Preferences = INITIAL_PREFERENCES,
 	theme: ThemeId = "lava",
 ): SavedSession {
-	const comparison = SavedSessionSchema.parse({
+	const session = SavedSessionSchema.parse({
 		id: generateId(),
 		name: filePaths[0] ? fileNameOf(filePaths[0]).slice(0, 200) : "New Session",
 		volume: preferences.monitorVolume,
@@ -69,9 +69,9 @@ export function createSavedSession(
 		differenceB: null,
 	});
 
-	if (filePaths.length === 0) comparison.savedFingerprint = sessionFingerprint(comparison);
+	if (filePaths.length === 0) session.savedFingerprint = sessionFingerprint(session);
 
-	return comparison;
+	return session;
 }
 
 export function createTabId(): string {

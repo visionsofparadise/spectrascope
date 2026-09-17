@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { extendSelection, normalizeSelection } from "./selection";
 
 describe("normalizeSelection", () => {
-	it("orders reversed gestures and clamps them to the comparison", () => {
+	it("orders reversed gestures and clamps them to the session", () => {
 		expect(normalizeSelection(1200, -100, 1000)).toEqual({ start: 0, end: 1000 });
 		expect(normalizeSelection(800, 200, 1000)).toEqual({ start: 200, end: 800 });
 	});

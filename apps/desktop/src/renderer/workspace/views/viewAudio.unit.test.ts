@@ -4,7 +4,7 @@ import { sessionDurationOf, EMPTY_AUDIO_DATA, resolveVisibleSourceAudio, useTime
 
 vi.mock("react", () => ({ useMemo: (compute: () => unknown) => compute() }));
 
-describe("comparison source extent", () => {
+describe("session source extent", () => {
 	it("keeps Timeline raw-reader identity when mounting a zero-offset Overlay or Loudness view", () => {
 		const source = createDefaultSource(0, { id: "first", timelineOffsetMs: 0 });
 		const audio = { ...EMPTY_AUDIO_DATA, durationMs: 2000, totalSamples: 96000 };
