@@ -78,7 +78,7 @@ export const Knob = ({
 		[dragging, onChange],
 	);
 
-	const onPointerUp = useCallback(() => {
+	const endDrag = useCallback(() => {
 		setDragging(false);
 		onChangeEnd?.(currentValue.current);
 	}, [onChangeEnd]);
@@ -98,7 +98,9 @@ export const Knob = ({
 				className={onChange && !disabled ? "cursor-pointer" : undefined}
 				onPointerDown={onPointerDown}
 				onPointerMove={onPointerMove}
-				onPointerUp={onPointerUp}
+				onPointerUp={endDrag}
+				onPointerCancel={endDrag}
+				onLostPointerCapture={endDrag}
 			>
 				<path
 					d={arcPath(startAngle, totalSweep)}
