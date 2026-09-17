@@ -18,6 +18,7 @@ const media = vi.hoisted(() => ({
 	durationSec: 10,
 	url: "",
 	positionListener: (_position: number) => {},
+	durationListener: (_duration: number) => {},
 	play: vi.fn(),
 	pause: vi.fn(),
 	seek: vi.fn(),
@@ -90,8 +91,11 @@ vi.mock("./PlaybackEngine", () => ({
 		onPlayingChange() {
 			return () => {};
 		}
-		onDurationChange() {
-			return () => {};
+		onDurationChange(listener: (duration: number) => void) {
+			media.durationListener = listener;
+			return () => {
+				media.durationListener = () => {};
+			};
 		}
 		onError() {
 			return () => {};
@@ -241,5 +245,16 @@ describe("session state reaching the engine", () => {
 		flush(document);
 		expect(media.setVolume).toHaveBeenLastCalledWith(initial);
 		expect(media.setVolume).toHaveBeenCalledTimes(2);
+	});
+});
+
+describe("stream duration", () => {
+	it("follows the stream, the engine's reported duration and a removed stream", () => {
+		render("media://audio");
+		expect(playback.durationSec).toBe(10);
+		media.durationListener(9.5);
+		expect(playback.durationSec).toBe(9.5);
+		render(null);
+		expect(playback.durationSec).toBe(0);
 	});
 });

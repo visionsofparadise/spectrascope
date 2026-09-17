@@ -7,6 +7,7 @@ import { createGestureKey } from "../../utils/gestureKey";
 import { extendSelection, isNestedSelectionControl, normalizeSelection } from "../utils/selection";
 import { Playhead } from "./Playhead";
 import { Selection } from "./Selection";
+import { useSessionSelection } from "./useSessionSelection";
 import type { SessionContext } from "../../models/Context";
 import type { SelectionGesture } from "../utils/selection";
 import type { ComponentProps } from "react";
@@ -36,17 +37,16 @@ export const SelectionSurface = scope<SelectionSurfaceProps>(
 		context,
 		...props
 	}: SelectionSurfaceProps) => {
-		const { document } = context.session;
-		const { playback, playbackControls } = context;
+		const { playback, playbackControls, sessionDurationMs } = context;
 		const [extendKey] = useState(createGestureKey);
 		const gestureRef = useRef<{ pointerId: number; clientX: number; anchor: number; dragging: boolean } | null>(null);
 		const keyboardGestureRef = useRef<SelectionGesture | null>(null);
 		const wasSelectingRef = useRef(false);
 		const [draft, setDraft] = useState<{ start: number; end: number } | null>(null);
-		const sessionDurationMs = playback.durationSec * 1000;
-		const durationMs = Math.max(sessionDurationMs, endMs);
+		const durationMs = Math.max(Math.max(playback.durationSec, sessionDurationMs / 1000) * 1000, endMs);
 		const span = endMs - startMs;
-		const selection = draft ?? document.selection;
+		const sessionSelection = useSessionSelection(context);
+		const selection = draft ?? sessionSelection;
 		const timeAt = (element: HTMLDivElement, clientX: number): number => {
 			const rect = element.getBoundingClientRect();
 			const fraction = rect.width > 0 ? Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) : 0;
@@ -192,7 +192,7 @@ export const SelectionSurface = scope<SelectionSurfaceProps>(
 					if (event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
 						const gesture = extendSelection(
 							keyboardGestureRef.current,
-							document.selection,
+							sessionSelection,
 							playback.positionSec * 1000,
 							((event.key === "ArrowRight" ? 1 : -1) * span) / 100,
 							durationMs,

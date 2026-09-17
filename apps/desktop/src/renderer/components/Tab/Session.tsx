@@ -15,7 +15,7 @@ import { ViewLoadingToast } from "../../workspace/spectral/ViewLoadingToast";
 import { PreparingAudioContext } from "../../workspace/spectral/viewProgress";
 import { Transport } from "../../workspace/Transport";
 import { hasTransportViewControls, TransportViewControls } from "../../workspace/TransportViewControls";
-import { normalizeSelection } from "../../workspace/utils/selection";
+import { normalizedSelectionOf } from "../../workspace/utils/selection";
 import { ViewTopBar } from "../../workspace/ViewTopBar";
 import { Workspace } from "../../workspace/Workspace";
 import type { ExportControl } from "../../export/ExportControl";
@@ -110,22 +110,15 @@ export const SessionTab = scope<Props>(({ session, onExportControlChange, contex
 	const playback = useMutableState<PlaybackState>(
 		() => ({
 			positionSec: transport.positionSec,
-			durationSec: sessionDurationMs / 1000,
+			durationSec: playbackDurationSec,
 			playing: false,
 			error: null,
 		}),
 		{ emitOn: (flush) => requestAnimationFrame(flush) },
 	);
 
-	useEffect(() => {
-		playback.durationSec = sessionDurationMs / 1000;
-	}, [identify(playback), sessionDurationMs]);
-
 	const selection = useMemo(
-		() =>
-			document.selection
-				? normalizeSelection(document.selection.start, document.selection.end, sessionDurationMs)
-				: null,
+		() => normalizedSelectionOf(document.selection, sessionDurationMs),
 		[document.selection, sessionDurationMs],
 	);
 	const exportStream = activeView === "difference" ? diffInfo : sumInfo;
@@ -168,7 +161,7 @@ export const SessionTab = scope<Props>(({ session, onExportControlChange, contex
 	);
 
 	const context = useMemo(
-		(): SessionContext => ({ ...appContext, session, playback, playbackControls }),
+		(): SessionContext => ({ ...appContext, session, playback, playbackControls, sessionDurationMs }),
 		[
 			identify(appContext.app),
 			identify(appContext.sessionStatus),
@@ -186,6 +179,7 @@ export const SessionTab = scope<Props>(({ session, onExportControlChange, contex
 			identify(session),
 			identify(playback),
 			playbackControls,
+			sessionDurationMs,
 		],
 	);
 

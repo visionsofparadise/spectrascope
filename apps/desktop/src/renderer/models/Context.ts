@@ -26,4 +26,5 @@ export interface SessionContext extends AppContext {
 	readonly session: Session;
 	readonly playback: PlaybackState;
 	readonly playbackControls: PlaybackControls;
+	readonly sessionDurationMs: number;
 }

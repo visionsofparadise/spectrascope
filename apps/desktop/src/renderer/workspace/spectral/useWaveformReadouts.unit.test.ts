@@ -23,7 +23,7 @@ vi.mock("react", async (importOriginal) => ({
 	},
 }));
 const session = createSession({ ...createSavedSession([]), selection: { start: 2010, end: 2012 } });
-const context = { session } as unknown as SessionContext;
+const context = { session, sessionDurationMs: 3000 } as unknown as SessionContext;
 beforeEach(() => {
 	runtime.index = 0;
 	runtime.states = [];

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { readChartValue } from "../utils/readChartValue";
 import { EMPTY_READOUT, timeReadoutRowOf } from "./readoutRows";
+import { useSessionSelection } from "./useSessionSelection";
 import type { SessionContext } from "../../models/Context";
 import type { TimeWindow } from "../useTimeViewport";
 
@@ -37,8 +38,7 @@ export function nearestChartTrace(
 }
 
 export function useChartReadouts(valueLabel: string, context: SessionContext) {
-	const { document } = context.session;
-	const selection = document.selection;
+	const selection = useSessionSelection(context);
 	const [traces, setTraces] = useState<ReadonlyMap<string, ChartReadoutTrace>>(() => new Map());
 	const [cursor, setCursor] = useState<{ timeMs: number; y: number } | null>(null);
 	const onTraceChange = useCallback((sourceId: string, trace: ChartReadoutTrace | null) => {

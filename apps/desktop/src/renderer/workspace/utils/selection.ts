@@ -11,6 +11,13 @@ export function normalizeSelection(
 	return upper > lower ? { start: lower, end: upper } : null;
 }
 
+export function normalizedSelectionOf(
+	selection: { readonly start: number; readonly end: number } | null,
+	durationMs: number,
+): { start: number; end: number } | null {
+	return selection ? normalizeSelection(selection.start, selection.end, durationMs) : null;
+}
+
 export interface SelectionGesture {
 	readonly anchor: number;
 	readonly active: number;

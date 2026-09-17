@@ -15,6 +15,7 @@ let context = {} as SessionContext;
 
 vi.mock("react", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react")>()),
+	useMemo: (compute: () => unknown) => compute(),
 	useRef: (initial: unknown) => {
 		const index = runtime.index++;
 		runtime.values[index] ??= { current: initial };
@@ -79,6 +80,7 @@ beforeEach(() => {
 		session,
 		playback: createMutableState<PlaybackState>({ positionSec: 0.5, durationSec: 1, playing: false, error: null }),
 		playbackControls: { onPlayToggle: vi.fn(), onSeek, onVolumeChange: vi.fn() },
+		sessionDurationMs: 1000,
 	} as unknown as SessionContext;
 	onSeek.mockReset();
 	vi.stubGlobal("Element", SurfaceElement);
@@ -225,6 +227,16 @@ describe("SelectionSurface gestures", () => {
 		expect(surface.setPointerCapture).not.toHaveBeenCalled();
 		expect(session.document.selection).toBeNull();
 		expect(onSeek).not.toHaveBeenCalled();
+	});
+
+	it("renders and extends a stored selection past a shrunken session span from its clamped range", () => {
+		const surface = new SurfaceElement();
+
+		context = { ...context, sessionDurationMs: 600 };
+		session.document.selection = { start: 200, end: 900 };
+		expect(surfaceProps()["aria-valuenow"]).toBe(600);
+		surfaceProps().onKeyDown?.(keyboardEvent(surface, "ArrowLeft", true));
+		expect(session.document.selection).toEqual({ start: 200, end: 590 });
 	});
 
 	it("records one history entry for a held Shift+Arrow and a second after key-up", () => {

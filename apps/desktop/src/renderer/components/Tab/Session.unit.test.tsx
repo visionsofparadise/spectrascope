@@ -206,7 +206,7 @@ it("bounds a Shift+Arrow extend by the session when the playing stream is shorte
 		DERIVED_STREAMS.sumInfo = { key: "sum", sampleRate: 48_000, durationMs: 2000 };
 		const context = render();
 
-		expect(context.playback.durationSec).toBe(10);
+		expect(context.sessionDurationMs).toBe(10_000);
 
 		session.document.selection = { start: 1000, end: 8000 };
 		const surface = new SurfaceElement();

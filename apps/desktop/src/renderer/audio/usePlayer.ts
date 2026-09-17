@@ -69,6 +69,9 @@ export function usePlayer(
 
 			if (!next) transport.positionSec = playback.positionSec;
 		});
+		const unsubscribeDuration = player.onDurationChange((next) => {
+			playback.durationSec = next;
+		});
 		const unsubscribeError = player.onError((message) => {
 			playback.error = message;
 		});
@@ -77,6 +80,7 @@ export function usePlayer(
 			transport.positionSec = playback.positionSec;
 			unsubscribePosition();
 			unsubscribePlaying();
+			unsubscribeDuration();
 			unsubscribeError();
 			player.dispose();
 			playerRef.current = null;
@@ -100,6 +104,7 @@ export function usePlayer(
 		if (streamUrl === null) {
 			resumeAfterPreparationRef.current = preparing && (player.playing || resumeAfterPreparationRef.current);
 			player.pause();
+			playback.durationSec = 0;
 
 			return;
 		}
@@ -110,6 +115,8 @@ export function usePlayer(
 		resumeAfterPreparationRef.current = false;
 
 		const changed = player.setSourceUrl(streamUrl, resumeSec, durationSec);
+
+		playback.durationSec = durationSec;
 
 		if (changed) playback.error = null;
 

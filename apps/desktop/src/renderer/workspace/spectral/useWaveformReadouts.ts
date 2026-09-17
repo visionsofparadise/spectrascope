@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { readWaveformAmplitude } from "spectral-display";
 import { EMPTY_READOUT, timeReadoutRowOf } from "./readoutRows";
+import { useSessionSelection } from "./useSessionSelection";
 import type { SessionContext } from "../../models/Context";
 import type { SourceRenderCursorReadout } from "../SourceRender";
 import type { ComputeResultReady } from "spectral-display";
@@ -52,8 +53,7 @@ export function waveformAmplitudeLabel(
 }
 
 export function useWaveformReadouts(context: SessionContext) {
-	const { document } = context.session;
-	const selection = document.selection;
+	const selection = useSessionSelection(context);
 	const [displayed, setDisplayed] = useState<ReadonlyMap<string, DisplayedWaveform>>(() => new Map());
 	const [cursor, setCursor] = useState<SourceRenderCursorReadout | null>(null);
 	const onDisplayedResultChange = useCallback((sourceId: string, value: DisplayedWaveform | null) => {

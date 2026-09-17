@@ -33,9 +33,14 @@ function render(
 	disabled = false,
 	session: Session = createSession(createSavedSession([])),
 	onVolumeChange = vi.fn(),
+	durations: { readonly durationSec: number; readonly sessionDurationMs: number } = {
+		durationSec: 10,
+		sessionDurationMs: 10_000,
+	},
+	onSeek = vi.fn(),
 ) {
-	const playback = createMutableState({ positionSec: 1, durationSec: 10, playing, error: null });
-	const playbackControls: PlaybackControls = { onPlayToggle: toggle, onSeek: vi.fn(), onVolumeChange };
+	const playback = createMutableState({ positionSec: 1, durationSec: durations.durationSec, playing, error: null });
+	const playbackControls: PlaybackControls = { onPlayToggle: toggle, onSeek, onVolumeChange };
 
 	return elements(
 		Transport({
@@ -48,7 +53,12 @@ function render(
 			},
 			sampleRate: 48000,
 			viewControls: <span>Display controls</span>,
-			context: { session, playback, playbackControls } as unknown as SessionContext,
+			context: {
+				session,
+				playback,
+				playbackControls,
+				sessionDurationMs: durations.sessionDurationMs,
+			} as unknown as SessionContext,
 		}),
 	);
 }
@@ -105,6 +115,29 @@ it("keeps compact controls reachable through named native nonmodal popovers", ()
 			nodes.some((element) => element.props.id === trigger.props.popoverTarget && element.props.popover === "auto"),
 		).toBe(true);
 	}
+});
+it("shows, steps and seeks to the end of the stream duration when the session span is longer", () => {
+	const onSeek = vi.fn();
+	const nodes = render(
+		false,
+		vi.fn(),
+		false,
+		createSession(createSavedSession([])),
+		vi.fn(),
+		{ durationSec: 2, sessionDurationMs: 10_000 },
+		onSeek,
+	);
+	const click = (label: string) =>
+		(
+			nodes.find((element) => element.type === "button" && element.props["aria-label"] === label)!.props
+				.onClick as () => void
+		)();
+
+	expect(nodes.some((element) => element.type === "span" && element.props.children === "00:02.000")).toBe(true);
+	expect(nodes.some((element) => element.type === "span" && element.props.children === "00:10.000")).toBe(false);
+	click("Jump forward five seconds");
+	click("Skip to end");
+	expect(onSeek.mock.calls).toEqual([[2], [2]]);
 });
 it("chooses playback speed through an upward chip selector", () => {
 	const session = createSession(createSavedSession([]));
