@@ -165,6 +165,9 @@ it("keeps the session context and its callbacks across renders that receive a fr
 			workspace: propsOf("mock-workspace"),
 		};
 	};
+
+	hooks.onDefaultDifference.length = 0;
+
 	const before = render(first!);
 	const after = render(second!);
 
@@ -173,6 +176,7 @@ it("keeps the session context and its callbacks across renders that receive a fr
 	expect(after.workspace.context).toBe(before.context);
 	expect(after.workspace.onRelinkSource).toBe(before.workspace.onRelinkSource);
 	expect(after.control).toBe(before.control);
+	expect(hooks.onDefaultDifference[1]).not.toBe(hooks.onDefaultDifference[0]);
 });
 
 it("writes the default difference pair through the context of the render that supplied the callback", () => {
