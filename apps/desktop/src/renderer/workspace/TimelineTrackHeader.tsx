@@ -13,7 +13,6 @@ import {
 import { IconButton } from "../components/IconButton";
 import { LayerColorPicker } from "./LayerColorPicker";
 import type { Source } from "./source";
-import type { SourceState } from "../models/State/App";
 
 export interface TimelineOffsetHandle {
 	readonly valueMaxMs: number;
@@ -28,7 +27,7 @@ interface TimelineTrackHeaderProps {
 	readonly top: string;
 	readonly offsetMs: number;
 	readonly offsetHandle?: TimelineOffsetHandle;
-	readonly onSourceChange?: (changes: Partial<SourceState>) => void;
+	readonly onSourceChange?: (changes: Partial<Source>) => void;
 	readonly onRelink?: () => void;
 	readonly onRemove?: () => void;
 }
